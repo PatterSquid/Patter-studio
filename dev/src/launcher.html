@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patter Studio</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1424; color: #cfd8e8; font: 16px system-ui, sans-serif; }
+  body { display: grid; place-items: center; }
+  #msg { opacity: 0.8; }
+</style>
+</head>
+<body>
+<div id="msg">Opening Patter Studio…</div>
+<script id="patter-embedded" type="text/x-patter-app">/*EMBED*/</script>
+<script>
+/* Patter Studio launcher. This small page is what is installed on the computer. It opens the newest copy of Patter Studio it
+   has: either the one that came with the installer, or a newer one it downloaded from the Patter Studio home on GitHub and
+   saved on this computer. When online it checks for a newer version first (for a few seconds at most), so updates arrive
+   by themselves. If a new version ever fails to start, it goes back to the last one that worked. */
+(async () => {
+  const HOME = window.PATTER_HOME || 'https://raw.githubusercontent.com/PatterSquid/patter-studio/main/';
+  const BUILT_IN = '/*VERSION*/', KEY = 'patter-launcher', msg = document.getElementById('msg');
+  const cmp = (a, b) => { const x = String(a || '0').split('.').map(Number), y = String(b || '0').split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+  const readLS = () => { try { return Object.assign({ use: 'auto', bad: [], fails: {} }, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return { use: 'auto', bad: [], fails: {} }; } };
+  const writeLS = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { } };
+  let dbp = null;
+  const db = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('patter-launcher', 1); r.onupgradeneeded = () => r.result.createObjectStore('apps', { keyPath: 'slot' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const idb = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction('apps', mode), s = t.objectStore('apps'); let out; const r = fn(s); if (r && 'onsuccess' in r) r.onsuccess = () => { out = r.result; }; t.oncomplete = () => res(out); t.onerror = () => rej(t.error); }); };
+  const get = slot => idb('readonly', s => s.get(slot)).catch(() => null), put = rec => idb('readwrite', s => s.put(rec)).catch(() => null);
+  const fetchT = async (url, ms) => { const c = new AbortController(), to = setTimeout(() => c.abort(), ms); try { const r = await fetch(url + '?t=' + Date.now(), { cache: 'no-store', signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return r; } finally { clearTimeout(to); } };
+  const st = readLS();
+  // The last start never said it was fine: count it, and after two failures stop using that version
+  if (st.boot && !st.boot.ok && st.boot.v && st.boot.v !== BUILT_IN) { st.fails[st.boot.v] = (st.fails[st.boot.v] || 0) + 1; if (st.fails[st.boot.v] >= 2 && !st.bad.includes(st.boot.v)) st.bad.push(st.boot.v); }
+  let cur = await get('current'), prev = await get('previous'), justUpdated = false;
+  // Look for a newer version on GitHub, download it and keep it on this computer
+  async function check(quick) {
+    if (navigator.onLine === false) return 'offline';
+    try {
+      const info = await (await fetchT(HOME + 'version.json', quick ? 4000 : 15000)).json(), v = String(info.version || '');
+      const have = cur && cmp(cur.v, BUILT_IN) > 0 ? cur.v : BUILT_IN;
+      if (!v || cmp(v, have) <= 0 || st.bad.includes(v)) return 'latest';
+      if (quick) msg.textContent = 'Updating Patter Studio to version ' + v + '…';
+      const html = await (await fetchT(HOME + String(info.file || 'app/patter-studio.html').replace(/[^a-zA-Z0-9_.\-\/]/g, ''), 30000)).text();
+      if (!/PATTER_APP_VERSION/.test(html) || !/<\/html>\s*$/i.test(html.trim() + '\n') || html.length < 100000) return 'broken';
+      if (cur) { await put(Object.assign({}, cur, { slot: 'previous' })); prev = cur; }
+      cur = { slot: 'current', v, html, at: Date.now(), notes: String(info.notes || '') }; await put(cur); return 'updated';
+    } catch (e) { return 'offline'; }
+  }
+  if (st.use !== 'builtin') { const r = await check(true); justUpdated = r === 'updated'; }
+  // Pick what to open: the newest saved version that hasn't failed, otherwise the one from the installer
+  let pick = null;
+  if (st.use !== 'builtin') { if (cur && cmp(cur.v, BUILT_IN) > 0 && !st.bad.includes(cur.v)) pick = cur; else if (prev && cmp(prev.v, BUILT_IN) > 0 && !st.bad.includes(prev.v)) pick = prev; }
+  let html, version, source;
+  if (pick) { html = pick.html; version = pick.v; source = 'update'; }
+  else { const b64 = document.getElementById('patter-embedded').textContent.trim(), bin = atob(b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); html = new TextDecoder('utf-8').decode(bytes); version = BUILT_IN; source = 'builtin'; justUpdated = false; }
+  st.boot = { v: version, ok: false, at: Date.now() }; writeLS(st);
+  window.PatterLauncher = {
+    version, source, justUpdated: justUpdated && source === 'update', canGoBack: source === 'update',
+    bootOK() { const s = readLS(); if (s.boot) s.boot.ok = true; if (s.fails) delete s.fails[version]; writeLS(s); },
+    check: async () => { const r = await check(false); return r === 'updated' ? 'updated' : r === 'latest' || r === 'broken' ? 'latest' : 'offline'; },
+    // Stop using this version and go back to the one before (or the installed one)
+    goBack() { const s = readLS(); if (source === 'update' && !s.bad.includes(version)) s.bad.push(version); writeLS(s); location.reload(); },
+    useBuiltIn() { const s = readLS(); s.use = 'builtin'; writeLS(s); location.reload(); },
+    useUpdates() { const s = readLS(); s.use = 'auto'; writeLS(s); location.reload(); },
+    get usingBuiltIn() { return readLS().use === 'builtin'; }
+  };
+  // A downloaded version that hits an error before it has finished starting is set aside, and the page reopens on the last
+  // good version, so a bad update can never leave the app unusable. The app reports both through these two calls.
+  let started = false; const boot0 = window.PatterLauncher.bootOK; window.PatterLauncher.bootOK = () => { started = true; boot0(); };
+  window.PatterLauncher.crashed = () => { if (started || source !== 'update') return; started = true; const s = readLS(); if (!s.bad.includes(version)) s.bad.push(version); writeLS(s); setTimeout(() => location.reload(), 50); };
+  document.open(); document.write(html); document.close();
+})();
+</script>
+</body>
+</html>

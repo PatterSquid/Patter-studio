@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-GB"><head>
+<script>window.addEventListener('error', function () { try { if (window.PatterLauncher && window.PatterLauncher.crashed) window.PatterLauncher.crashed(); } catch (e) { } });</script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Patter Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Narrow:ital,wght@0,400;0,700;1,400&family=Archivo:wght@400;600&family=Lora:ital,wght@0,400;1,500&family=Kalam:wght@700&family=Gochi+Hand&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>/*CSS*/</style></head>
+<body>
+<header>
+  <div class="brand"><b>PATTER</b> STUDIO</div>
+  <nav id="tabs" aria-label="Clip types">
+    <button data-mod="charts">Charts</button>
+    <button data-mod="timeline">Timeline</button>
+    <button data-mod="map">World map</button>
+    <button data-mod="flights">Flights</button>
+    <button data-mod="flyover">Flyover</button>
+    <button data-mod="picto">Pictogram</button>
+    <button data-mod="news">Newspaper</button>
+    <button data-mod="story">Story</button>
+    <button data-mod="broll">B roll</button>
+  </nav>
+  <div class="hdr-tools">
+    <span class="saved" id="savedNote" aria-live="polite"></span>
+    <button id="libBtn" class="proj" title="Your projects and templates"><small>Project</small><span id="projName">Untitled clip</span></button>
+    <button id="histBtn" title="Version history: roll back to an earlier version">History</button>
+    <button id="packsBtn" title="Add-on packs and app updates">Packs</button>
+    <button id="openProj" title="Open a project file from your computer">Open file</button>
+    <button id="saveProj" title="Save this project to a file, for backups or another computer">Save file</button>
+    <button id="keysBtn" class="icon" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+    <input id="projFile" type="file" accept=".json,application/json" hidden>
+  </div>
+</header>
+<main>
+  <aside>
+    <section class="card" id="look">
+      <h3>Look</h3>
+      <div class="field"><span class="lab">Colour scheme</span><div class="swatches" id="schemes"></div></div>
+      <div class="grid2">
+        <label class="field"><span class="lab">Banner colour</span><select id="banner"></select></label>
+        <label class="field"><span class="lab">Format</span><select id="format"><option value="16:9">16:9 YouTube</option><option value="9:16">9:16 Shorts</option></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="texture"> Halftone texture on the background</label>
+      <label class="check"><input type="checkbox" id="transparent"> Transparent background (exports a PNG sequence)</label>
+    </section>
+    <div id="inspector" style="display:flex;flex-direction:column;gap:12px"></div>
+    <button id="manualBtn" type="button" aria-expanded="false">Show manual inputs</button>
+    <div id="modForm" style="display:flex;flex-direction:column;gap:12px"></div>
+    <button id="resetMod">Reset this clip to the example</button>
+  </aside>
+  <section class="stagecol">
+    <div class="preview" id="prevWrap"><canvas id="prev" role="img" aria-label="Live preview of the clip"></canvas></div>
+    <div class="transport">
+      <button id="playBtn" aria-label="Play">Play</button>
+      <button id="restartBtn" aria-label="Play from the start">Restart</button>
+      <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the clip">
+      <span class="time" id="time">0.0 / 0.0 s</span>
+      <label class="pq" title="How sharp the preview is. Draft is fastest on slow laptops. Export is always full quality."><span class="lab">Preview</span><select id="pq" aria-label="Preview quality"><option value="draft">Draft</option><option value="normal">Normal</option><option value="full">Full</option></select></label>
+      <label class="pq" title="Start playing the preview straight away when you open a clip"><input type="checkbox" id="autoplay"><span class="lab">Autoplay</span></label>
+      <label class="pq" title="Draw the clip ahead in the background so playback is always smooth. The yellow bar on the scrubber shows how much is ready."><input type="checkbox" id="smooth"><span class="lab">Smooth</span></label>
+    </div>
+    <section class="card tl" id="timeline" aria-label="Timeline"></section>
+    <section class="card export">
+      <h3>Export</h3>
+      <div class="exprow">
+        <label class="field" style="min-width:200px"><span class="lab">Motion blur</span><select id="blur"><option value="smart">Smart, only where things move fast</option><option value="off">Off, fastest</option><option value="full">Every frame, slowest</option></select></label>
+        <label class="field" style="min-width:140px"><span class="lab">Frame rate</span><select id="fps"><option value="60">60 fps</option><option value="30">30 fps</option></select></label>
+        <label class="check" title="Draws the globe on the graphics chip. Much faster on maps and flights. Untick only if the globe looks wrong."><input type="checkbox" id="gpu" checked> Use graphics chip</label>
+        <button class="primary" id="exportBtn">Export MP4</button>
+        <button id="cancelBtn" hidden>Cancel</button>
+      </div>
+      <div class="exprow range"><label class="check"><input type="checkbox" id="rangeOn" disabled> Only export from the in point to the out point</label><span class="hint" id="rangeTxt"></span>
+        <span class="btnrow"><button id="setIn" title="Set the in point at the playhead (I)">Set in</button><button id="setOut" title="Set the out point at the playhead (O)">Set out</button><button id="playRange" title="Loop the range in the preview (P)" disabled>Loop the range</button><button id="clearRange" title="Clear the in and out points (X)" disabled>Clear</button></span></div>
+      <div class="exprow"><div class="bar"><i id="barFill"></i></div><span class="status" id="status">Ready. The preview is a quick draft; the export renders every frame at full quality.</span></div>
+    </section>
+  </section>
+</main>
+<dialog id="dlg" aria-label="Dialog"></dialog>
+<script id="patter-js">/*JS*/</script>
+</body></html>

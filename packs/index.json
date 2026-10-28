@@ -1,0 +1,10 @@
+{
+  "packs": [
+    {
+      "id": "bank_robbery",
+      "name": "Bank robbery",
+      "version": 1,
+      "file": "bank_robbery.json"
+    }
+  ]
+}
