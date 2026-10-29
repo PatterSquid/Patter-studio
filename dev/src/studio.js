@@ -742,7 +742,7 @@ const Studio = (() => {
         grid2(field('Shadow on the floor', range(A.shadow == null ? 0.5 : +A.shadow, 0, 1, 0.05, v => set('shadow', v), 'Shadow')), field('Flip left to right', seg([['0', 'No'], ['1', 'Yes']], A.mirror ? '1' : '0', v => { A.mirror = v === '1'; ch(); }))),
         H('div', { className: 'btnrow' }, btn('Fill the frame with the video', () => { A.x = 0.5; A.y = 0.5; A.h = 1; ch(); }), btn('Change video', pickVid), btn('Change to PNG sequence', pickPng), btn('Remove', () => { cfg.avatar = null; ch(); })), note, done ? foot() : ''));
     }
-    function neonCard(sel) {
+    function neonCard(picked) {
       const N = neonOf(cfg), set = (o) => { cfg.neon = Object.assign({}, N, o); }, fr = (eff(cfg).marks.frames || []);
       const kids = [H('p', { className: 'hint', textContent: N.style === 'neon' ? 'A neon outline of the squid. Drag it on the preview to move it, or a corner to change its size.' : 'Your PatterSquid logo, lit up and set into the wall at the same angle, glowing onto the wall round it. Every so often the squid blinks. Drag it to move it, and drag the four pink dots to tilt it to match the wall.' }),
         field('Look', seg([['logo', 'Your logo, lit'], ['neon', 'Neon outline']], N.style === 'neon' ? 'neon' : 'logo', v2 => { set({ style: v2 }); ch(); })),
@@ -750,7 +750,7 @@ const Studio = (() => {
       if (N.style !== 'neon') kids.push(H('div', { className: 'btnrow' }, btn('Smaller', () => { set({ q: qScale(N.q, 0.9) }); ch(); }), btn('Bigger', () => { set({ q: qScale(N.q, 1.1) }); ch(); }), btn('Straighten', () => { const c2 = qCentre(N.q), w2 = (Math.hypot(N.q[1][0] - N.q[0][0], N.q[1][1] - N.q[0][1]) + Math.hypot(N.q[2][0] - N.q[3][0], N.q[2][1] - N.q[3][1])) / 4, h2 = w2 * 1920 / 1080; set({ q: [[c2[0] - w2, c2[1] - h2], [c2[0] + w2, c2[1] - h2], [c2[0] + w2, c2[1] + h2], [c2[0] - w2, c2[1] + h2]].map(p => p.map(r4)) }); ch(); })),
         fr.length ? field('Hang it in a frame', sel('', [['', 'Choose a frame…'], ...fr.map(f => [f.id, f.name || 'Frame'])], v2 => { const f = fr.find(x => x.id === v2); if (f) { set({ q: qInFrame(f.p) }); ch(); } }, 'Hang it in a frame')) : '');
       else kids.push(field('Name next to it', seg([['1', 'Yes'], ['0', 'No']], N.text ? '1' : '0', v2 => { set({ text: v2 === '1' }); ch(); })));
-      kids.push(H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, style: N.style }); ch(); }), sel && done ? btn('Done', done) : ''));
+      kids.push(H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, style: N.style }); ch(); }), picked && done ? btn('Done', done) : ''));
       root.append(card('PatterSquid sign', ...kids));
     }
     function framesCard() {

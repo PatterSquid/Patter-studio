@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.29.15",
+  "version": "2026.10.29.16",
   "file": "app/patter-studio.html",
-  "notes": "Studio: your logo now hangs in the top frame at the same angle as the wall, glowing onto the wall around it. Tilt it with its corner dots."
+  "notes": "Studio: your logo hangs in the top frame at the wall's angle. Fixed a panel bug in the last version."
 }
