@@ -299,7 +299,8 @@
     const pgrid = H('div', { className: 'lib-grid' }, ...PIECES.map(pc => H('div', { className: 'lib-card' }, thumbEl(pc.thumb), H('div', { className: 'lib-meta' }, H('b', { textContent: pc.name }), H('span', { textContent: pc.layers.length + (pc.layers.length === 1 ? ' layer' : ' layers') })),
       H('div', { className: 'btnrow' }, UI.btn('Add at the playhead', () => { const id = Layers.insertPiece(cfg(), pc, player.t); save(); commit(); ed.build(); ed.select(id); dlg.close(); }), confirmBtn('Delete', async () => { await DB.del('templates', pc.id); await loadPieces(); openLibrary(); })))));
     openDlg('Projects',
-      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()))),
+      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()), UI.btn('Packs and updates', () => openPacks()))),
+      inboxSec(),
       H('h3', { textContent: 'Your projects' }), list.length ? grid : H('p', { className: 'hint', textContent: 'Nothing saved yet.' }),
       H('h3', { textContent: 'Templates' }), H('p', { className: 'hint', textContent: 'A template keeps this tab\'s settings, look and layers, so you can start new clips from it.' }),
       H('div', { className: 'tmpl-row' }, tname, UI.btn('Save this clip as a template', async () => { const n = tname.value.trim() || (TAB_NAMES[state.module] + ' template'); await saveTemplate(n); openLibrary(); })),
@@ -352,10 +353,29 @@
         confirmBtn('Remove', async () => { await Packs.remove(p.id); openPacks('Removed ' + p.name + '.'); })))) : H('p', { className: 'hint', textContent: 'No packs yet.' }),
       H('div', { className: 'btnrow' }, UI.btn('Check for new packs', async () => { status.textContent = 'Checking…'; const got = await Packs.check(); openPacks(got.length ? 'Added ' + got.join(', ') + '.' : Packs.lastError || 'You have every pack.'); }), UI.btn('Add a pack file…', () => file.click()), file), appSec);
   }
-  $('packsBtn').addEventListener('click', () => openPacks());
+  /* ---------- From Claude: whole projects published to the Patter Studio home on GitHub. They wait in the Project window
+     (a small dot on the Project button says something new has arrived) and only become a project when opened. ---------- */
+  let INBOX = [];
+  const saveInbox = () => DB.put('meta', INBOX, 'inbox').catch(() => null);
+  const drawProjDot = () => { const b = $('libBtn'); if (b) b.classList.toggle('has-new', INBOX.some(x => !x.opened)); };
+  async function loadInbox() { INBOX = (await DB.get('meta', 'inbox').catch(() => null)) || []; drawProjDot(); }
+  async function checkInbox() {
+    if (typeof Packs === 'undefined' || navigator.onLine === false) return []; const got = [];
+    try { const idx = await Packs.fetchJSON(Packs.HOME + 'projects/index.json');
+      for (const it of (idx && idx.projects) || []) { const id = String(it.id || '').replace(/[^a-zA-Z0-9_.\-]/g, ''); if (!id) continue; const rec = INBOX.find(x => x.id === id); if (rec && rec.rev === it.rev) continue;
+        try { const data = await Packs.fetchJSON(Packs.HOME + 'projects/' + String(it.file || id + '.patter.json').replace(/[^a-zA-Z0-9_.\-\/]/g, '')); if (!data || !data.look || !data.cfg) continue; await DB.put('meta', data, 'inbox:' + id);
+          const r = { id, name: String(it.name || data.name || 'New video').slice(0, 60), note: String(it.note || '').slice(0, 200), rev: it.rev, added: Date.now(), opened: false }; INBOX = INBOX.filter(x => x.id !== id); INBOX.unshift(r); got.push(r.name); } catch (e) { } }
+      if (got.length) { await saveInbox(); drawProjDot(); } } catch (e) { }
+    return got; }
+  async function openFromClaude(r) { const data = await DB.get('meta', 'inbox:' + r.id).catch(() => null); if (!data) { say('That one could not be opened. Try Check again later.', true); return; } const s = JSON.parse(JSON.stringify(data)); s.name = r.name; r.opened = true; await saveInbox(); drawProjDot(); dlg.close(); await newProject(s); say('Opened ' + r.name + ' as a new project. It is in your projects now, so you can change anything.'); }
+  function inboxSec() { if (!INBOX.length) return ''; return H('section', { className: 'dlg-sec' }, H('h3', { textContent: 'From Claude' }), H('div', { className: 'ver-list' }, ...INBOX.map(r => H('div', { className: 'pack-row' }, H('div', { className: 'lib-meta' }, H('b', { textContent: r.name + (r.opened ? '' : '  (new)') }), H('span', { textContent: (r.note ? r.note + ', ' : '') + 'arrived ' + ago(r.added) })),
+    UI.btn(r.opened ? 'Open a fresh copy' : 'Open', () => openFromClaude(r), r.opened ? '' : 'primary'), confirmBtn('Remove', async () => { INBOX = INBOX.filter(x => x !== r); await saveInbox(); DB.put('meta', null, 'inbox:' + r.id).catch(() => null); drawProjDot(); openLibrary(); }))))); }
   if (typeof Packs !== 'undefined') {
     Packs.onChange(() => { if (SP) SP.touch(); refreshAll(); });
-    Packs.loadSaved().then(() => Packs.check()).then(got => { if (got && got.length) say('New ' + (got.length > 1 ? 'packs' : 'pack') + ' added: ' + got.join(', ') + '. Find set pieces under + Set piece.'); });
+    loadInbox().then(() => Packs.loadSaved()).then(() => Packs.check()).then(async got => { const pj = await checkInbox(); const msg = [];
+      if (got && got.length) msg.push('New ' + (got.length > 1 ? 'packs' : 'pack') + ': ' + got.join(', ') + ' (find set pieces under + Set piece)');
+      if (pj.length) msg.push('New from Claude: ' + pj.join(', ') + ' (open it from the Project button)');
+      if (msg.length) say(msg.join('. ') + '.'); });
   }
   if (L() && L().justUpdated) say('Patter Studio updated itself to version ' + (window.PATTER_APP_VERSION || '') + '.');
   if (L() && L().bootOK) L().bootOK();

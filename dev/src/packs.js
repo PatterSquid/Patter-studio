@@ -43,5 +43,5 @@ const Packs = (() => {
   const forWorkers = () => Object.values(all).map(r => r.data);
   function loadInWorker(list) { const E2 = eng(); if (!E2 || !list) return; list.forEach(d => { try { E2.install(d); } catch (e) { } }); }
   const list = () => Object.values(all).map(r => ({ id: r.id, name: r.name, version: r.version, source: r.source, added: r.added, note: (r.data && r.data.description) || '', counts: ['places', 'props', 'hats', 'actions', 'setpieces'].map(k => [k, ((r.data && r.data[k]) || []).length]).filter(x => x[1]) }));
-  return { loadSaved, check, add, remove, list, forWorkers, loadInWorker, onChange: f => listeners.push(f), get version() { return version; }, get lastCheck() { return lastCheck; }, get lastError() { return lastError; }, HOME };
+  return { loadSaved, check, add, remove, list, forWorkers, loadInWorker, fetchJSON, onChange: f => listeners.push(f), get version() { return version; }, get lastCheck() { return lastCheck; }, get lastError() { return lastError; }, HOME };
 })();

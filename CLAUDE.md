@@ -15,6 +15,10 @@ next time he opens the app**, so test before pushing.
   keeps it in IndexedDB and opens it. A version that throws before it finishes starting is marked bad and it falls back
   to the previous one. Offline it opens the saved copy.
 * Packs: the app reads `packs/index.json` on opening and downloads any pack whose `version` is higher than the one it has.
+* Projects: the app reads `projects/index.json` and downloads any project whose `rev` (a fingerprint publish.py makes)
+  has changed. They wait under From Claude in the Project window (a dot shows on the Project button) until he opens them.
+  To send him a finished video, put its `.patter.json` (the same format as Save file, with `name` and an optional `note`)
+  in `projects/`, publish and push.
 * So: **new feature or fix** = bump `dev/VERSION`, build, test, publish, push. **New animation content** = add or update a
   pack JSON in `packs/` (bump its version), publish, push. A reinstall is never needed.
 

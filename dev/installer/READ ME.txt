@@ -12,8 +12,9 @@ Updates and packs:
 You only need to install once. Each time Patter Studio opens with an internet connection, it checks for a newer
 version and for new add on packs (new places, props, moves and set pieces), downloads them and keeps them on this
 computer. Without internet it simply opens the copy it already has.
-The Packs button shows what you have, lets you add a pack file by hand, and can take you back to the previous
-version if a new one ever misbehaves.
+Videos Claude builds for you arrive the same way: a small dot appears on the Project button, and they wait under
+From Claude in the Project window until you open them. Packs and updates (also in the Project window) shows your
+packs, lets you add a pack file by hand, and can take you back to the previous version if a new one ever misbehaves.
 
 Your work (Project button):
 Everything saves itself as you go. The Project button at the top holds all your clips, your templates, and New blank project.

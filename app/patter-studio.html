@@ -229,6 +229,10 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
 .vid-row .vid-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vid-row .vid-len { opacity: 0.7; font-variant-numeric: tabular-nums; }
 .vid-row button { flex: none; padding: 4px 10px; }
+
+/* A small dot on the Project button when something new from Claude is waiting */
+#libBtn { position: relative; }
+#libBtn.has-new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #f5821f; box-shadow: 0 0 0 2px #0b1424; }
 </style></head>
 <body>
 <header>
@@ -249,7 +253,6 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
     <span class="saved" id="savedNote" aria-live="polite"></span>
     <button id="libBtn" class="proj" title="Your projects and templates"><small>Project</small><span id="projName">Untitled clip</span></button>
     <button id="histBtn" title="Version history: roll back to an earlier version">History</button>
-    <button id="packsBtn" title="Add-on packs and app updates">Packs</button>
     <button id="openProj" title="Open a project file from your computer">Open file</button>
     <button id="saveProj" title="Save this project to a file, for backups or another computer">Save file</button>
     <button id="keysBtn" class="icon" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
@@ -302,7 +305,7 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
   </section>
 </main>
 <dialog id="dlg" aria-label="Dialog"></dialog>
-<script id="patter-js">window.PATTER_APP_VERSION='2026.10.29.1';
+<script id="patter-js">window.PATTER_APP_VERSION='2026.10.29.2';
 /* Minimal MP4 (ISO BMFF) muxer for one H.264 video track.
    Samples are AVC length prefixed access units, as produced by WebCodecs with avc.format = 'avc'. */
 const MP4Mux = (() => {
@@ -3094,7 +3097,7 @@ const Packs = (() => {
   const forWorkers = () => Object.values(all).map(r => r.data);
   function loadInWorker(list) { const E2 = eng(); if (!E2 || !list) return; list.forEach(d => { try { E2.install(d); } catch (e) { } }); }
   const list = () => Object.values(all).map(r => ({ id: r.id, name: r.name, version: r.version, source: r.source, added: r.added, note: (r.data && r.data.description) || '', counts: ['places', 'props', 'hats', 'actions', 'setpieces'].map(k => [k, ((r.data && r.data[k]) || []).length]).filter(x => x[1]) }));
-  return { loadSaved, check, add, remove, list, forWorkers, loadInWorker, onChange: f => listeners.push(f), get version() { return version; }, get lastCheck() { return lastCheck; }, get lastError() { return lastError; }, HOME };
+  return { loadSaved, check, add, remove, list, forWorkers, loadInWorker, fetchJSON, onChange: f => listeners.push(f), get version() { return version; }, get lastCheck() { return lastCheck; }, get lastError() { return lastError; }, HOME };
 })();
 
 /* Story: a chalkboard animator. Scenes in seven regions and four eras, stick people in their own colours and dress,
@@ -6452,7 +6455,8 @@ const Render = (() => {
     const pgrid = H('div', { className: 'lib-grid' }, ...PIECES.map(pc => H('div', { className: 'lib-card' }, thumbEl(pc.thumb), H('div', { className: 'lib-meta' }, H('b', { textContent: pc.name }), H('span', { textContent: pc.layers.length + (pc.layers.length === 1 ? ' layer' : ' layers') })),
       H('div', { className: 'btnrow' }, UI.btn('Add at the playhead', () => { const id = Layers.insertPiece(cfg(), pc, player.t); save(); commit(); ed.build(); ed.select(id); dlg.close(); }), confirmBtn('Delete', async () => { await DB.del('templates', pc.id); await loadPieces(); openLibrary(); })))));
     openDlg('Projects',
-      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()))),
+      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()), UI.btn('Packs and updates', () => openPacks()))),
+      inboxSec(),
       H('h3', { textContent: 'Your projects' }), list.length ? grid : H('p', { className: 'hint', textContent: 'Nothing saved yet.' }),
       H('h3', { textContent: 'Templates' }), H('p', { className: 'hint', textContent: 'A template keeps this tab\'s settings, look and layers, so you can start new clips from it.' }),
       H('div', { className: 'tmpl-row' }, tname, UI.btn('Save this clip as a template', async () => { const n = tname.value.trim() || (TAB_NAMES[state.module] + ' template'); await saveTemplate(n); openLibrary(); })),
@@ -6505,10 +6509,29 @@ const Render = (() => {
         confirmBtn('Remove', async () => { await Packs.remove(p.id); openPacks('Removed ' + p.name + '.'); })))) : H('p', { className: 'hint', textContent: 'No packs yet.' }),
       H('div', { className: 'btnrow' }, UI.btn('Check for new packs', async () => { status.textContent = 'Checking…'; const got = await Packs.check(); openPacks(got.length ? 'Added ' + got.join(', ') + '.' : Packs.lastError || 'You have every pack.'); }), UI.btn('Add a pack file…', () => file.click()), file), appSec);
   }
-  $('packsBtn').addEventListener('click', () => openPacks());
+  /* ---------- From Claude: whole projects published to the Patter Studio home on GitHub. They wait in the Project window
+     (a small dot on the Project button says something new has arrived) and only become a project when opened. ---------- */
+  let INBOX = [];
+  const saveInbox = () => DB.put('meta', INBOX, 'inbox').catch(() => null);
+  const drawProjDot = () => { const b = $('libBtn'); if (b) b.classList.toggle('has-new', INBOX.some(x => !x.opened)); };
+  async function loadInbox() { INBOX = (await DB.get('meta', 'inbox').catch(() => null)) || []; drawProjDot(); }
+  async function checkInbox() {
+    if (typeof Packs === 'undefined' || navigator.onLine === false) return []; const got = [];
+    try { const idx = await Packs.fetchJSON(Packs.HOME + 'projects/index.json');
+      for (const it of (idx && idx.projects) || []) { const id = String(it.id || '').replace(/[^a-zA-Z0-9_.\-]/g, ''); if (!id) continue; const rec = INBOX.find(x => x.id === id); if (rec && rec.rev === it.rev) continue;
+        try { const data = await Packs.fetchJSON(Packs.HOME + 'projects/' + String(it.file || id + '.patter.json').replace(/[^a-zA-Z0-9_.\-\/]/g, '')); if (!data || !data.look || !data.cfg) continue; await DB.put('meta', data, 'inbox:' + id);
+          const r = { id, name: String(it.name || data.name || 'New video').slice(0, 60), note: String(it.note || '').slice(0, 200), rev: it.rev, added: Date.now(), opened: false }; INBOX = INBOX.filter(x => x.id !== id); INBOX.unshift(r); got.push(r.name); } catch (e) { } }
+      if (got.length) { await saveInbox(); drawProjDot(); } } catch (e) { }
+    return got; }
+  async function openFromClaude(r) { const data = await DB.get('meta', 'inbox:' + r.id).catch(() => null); if (!data) { say('That one could not be opened. Try Check again later.', true); return; } const s = JSON.parse(JSON.stringify(data)); s.name = r.name; r.opened = true; await saveInbox(); drawProjDot(); dlg.close(); await newProject(s); say('Opened ' + r.name + ' as a new project. It is in your projects now, so you can change anything.'); }
+  function inboxSec() { if (!INBOX.length) return ''; return H('section', { className: 'dlg-sec' }, H('h3', { textContent: 'From Claude' }), H('div', { className: 'ver-list' }, ...INBOX.map(r => H('div', { className: 'pack-row' }, H('div', { className: 'lib-meta' }, H('b', { textContent: r.name + (r.opened ? '' : '  (new)') }), H('span', { textContent: (r.note ? r.note + ', ' : '') + 'arrived ' + ago(r.added) })),
+    UI.btn(r.opened ? 'Open a fresh copy' : 'Open', () => openFromClaude(r), r.opened ? '' : 'primary'), confirmBtn('Remove', async () => { INBOX = INBOX.filter(x => x !== r); await saveInbox(); DB.put('meta', null, 'inbox:' + r.id).catch(() => null); drawProjDot(); openLibrary(); }))))); }
   if (typeof Packs !== 'undefined') {
     Packs.onChange(() => { if (SP) SP.touch(); refreshAll(); });
-    Packs.loadSaved().then(() => Packs.check()).then(got => { if (got && got.length) say('New ' + (got.length > 1 ? 'packs' : 'pack') + ' added: ' + got.join(', ') + '. Find set pieces under + Set piece.'); });
+    loadInbox().then(() => Packs.loadSaved()).then(() => Packs.check()).then(async got => { const pj = await checkInbox(); const msg = [];
+      if (got && got.length) msg.push('New ' + (got.length > 1 ? 'packs' : 'pack') + ': ' + got.join(', ') + ' (find set pieces under + Set piece)');
+      if (pj.length) msg.push('New from Claude: ' + pj.join(', ') + ' (open it from the Project button)');
+      if (msg.length) say(msg.join('. ') + '.'); });
   }
   if (L() && L().justUpdated) say('Patter Studio updated itself to version ' + (window.PATTER_APP_VERSION || '') + '.');
   if (L() && L().bootOK) L().bootOK();

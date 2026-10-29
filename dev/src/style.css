@@ -223,3 +223,7 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
 .vid-row .vid-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vid-row .vid-len { opacity: 0.7; font-variant-numeric: tabular-nums; }
 .vid-row button { flex: none; padding: 4px 10px; }
+
+/* A small dot on the Project button when something new from Claude is waiting */
+#libBtn { position: relative; }
+#libBtn.has-new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #f5821f; box-shadow: 0 0 0 2px #0b1424; }

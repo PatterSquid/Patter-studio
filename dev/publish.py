@@ -30,6 +30,16 @@ for f in sorted(os.listdir(pdir)):
         packs.append({'id': p['id'], 'name': p.get('name', p['id']), 'version': p.get('version', 1), 'file': f})
 json.dump({'packs': packs}, open(os.path.join(pdir, 'index.json'), 'w'), indent=2)
 
+# Whole projects for him (videos built from his scripts): every .patter.json in projects/ is listed with a fingerprint,
+# so a changed file reaches him again as an update
+import hashlib
+jdir = os.path.join(REPO, 'projects'); os.makedirs(jdir, exist_ok=True); projs = []
+for f in sorted(os.listdir(jdir)):
+    if f.endswith('.patter.json'):
+        raw = open(os.path.join(jdir, f), 'rb').read(); st = json.loads(raw)
+        projs.append({'id': f[:-len('.patter.json')], 'name': st.get('name', f), 'note': st.get('note', ''), 'rev': hashlib.sha1(raw).hexdigest()[:12], 'file': f})
+json.dump({'projects': projs}, open(os.path.join(jdir, 'index.json'), 'w'), indent=2)
+
 # Installer zip: the launcher goes in as Patter-Studio.html so it lands where the old app was and keeps every project
 z = os.path.join(DIST, 'Patter-Studio-Installer.zip')
 with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as Z:
