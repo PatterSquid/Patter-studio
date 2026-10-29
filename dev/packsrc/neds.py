@@ -30,6 +30,7 @@ sc = {'region': 'europe', 'era': 'modern', 'place': 'outdoors', 'weather': 'rain
           A(N1, 'walk', 9.4, 1.6, to='@' + G),
           A(N1, 'smash', 11.1, 1.8, to=G),
           A(N2, 'laugh', 12.4, 1.4),
+          A(N1, 'walk', 13.0, 0.8, to=880),
           A(N2, 'walk', 13.9, 1.0, to='@' + G),
           A(N2, 'pish', 15.0, 3.0),
           A(N1, 'laugh', 15.2, 2.2),
@@ -40,7 +41,7 @@ sc = {'region': 'europe', 'era': 'modern', 'place': 'outdoors', 'weather': 'rain
 cast = [{'role': N1, 'name': 'Tam', 'sex': 'man', 'colour': 'white', 'hat': 'cap'},
         {'role': N2, 'name': 'Scotty', 'sex': 'man', 'colour': 'blue', 'hat': 'cap', 'beard': 'stubble'},
         {'role': G, 'name': 'Damien', 'sex': 'man', 'colour': 'black', 'hat': 'gothhair'}]
-pack = {'format': 1, 'id': 'neds', 'name': 'Neds and a goth', 'version': 2,
+pack = {'format': 1, 'id': 'neds', 'name': 'Neds and a goth', 'version': 3,
         'description': 'Goth hair and the Buckie ambush: two neds on the Buckie, a goth walking past, a bottle, a pish and a runner.',
         'hats': hats, 'setpieces': [{'id': 'buckie_ambush', 'name': 'Buckie ambush', 'note': 'Two neds slag a goth, bottle him, pish on him and leg it.', 'cast': cast, 'scenes': [sc], 'layers': []}]}
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'packs', 'neds.json')

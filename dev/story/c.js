@@ -4,8 +4,15 @@
   const HAIRS = [['', 'Usual'], ['short', 'Short'], ['long', 'Long'], ['curly', 'Curly'], ['spiky', 'Spiky'], ['afro', 'Afro'], ['ponytail', 'Ponytail'], ['bun', 'Bun'], ['mohawk', 'Mohawk'], ['none', 'Bald']];
   const BEARDS = [['', 'None'], ['stubble', 'Stubble'], ['short', 'Short'], ['long', 'Long'], ['bushy', 'Bushy'], ['goatee', 'Goatee'], ['tache', 'Moustache']];
   const HATS = [['', 'None'], ['flatcap', 'Flat cap'], ['beanie', 'Beanie'], ['cap', 'Baseball cap'], ['tophat', 'Top hat'], ['cowboy', 'Cowboy hat'], ['hardhat', 'Hard hat'], ['crown', 'Crown'], ['scarf', 'Headscarf']];
-  function ik(Sx, Sy, Tx, Ty, l1, l2, side, low) { let dx = Tx - Sx, dy = Ty - Sy, d = Math.hypot(dx, dy); d = cl(d, Math.abs(l1 - l2) + 2, l1 + l2 - 0.5); const a = Math.atan2(dy, dx), b = Math.acos(cl((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
-    const c1 = [Sx + Math.cos(a + b) * l1, Sy + Math.sin(a + b) * l1], c2 = [Sx + Math.cos(a - b) * l1, Sy + Math.sin(a - b) * l1], sc = low ? c => (c[1] - Sy) - (c[0] - Sx) * low * 0.35 : c => (c[0] - Sx) * side + (c[1] - Sy) * 0.5; return [sc(c1) > sc(c2) ? c1 : c2, [Sx + Math.cos(a) * d, Sy + Math.sin(a) * d]]; }
+  // Two-bone reach (arm or leg). The joint bends towards a preferred side; near the point where either bend would do, the
+  // bend eases through straight instead of flipping over in one frame.
+  function ik(Sx, Sy, Tx, Ty, l1, l2, side, low, pole) { let dx = Tx - Sx, dy = Ty - Sy, d = Math.hypot(dx, dy); d = cl(d, Math.abs(l1 - l2) + 2, l1 + l2 - 0.5); const a = Math.atan2(dy, dx), ux = Math.cos(a), uy = Math.sin(a);
+    const al = (l1 * l1 + d * d - l2 * l2) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - al * al)), px = -uy, py = ux;
+    const pl = pole || (low ? [-low * 0.35, 1] : [side, 0.5]), pn = Math.hypot(pl[0], pl[1]) || 1, s = cl((px * pl[0] + py * pl[1]) / pn / 0.5, -1, 1), sg = s * (2 - Math.abs(s));
+    let Ex = Sx + ux * al + px * h * sg, Ey = Sy + uy * al + py * h * sg;
+    // Hand pulled right in close: which way the joint points is decided by the preferred side, not by the exact spot
+    if (pole) { const q = cl((d - 0.08 * S) / (0.2 * S), 0, 1), wq = q * q * (3 - 2 * q); if (wq < 1) { Ex = lerp(Sx + pl[0] / pn * l1, Ex, wq); Ey = lerp(Sy + pl[1] / pn * l1, Ey, wq); } }
+    return [[Ex, Ey], [Sx + ux * d, Sy + uy * d]]; }
   // Knees bend forward: the elbow solver with the bend set to the side the person faces
   function leg(hip, foot, dir) { const l = 0.215 * S, [K, Fp] = ik(hip[0], hip[1], foot[0], foot[1], l, l, dir); return [hip, K, Fp]; }
   function figure(g, ch, P, t, reveal = 1) {
@@ -19,7 +26,7 @@
     if (!P.noLegs) [0, 1].forEach(i => { let p;
       if (P.tuck > 0.01) { const k = P.tuck, kn = [hip[0] + dir * lerp(0.03, 0.17, k) * S + (i ? 5 : -5), hip[1] + lerp(0.21, -0.05, k) * S], ft = [hip[0] + dir * lerp(0.04, 0.03, k) * S, hip[1] + lerp(0.42, 0.1, k) * S]; p = [hip, kn, ft]; }
       else if ((P.sit || 0) > 0.5) { const kn = [hip[0] + dir * 0.21 * S + (i ? 6 : -6), hip[1] + 4]; p = [hip, kn, [kn[0] + dir * 6, P.lowSit ? kn[1] + 8 : FL]]; }
-      else if (P.walk != null) { const ph = P.walk + i * Math.PI, a = 0.42 * Math.sin(ph), k = 0.75 * Math.max(0, -Math.cos(ph)); const kn = [hip[0] + dir * Math.sin(a) * 0.22 * S, hip[1] + Math.cos(a) * 0.22 * S]; const ft = [kn[0] + dir * Math.sin(a - k) * 0.21 * S, Math.min(FL, kn[1] + Math.cos(a - k) * 0.21 * S)]; p = [hip, kn, ft]; }
+      else if (P.walk != null) { const ph = P.walk + i * Math.PI, wa = P.walkAmp != null ? P.walkAmp : 1, a = 0.42 * Math.sin(ph) * wa, k = 0.75 * Math.max(0, -Math.cos(ph)) * wa; const kn = [hip[0] + dir * Math.sin(a) * 0.22 * S, hip[1] + Math.cos(a) * 0.22 * S]; const ft = [kn[0] + dir * Math.sin(a - k) * 0.21 * S, Math.min(FL, kn[1] + Math.cos(a - k) * 0.21 * S)]; p = [hip, kn, ft]; }
       else if ((P.kneel || 0) > 0.5) { p = i ? [hip, [hip[0] + dir * 0.18 * S, hip[1] + 0.06 * S], [hip[0] + dir * 0.19 * S, floor]] : [hip, [hip[0] - dir * 0.02 * S, floor - 6], [hip[0] - dir * 0.22 * S, floor - 4]]; }
       else { const spread = (i ? 1 : -1) * 0.07 * S * (P.wide || 1); let ft = [hip[0] + spread, floor - (P.tap && i === 1 ? P.tap : 0) - (P.kick && i === 1 ? P.kick : 0)]; if (P.kickF && i === 1) ft = [hip[0] + dir * lerp(0.07, 0.4, P.kickF) * S, lerp(floor, hip[1] + 0.06 * S, P.kickF)]; p = leg(hip, ft, dir); }
       const ft = p[p.length - 1]; parts.push({ p: p.concat([[ft[0] + dir * 0.05 * S, ft[1]]]), col }); });
@@ -40,7 +47,7 @@
     if ((P.moon || 0) > 0.3) { const bx = hip[0] - dir * 0.05 * S, by = hip[1] + 0.035 * S, sk = mixC(BOARD, '#f6d2c0', 0.75); [0, 1].forEach(k => parts.push({ p: circP(bx - dir * k * 0.045 * S, by, 0.05 * S, 0.055 * S), col: CH.pink, fill: sk, w: 4 })); parts.push({ p: [[hip[0] - 0.09 * S, hip[1] + 0.21 * S], [hip[0] + 0.09 * S, hip[1] + 0.21 * S]], col, w: 7 }); }
     parts.push({ p: [neck, hip], col });
     // Arms: hands go to targets relative to the shoulder; elbows bend outward
-    const hands = {}; [-1, 1].forEach(side => { const T = (P.hands && P.hands[side]) || [side * 0.07 * S, 0.31 * S], [El, Hd] = ik(sh[0] + side * 3, sh[1], sh[0] + T[0], sh[1] + T[1], 0.17 * S, 0.16 * S, side, T[1] > -0.03 * S || (P.elbowDown && P.elbowDown[side]) ? dir : 0); hands[side] = Hd; parts.push({ p: [[sh[0], sh[1]], El, Hd], col }); const fg = P.fingers && P.fingers[side];
+    const hands = {}, elbows = {}; [-1, 1].forEach(side => { const T = (P.hands && P.hands[side]) || [side * 0.07 * S, 0.31 * S], [El, Hd] = ik(sh[0] + side * 3, sh[1], sh[0] + T[0], sh[1] + T[1], 0.17 * S, 0.16 * S, side, 0, (() => { const lk = Math.max(+(P.elbowDown && P.elbowDown[side]) || 0, cl((T[1] + 0.22 * S) / (0.4 * S), 0, 1)), lq = lk * lk * (3 - 2 * lk); return [lerp(side, -dir * 0.35, lq), lerp(0.5, 1, lq)]; })()); hands[side] = Hd; elbows[side] = El; parts.push({ p: [[sh[0], sh[1]], El, Hd], col }); const fg = P.fingers && P.fingers[side];
       if (fg === 'mid') { parts.push({ p: circP(Hd[0], Hd[1], 13, 12), col, fill: BOARD, w: 5 }); parts.push({ p: [[Hd[0], Hd[1] - 8], [Hd[0] + dir * 2, Hd[1] - 48]], col, w: 7 }); }
       if (fg === 'v') { parts.push({ p: circP(Hd[0], Hd[1], 10, 9), col, fill: BOARD, w: 4.5 }); parts.push({ p: [[Hd[0] - 12, Hd[1] - 34], [Hd[0], Hd[1] - 6], [Hd[0] + 12, Hd[1] - 34]], col, w: 5.5 }); }
       if (fg === 'fist') parts.push({ p: circP(Hd[0], Hd[1], 15, 13), col, fill: BOARD, w: 5.5 });
@@ -116,7 +123,7 @@
     const tot = reveal < 1 ? parts.reduce((a, q) => a + plen(q.p), 0) : 0; let used = tot * reveal;
     const ln = (p, c, ww) => { if (outl && c === col) line(g, p, CH.white, ww * wm + 5); line(g, p, c, ww * wm); };
     parts.forEach(q => { if (q.fill && reveal > 0.3) fillPoly(g, q.p, q.fill, cl((reveal - 0.3) / 0.4, 0, 1)); if (reveal >= 1) { ln(q.p, q.col, q.w || w); return; } const L = plen(q.p); if (used > 0) ln(partial(q.p, Math.min(1, used / L)), q.col, q.w || w); used -= L; });
-    return { hc, hr, top, hands, sh, hip, dir };
+    return { hc, hr, top, hands, elbows, sh, hip, dir };
   }
 
   /* ---------- Props and weapons ---------- */

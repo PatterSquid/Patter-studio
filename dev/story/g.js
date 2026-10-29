@@ -22,10 +22,13 @@
     if (A0 && A0[4] === 'text' && a.text === undefined) a.text = k === 'caption' ? 'Caption' : k === 'timejump' ? '6 hours later' : '';
     if (TALK.includes(k) && a.text) a.dur = r2(talkDur(a.text));
     if (A0 && A0[4] === 'spot' && !a.to) { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, ks = spotsFor(sc).filter(x => !x.startsWith('off')); a.to = ks.find(x => Math.abs(spotOf(o.set, x).x - st.x) > 80) || 'middle'; }
-    if (A0 && A0[4] === 'spot') { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, dx = Math.abs(spotOf(o.set, a.to, sim, st).x - st.x); a.dur = r2(cl(0.35 + dx / (k === 'run' || k === 'charge' ? 700 : k === 'sneak' ? 240 : k === 'swim' ? 300 : 430), 0.6, 8)); }
+    if (A0 && A0[4] === 'spot') { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, dx = Math.abs(spotOf(o.set, a.to, sim, st, who).x - st.x); a.dur = r2(cl(0.35 + dx / (k === 'run' || k === 'charge' ? 700 : k === 'sneak' ? 240 : k === 'swim' ? 300 : 430), 0.6, 8)); }
     if (k === 'give') { a.prop = a.prop || 'passport'; a.to = a.to || ((sc.people.find(p => p.pid !== who) || {}).pid || ''); }
     if ((AIMED.includes(k) || (PACK.acts[k] && PACK.acts[k].target)) && k !== 'give' && k !== 'spit' && !a.to) { const sim0 = simScene(sc, o, rel), me = sim0[who] || { x: 960 }, others = sc.people.filter(p => p.pid !== who && sim0[p.pid]).sort((p1, p2) => Math.abs(sim0[p1.pid].x - me.x) - Math.abs(sim0[p2.pid].x - me.x)); a.to = (others[0] || {}).pid || ''; }
     if (k === 'smash' && !a.prop) a.prop = 'bottle';
+    // Going for someone standing well away: walk up to them first, so the swing does not start with a dash across the board
+    if (HIT[k] && a.to && a.who && !extra.start0) { const sim0 = simScene(sc, o, rel), me = sim0[who], tq = sim0[a.to]; if (me && tq && !me.wet && !me.sit && !me.lying) { const far = Math.abs(tq.x - me.x) - 0.42 * S;
+      if (far > 0.3 * a.dur * 430 + 60) { const w = { id: nid('a'), who, k: 'walk', start: rel, dur: r2(cl(0.35 + far / 430, 0.6, 8)), to: '@' + a.to }; sc.acts = sc.acts || []; sc.acts.push(w); settle(sc, w); a.start = r2(w.start + w.dur); } } }
     if (k === 'take') a.prop = a.prop || 'phone';
     if (a.who) { sc.acts = sc.acts || []; sc.acts.push(a); } else { sc.extra = sc.extra || []; sc.extra.push(a); } settle(sc, a); return a;
   }
@@ -70,7 +73,7 @@
       if (kind !== 'W') return null; const pe = sc.people.find(p => p.pid === pid); if (!pe) return null; const o = plan(cfg).scenes.find(x => x.sc.id === sid), lt = ctx && ctx.t != null && o ? ctx.t - o.t0 : 0;
       // Dragging moves where they are at the playhead: the end of their latest walk, or where they start
       const mv = (sc.acts || []).filter(a => a.who === pid && MOVES.includes(a.k) && a.start <= lt + 0.01).sort((a, b) => b.start - a.start)[0];
-      if (mv && o) { const sim = simScene(sc, o, Math.max(0, mv.start - 0.001)); return { sid, pid, aid: mv.id, x: spotOf(o.set, mv.to, sim, sim[pid]).x, size: pe.size || 1, swim: mv.k === 'swim' }; }
+      if (mv && o) { const sim = simScene(sc, o, Math.max(0, mv.start - 0.001)); return { sid, pid, aid: mv.id, x: spotOf(o.set, mv.to, sim, sim[pid], pid).x, size: pe.size || 1, swim: mv.k === 'swim' }; }
       return { sid, pid, x: spotOf(setOf(sc), pe.start).x, size: pe.size || 1 }; },
     move(cfg, id, s, dx, dy) { if (!s) return; const sc = scById(cfg, s.sid); if (!sc) return;
       if (s.qid) { const q = (sc.screens || []).find(x => x.id === s.qid); if (q) { q.x = Math.round(cl(s.x + dx, 0, WW)); q.y = Math.round(cl(s.y + (dy || 0), 0, WH)); } return; }

@@ -39,6 +39,9 @@ git add -A && git commit && git push origin main
   render sweeps, undo round trips, launcher update and rollback, packs UI). They were written with absolute paths from
   the original session; adjust paths before running.
 * Headless Chromium cannot encode H.264, so check exports with PNG sequences or by drawing frames directly.
+* Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in
+  `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
+  after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).
 
 ## The Video tab (dev/src/video.js)
 

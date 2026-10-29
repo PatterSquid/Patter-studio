@@ -162,7 +162,7 @@
         H('p', { className: 'hint' }, 'Tip: + Scene carries everyone on into the next place, walking in from the left.')));
     }
   }
-  const mod = { id: 'story', name: 'Story', packs, mediaAt, mediaFor, defaults, duration, draw, form: (root, cfg, changed) => panel(root, cfg, null, changed, null), editor, blurHint, _plan: plan, _sim: simScene, _set: buildSet, _cues: screenCues, ACT, PROPS, REGIONS, ERAS, PLACES, SCREENS };
+  const mod = { id: 'story', name: 'Story', packs, mediaAt, mediaFor, defaults, duration, draw, form: (root, cfg, changed) => panel(root, cfg, null, changed, null), editor, blurHint, _plan: plan, _sim: simScene, _pose: poseOf, _figure: figure, _newAct: newAct, _set: buildSet, _cues: screenCues, ACT, PROPS, REGIONS, ERAS, PLACES, SCREENS };
   // The B roll tab: the same chalk world, set up around a screen for real footage with a presenter beside it
   function brollDefaults() {
     const cast = [{ id: 'host', name: 'Host', sex: 'man', colour: 'orange', dress: 'kilt', hair: 'spiky', beard: 'short' }];

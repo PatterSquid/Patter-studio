@@ -305,7 +305,7 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
   </section>
 </main>
 <dialog id="dlg" aria-label="Dialog"></dialog>
-<script id="patter-js">window.PATTER_APP_VERSION='2026.10.29.3';
+<script id="patter-js">window.PATTER_APP_VERSION='2026.10.29.4';
 /* Minimal MP4 (ISO BMFF) muxer for one H.264 video track.
    Samples are AVC length prefixed access units, as produced by WebCodecs with avc.format = 'avc'. */
 const MP4Mux = (() => {
@@ -3403,8 +3403,15 @@ const Story = (() => {
   const HAIRS = [['', 'Usual'], ['short', 'Short'], ['long', 'Long'], ['curly', 'Curly'], ['spiky', 'Spiky'], ['afro', 'Afro'], ['ponytail', 'Ponytail'], ['bun', 'Bun'], ['mohawk', 'Mohawk'], ['none', 'Bald']];
   const BEARDS = [['', 'None'], ['stubble', 'Stubble'], ['short', 'Short'], ['long', 'Long'], ['bushy', 'Bushy'], ['goatee', 'Goatee'], ['tache', 'Moustache']];
   const HATS = [['', 'None'], ['flatcap', 'Flat cap'], ['beanie', 'Beanie'], ['cap', 'Baseball cap'], ['tophat', 'Top hat'], ['cowboy', 'Cowboy hat'], ['hardhat', 'Hard hat'], ['crown', 'Crown'], ['scarf', 'Headscarf']];
-  function ik(Sx, Sy, Tx, Ty, l1, l2, side, low) { let dx = Tx - Sx, dy = Ty - Sy, d = Math.hypot(dx, dy); d = cl(d, Math.abs(l1 - l2) + 2, l1 + l2 - 0.5); const a = Math.atan2(dy, dx), b = Math.acos(cl((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
-    const c1 = [Sx + Math.cos(a + b) * l1, Sy + Math.sin(a + b) * l1], c2 = [Sx + Math.cos(a - b) * l1, Sy + Math.sin(a - b) * l1], sc = low ? c => (c[1] - Sy) - (c[0] - Sx) * low * 0.35 : c => (c[0] - Sx) * side + (c[1] - Sy) * 0.5; return [sc(c1) > sc(c2) ? c1 : c2, [Sx + Math.cos(a) * d, Sy + Math.sin(a) * d]]; }
+  // Two-bone reach (arm or leg). The joint bends towards a preferred side; near the point where either bend would do, the
+  // bend eases through straight instead of flipping over in one frame.
+  function ik(Sx, Sy, Tx, Ty, l1, l2, side, low, pole) { let dx = Tx - Sx, dy = Ty - Sy, d = Math.hypot(dx, dy); d = cl(d, Math.abs(l1 - l2) + 2, l1 + l2 - 0.5); const a = Math.atan2(dy, dx), ux = Math.cos(a), uy = Math.sin(a);
+    const al = (l1 * l1 + d * d - l2 * l2) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - al * al)), px = -uy, py = ux;
+    const pl = pole || (low ? [-low * 0.35, 1] : [side, 0.5]), pn = Math.hypot(pl[0], pl[1]) || 1, s = cl((px * pl[0] + py * pl[1]) / pn / 0.5, -1, 1), sg = s * (2 - Math.abs(s));
+    let Ex = Sx + ux * al + px * h * sg, Ey = Sy + uy * al + py * h * sg;
+    // Hand pulled right in close: which way the joint points is decided by the preferred side, not by the exact spot
+    if (pole) { const q = cl((d - 0.08 * S) / (0.2 * S), 0, 1), wq = q * q * (3 - 2 * q); if (wq < 1) { Ex = lerp(Sx + pl[0] / pn * l1, Ex, wq); Ey = lerp(Sy + pl[1] / pn * l1, Ey, wq); } }
+    return [[Ex, Ey], [Sx + ux * d, Sy + uy * d]]; }
   // Knees bend forward: the elbow solver with the bend set to the side the person faces
   function leg(hip, foot, dir) { const l = 0.215 * S, [K, Fp] = ik(hip[0], hip[1], foot[0], foot[1], l, l, dir); return [hip, K, Fp]; }
   function figure(g, ch, P, t, reveal = 1) {
@@ -3418,7 +3425,7 @@ const Story = (() => {
     if (!P.noLegs) [0, 1].forEach(i => { let p;
       if (P.tuck > 0.01) { const k = P.tuck, kn = [hip[0] + dir * lerp(0.03, 0.17, k) * S + (i ? 5 : -5), hip[1] + lerp(0.21, -0.05, k) * S], ft = [hip[0] + dir * lerp(0.04, 0.03, k) * S, hip[1] + lerp(0.42, 0.1, k) * S]; p = [hip, kn, ft]; }
       else if ((P.sit || 0) > 0.5) { const kn = [hip[0] + dir * 0.21 * S + (i ? 6 : -6), hip[1] + 4]; p = [hip, kn, [kn[0] + dir * 6, P.lowSit ? kn[1] + 8 : FL]]; }
-      else if (P.walk != null) { const ph = P.walk + i * Math.PI, a = 0.42 * Math.sin(ph), k = 0.75 * Math.max(0, -Math.cos(ph)); const kn = [hip[0] + dir * Math.sin(a) * 0.22 * S, hip[1] + Math.cos(a) * 0.22 * S]; const ft = [kn[0] + dir * Math.sin(a - k) * 0.21 * S, Math.min(FL, kn[1] + Math.cos(a - k) * 0.21 * S)]; p = [hip, kn, ft]; }
+      else if (P.walk != null) { const ph = P.walk + i * Math.PI, wa = P.walkAmp != null ? P.walkAmp : 1, a = 0.42 * Math.sin(ph) * wa, k = 0.75 * Math.max(0, -Math.cos(ph)) * wa; const kn = [hip[0] + dir * Math.sin(a) * 0.22 * S, hip[1] + Math.cos(a) * 0.22 * S]; const ft = [kn[0] + dir * Math.sin(a - k) * 0.21 * S, Math.min(FL, kn[1] + Math.cos(a - k) * 0.21 * S)]; p = [hip, kn, ft]; }
       else if ((P.kneel || 0) > 0.5) { p = i ? [hip, [hip[0] + dir * 0.18 * S, hip[1] + 0.06 * S], [hip[0] + dir * 0.19 * S, floor]] : [hip, [hip[0] - dir * 0.02 * S, floor - 6], [hip[0] - dir * 0.22 * S, floor - 4]]; }
       else { const spread = (i ? 1 : -1) * 0.07 * S * (P.wide || 1); let ft = [hip[0] + spread, floor - (P.tap && i === 1 ? P.tap : 0) - (P.kick && i === 1 ? P.kick : 0)]; if (P.kickF && i === 1) ft = [hip[0] + dir * lerp(0.07, 0.4, P.kickF) * S, lerp(floor, hip[1] + 0.06 * S, P.kickF)]; p = leg(hip, ft, dir); }
       const ft = p[p.length - 1]; parts.push({ p: p.concat([[ft[0] + dir * 0.05 * S, ft[1]]]), col }); });
@@ -3439,7 +3446,7 @@ const Story = (() => {
     if ((P.moon || 0) > 0.3) { const bx = hip[0] - dir * 0.05 * S, by = hip[1] + 0.035 * S, sk = mixC(BOARD, '#f6d2c0', 0.75); [0, 1].forEach(k => parts.push({ p: circP(bx - dir * k * 0.045 * S, by, 0.05 * S, 0.055 * S), col: CH.pink, fill: sk, w: 4 })); parts.push({ p: [[hip[0] - 0.09 * S, hip[1] + 0.21 * S], [hip[0] + 0.09 * S, hip[1] + 0.21 * S]], col, w: 7 }); }
     parts.push({ p: [neck, hip], col });
     // Arms: hands go to targets relative to the shoulder; elbows bend outward
-    const hands = {}; [-1, 1].forEach(side => { const T = (P.hands && P.hands[side]) || [side * 0.07 * S, 0.31 * S], [El, Hd] = ik(sh[0] + side * 3, sh[1], sh[0] + T[0], sh[1] + T[1], 0.17 * S, 0.16 * S, side, T[1] > -0.03 * S || (P.elbowDown && P.elbowDown[side]) ? dir : 0); hands[side] = Hd; parts.push({ p: [[sh[0], sh[1]], El, Hd], col }); const fg = P.fingers && P.fingers[side];
+    const hands = {}, elbows = {}; [-1, 1].forEach(side => { const T = (P.hands && P.hands[side]) || [side * 0.07 * S, 0.31 * S], [El, Hd] = ik(sh[0] + side * 3, sh[1], sh[0] + T[0], sh[1] + T[1], 0.17 * S, 0.16 * S, side, 0, (() => { const lk = Math.max(+(P.elbowDown && P.elbowDown[side]) || 0, cl((T[1] + 0.22 * S) / (0.4 * S), 0, 1)), lq = lk * lk * (3 - 2 * lk); return [lerp(side, -dir * 0.35, lq), lerp(0.5, 1, lq)]; })()); hands[side] = Hd; elbows[side] = El; parts.push({ p: [[sh[0], sh[1]], El, Hd], col }); const fg = P.fingers && P.fingers[side];
       if (fg === 'mid') { parts.push({ p: circP(Hd[0], Hd[1], 13, 12), col, fill: BOARD, w: 5 }); parts.push({ p: [[Hd[0], Hd[1] - 8], [Hd[0] + dir * 2, Hd[1] - 48]], col, w: 7 }); }
       if (fg === 'v') { parts.push({ p: circP(Hd[0], Hd[1], 10, 9), col, fill: BOARD, w: 4.5 }); parts.push({ p: [[Hd[0] - 12, Hd[1] - 34], [Hd[0], Hd[1] - 6], [Hd[0] + 12, Hd[1] - 34]], col, w: 5.5 }); }
       if (fg === 'fist') parts.push({ p: circP(Hd[0], Hd[1], 15, 13), col, fill: BOARD, w: 5.5 });
@@ -3515,7 +3522,7 @@ const Story = (() => {
     const tot = reveal < 1 ? parts.reduce((a, q) => a + plen(q.p), 0) : 0; let used = tot * reveal;
     const ln = (p, c, ww) => { if (outl && c === col) line(g, p, CH.white, ww * wm + 5); line(g, p, c, ww * wm); };
     parts.forEach(q => { if (q.fill && reveal > 0.3) fillPoly(g, q.p, q.fill, cl((reveal - 0.3) / 0.4, 0, 1)); if (reveal >= 1) { ln(q.p, q.col, q.w || w); return; } const L = plen(q.p); if (used > 0) ln(partial(q.p, Math.min(1, used / L)), q.col, q.w || w); used -= L; });
-    return { hc, hr, top, hands, sh, hip, dir };
+    return { hc, hr, top, hands, elbows, sh, hip, dir };
   }
 
   /* ---------- Props and weapons ---------- */
@@ -3631,15 +3638,22 @@ const Story = (() => {
   const SPOTS = { 'off left': -170, left: 380, middle: 960, right: 1540, 'off right': 2090 };
 
   /* ---------- Working out where everyone is at a moment ---------- */
-  function spotOf(set, k, sim, me) {
+  function spotOf(set, k, sim, me, pid) {
     if (typeof k === 'number') return { x: k };
-    if (k && k[0] === '@' && sim && sim[k.slice(1)]) { const o = sim[k.slice(1)], side = me && me.x < o.x ? -1 : 1; return { x: o.x + side * 0.42 * S }; }
+    // Walking up to someone: stand beside them, on the near side unless somebody is already standing there
+    if (k && k[0] === '@' && sim && sim[k.slice(1)]) { const tk = k.slice(1), o = sim[tk], side = me && me.x < o.x ? -1 : 1, gap = (o.lying ? 0.5 : 0.42) * S;
+      const taken = x => Object.keys(sim).some(q => q !== tk && q !== pid && sim[q] && !sim[q].lying && Math.abs(sim[q].x - x) < 0.3 * S), near = o.x + side * gap, far = o.x - side * gap;
+      if (pid == null || !taken(near)) return { x: near }; if (!taken(far) && far > 60 && far < WW - 60 && (!me || Math.abs(far - me.x) <= Math.abs(near - me.x) + 0.5 * S)) return { x: far }; return { x: near + side * 0.32 * S }; }
     if (SPOTS[k] != null && !(set.marks[k])) return { x: SPOTS[k] }; return set.marks[k] || set.marks.middle || { x: 960 };
   }
+  const refMemo = new WeakMap();
   function simScene(sc, P, t, noRef) {
     // Where everyone was at an earlier moment: walking up to someone, or swinging at them, aims for where that person
     // actually is when the move starts, even if they are listed after the mover or have walked since the scene began
-    const refs = {}, refAt = ts => noRef ? null : (refs[ts] || (refs[ts] = simScene(sc, P, ts, true)));
+    // (worked out properly, a moment before, so moves that themselves aimed at someone land in the right place too; each
+    // moment is remembered for the scene so this stays cheap)
+    let rc = refMemo.get(P); if (!rc || rc.sc !== sc) { rc = { sc, m: new Map() }; refMemo.set(P, rc); }
+    const refAt = ts => { if (noRef) return null; const k = Math.round(ts * 10000); let r = rc.m.get(k); if (!r) { if (rc.m.size > 2000) rc.m.clear(); r = simScene(sc, P, ts - 0.0001); rc.m.set(k, r); } return r; };
     const set = P.set, out = {}, water = set.water, inW = x => !!water && x > water.x0 + 30 && x < water.x1 - 30;
     sc.people.forEach(pe => { const sp = spotOf(set, pe.start), x = sp.x; out[pe.pid] = { x, dir: pe.start === 'off right' ? -1 : pe.start === 'off left' ? 1 : (x < 960 ? 1 : -1), sit: !!sp.sit, lowSit: !!sp.low, behind: !!sp.behind, wet: !!sp.water, sleep: false, lying: false, kneel: false, mood: 'ok', active: null, props: pe.holding ? [pe.holding] : [] }; if (inW(x)) out[pe.pid].wet = true; const inj = pe.injury || ''; out[pe.pid].blackEye = inj === 'blackeye'; out[pe.pid].bandage = inj === 'bandage'; out[pe.pid].plaster = inj === 'plaster'; });
     // Props change hands at fixed moments
@@ -3663,7 +3677,7 @@ const Story = (() => {
         if (a.synthetic && out[a.by]) { const hx = out[a.by].x; st.hitAway = a.away || (st.x >= hx ? 1 : -1); if (!done) st.dir = -st.hitAway; }
         if (MOVES.includes(a.k) || a.k === 'dive' || a.k === 'cannonball' || a.k === 'climbout') {
           let sp; if (a.k === 'dive' || a.k === 'cannonball') sp = { x: water ? cl(st.x < (water.x0 + water.x1) / 2 ? water.x0 + 170 : water.x1 - 170, water.x0 + 60, water.x1 - 60) : st.x + st.dir * 300, water: !!water };
-          else if (a.k === 'climbout') sp = { x: water ? (st.x < (water.x0 + water.x1) / 2 ? water.x0 - 110 : water.x1 + 110) : st.x }; else sp = spotOf(set, a.to, (String(a.to || '')[0] === '@' && refAt(a.start)) || out, st);
+          else if (a.k === 'climbout') sp = { x: water ? (st.x < (water.x0 + water.x1) / 2 ? water.x0 - 110 : water.x1 + 110) : st.x }; else sp = spotOf(set, a.to, (String(a.to || '')[0] === '@' && refAt(a.start)) || out, st, pe.pid);
           if (a.k === 'swim' && water) sp = { x: cl(sp.x, water.x0 + 60, water.x1 - 60), water: true };
           if (done) { st.dir = sp.x >= st.x ? 1 : -1; if (Math.abs(sp.x - st.x) < 1) st.dir = st.active ? st.dir : st.dir; st.x = sp.x; st.sit = !!sp.sit && !['charge', 'swim'].includes(a.k); st.lowSit = !!sp.low; st.behind = !!sp.behind; st.sleep = false; st.lying = false; st.kneel = false; st.wet = a.k === 'climbout' ? false : !!sp.water || (a.k === 'swim' && st.wet) || inW(st.x); }
           else { st.walkFrom = st.x; st.walkTo = sp.x; st.sitAt = !!sp.sit; st.toWater = !!sp.water; } }
@@ -3684,6 +3698,10 @@ const Story = (() => {
     sc.people.forEach(pe => { const st = out[pe.pid], a = st.active; if (st.lying || st.wet) return; if (a && (MOVES.includes(a.a.k) || ['dive', 'cannonball', 'climbout', 'turn'].includes(a.a.k))) return;
       if (a && SCRACT[a.a.k] && !a.walking) { const q = scrFor(sc, a.a, st.x); if (q) { const dx = (+q.x || 960) - st.x; if (Math.abs(dx) > 20) st.dir = dx > 0 ? 1 : -1; } return; }
       if (st.perch) return;
+      // About to go for someone, or just walked up to them: keep facing them rather than turning away to the crowd and back
+      if (!a) { const mine = P.byWho[pe.pid] || [], tgt = q => { const k2 = String(q.to || '').replace(/^@/, ''); return k2 && out[k2] && out[k2] !== st ? out[k2] : null; };
+        const nx = mine.find(q => q.start > t && q.start - t < 0.8 && !q.synthetic && tgt(q)), pv = mine.filter(q => !q.synthetic && q.start + q.dur <= t && t - (q.start + q.dur) < 1.2 && String(q.to || '')[0] === '@' && tgt(q)).pop(), f = nx || pv;
+        if (f) { const o2 = tgt(f); if (Math.abs(o2.x - st.x) > 20) st.dir = o2.x > st.x ? 1 : -1; return; } }
       if (a && PACK.acts[a.a.k] && a.a.to && out[a.a.to] && out[a.a.to] !== st) { st.dir = out[a.a.to].x > st.x ? 1 : -1; return; }
       if (a && (a.a.k === 'give' || a.a.k === 'hug' || a.a.k === 'punch') && a.a.to && out[a.a.to]) { st.dir = out[a.a.to].x > st.x ? 1 : -1; return; }
       const recv = sc.people.find(q => { const qa = out[q.pid].active; return qa && ['give', 'hug', 'punch'].includes(qa.a.k) && qa.a.to === pe.pid; }); if (recv) { st.dir = out[recv.pid].x > st.x ? 1 : -1; return; }
@@ -3720,7 +3738,9 @@ const Story = (() => {
   function faceOf(Q, st, t) { const A = st.active && st.active.a; if (!A || ACT[A.k] && ACT[A.k][2] === 'Feel') return;
     const own = Q.mood; if (st.mood && st.mood !== 'ok' && (!own || own === 'ok' || own === 'happy')) Q.mood = st.mood;
     if (A.face) { Q.mood = A.face; if (!Q.emote) { if (A.face === 'angry') Q.emote = { k: 'steam', e: st.active.e }; if (A.face === 'scared') Q.emote = { k: 'sweat', e: st.active.e }; } } }
-  function poseOf(ch, st, t, P) {
+  // Running: up to speed quickly, steady in the middle, a couple of steps to pull up at the end
+  const runEase = p => { const ac = 0.14, v = 1 / (1 - ac); return p < ac ? v * p * p / (2 * ac) : p > 1 - ac ? 1 - v * (1 - p) * (1 - p) / (2 * ac) : v * (p - ac / 2); };
+  function poseRaw(ch, st, t, P) {
     const Q = poseCore(ch, st, t, P); Q.grips = {}; faceOf(Q, st, t); if (Q.hidden) return Q;
     const A = st.active && st.active.a, k = A ? A.k : '', front = Q.dir, back = -Q.dir, set = { ...Q.hands }, used = {};
     const ap = A ? actProp(k, st, Q, A) : null; if (ap && ap.prop && !Q.props.includes(ap.prop) && !(Q.hold && Q.hold.prop === ap.prop)) ap.prop = null; Q.ap = ap && ap.prop; if (ap && ap.prop) { Q.grips[ap.prop] = ap.side; used[ap.side] = 1; if (ap.prop === 'rifle' && k !== 'shoot') used[-ap.side] = 1; }
@@ -3739,6 +3759,46 @@ const Story = (() => {
       else if (moved && !used[-sd] && !set[-sd]) Q.hands[-sd] = moved; });
     return Q;
   }
+  /* Smooth joins. Every action is drawn on its own, so when one ends and the next begins (or someone walks up and starts
+     swinging, or turns to face whoever is talking) the body would jump straight into the new pose. For a moment after any
+     such change the new pose is eased in from where the body was just before it, and a change of direction becomes a quick
+     turn round on the spot. */
+  const BLEND = 0.24, TURN = 0.2, BLENDF = ['x', 'hop', 'bob', 'hdx', 'hdy', 'tilt', 'lean', 'lower', 'kneel', 'sit', 'rot', 'tuck', 'kickF', 'kick', 'tap'];
+  const joinCache = new WeakMap();
+  function changesOf(P) { let m = joinCache.get(P); if (m && m.key === P.byWho) return m; const L = [];
+    Object.values(P.byWho || {}).forEach(list => (list || []).forEach(a => { L.push(+a.start || 0, (+a.start || 0) + (+a.dur || 0)); })); (P.events || []).forEach(e => L.push(+e.t || 0));
+    m = { key: P.byWho, times: [...new Set(L.map(x => Math.round(x * 1000) / 1000))].sort((a, b) => a - b), sims: new Map() }; joinCache.set(P, m); return m; }
+  function simBefore(P, m, tb) { let s = m.sims.get(tb); if (!s) { if (m.sims.size > 400) m.sims.clear(); s = simScene(P.sc, P, Math.max(0, tb - 0.001)); m.sims.set(tb, s); } return s; }
+  const pidOf = (P, ch) => { if (ch.__pid != null && P.cast[ch.__pid] === ch) return ch.__pid; const k = Object.keys(P.cast || {}).find(q => P.cast[q] === ch); try { Object.defineProperty(ch, '__pid', { value: k, writable: true, configurable: true, enumerable: false }); } catch (e) { } return k; };
+  const handRel = (Q, r) => { const sd = r * Q.dir, h = (Q.hands && Q.hands[sd]) || [sd * 0.07 * S, 0.31 * S]; return [h[0] * Q.dir, h[1]]; };
+  function poseOf(ch, st, t, P, depth = 0) {
+    const Q = poseRaw(ch, st, t, P); if (!P || !P.sc || !P.byWho || depth > 1 || Q.hidden) return Q;
+    const m = changesOf(P), A = st.active; let tb = null;
+    // The latest change just before now: an action starting or ending (anyone's, since people turn to face each other), or
+    // the moment a walk up to someone turns into the action itself
+    for (let i = m.times.length - 1; i >= 0; i--) { const x = m.times[i]; if (x > t) continue; if (x > t - BLEND && x > 0.001) tb = x; break; }
+    if (A && A.ap && A.walking == null) { const x = A.a.start + A.ap * A.a.dur; if (x <= t && x > t - BLEND && (tb == null || x > tb)) tb = x; }
+    if (tb == null) return Q;
+    const pid = pidOf(P, ch), st0 = pid != null && simBefore(P, m, tb)[pid]; if (!st0) return Q;
+    const Q0 = poseOf(ch, st0, tb - 0.001, P, depth + 1); if (Q0.hidden || Q0.swimming || Q.swimming) return Q;
+    const u = cl((t - tb) / BLEND, 0, 1), w = io(u);
+    BLENDF.forEach(f => { const a = +Q0[f] || 0, b = +Q[f] || 0; if (a === b) return; if (f === 'x' && Math.abs(a - b) > 320) return; Q[f] = lerp(a, b, w); });
+    // Hands are blended front to front and back to back, so a turn swaps them round cleanly
+    const turning = Q0.dir !== Q.dir && !(Q.rot > 0.3 || Q0.rot > 0.3); let dirNow = Q.dir;
+    if (turning) { const k = cl((t - tb) / TURN, 0, 1), c = lerp(-(Q0.turnK != null ? Q0.turnK : 1), 1, (1 - Math.cos(k * Math.PI)) / 2); if (c < 0) dirNow = -Q.dir; Q.turnK = Math.max(0.12, Math.abs(c)); }
+    else if (Q0.turnK != null && Q0.turnK < 1) Q.turnK = lerp(Q0.turnK, Q.turnK != null ? Q.turnK : 1, w);
+    // Hands swing round the shoulder (not in a straight line through it), passing in front when they go from low to high
+    const H = {}; [1, -1].forEach(r => { const a = handRel(Q0, r), b = handRel(Q, r), ra = Math.hypot(a[0], a[1]), rb = Math.hypot(b[0], b[1]); let ta = Math.atan2(a[1], a[0]), tb2 = Math.atan2(b[1], b[0]), dt = tb2 - ta;
+      while (dt > Math.PI) dt -= 2 * Math.PI; while (dt < -Math.PI) dt += 2 * Math.PI; if (Math.abs(dt) > 2.9) { const mid = ta + dt / 2; if (Math.cos(mid) < 0) dt = dt > 0 ? dt - 2 * Math.PI : dt + 2 * Math.PI; }
+      const th = ta + dt * w, rr = lerp(ra, rb, w), h = ra < 1 || rb < 1 ? [lerp(a[0], b[0], w), lerp(a[1], b[1], w)] : [Math.cos(th) * rr, Math.sin(th) * rr]; H[r * dirNow] = [h[0] * dirNow, h[1]]; });
+    if (dirNow !== Q.dir) { const g2 = {}; Object.keys(Q.grips || {}).forEach(pr => { g2[pr] = -Q.grips[pr]; }); Q.grips = g2; if (Q.hold && Q.hold.side) Q.hold = Object.assign({}, Q.hold, { side: -Q.hold.side }); }
+    // Elbows that are tucked down for holding something tuck in gradually too
+    if (Q0.elbowDown || Q.elbowDown) { const E = {}; [1, -1].forEach(r => { const a = +((Q0.elbowDown || {})[r * Q0.dir]) || 0, b = +((Q.elbowDown || {})[r * Q.dir]) || 0, v = lerp(a, b, w); if (v > 0.001) E[r * dirNow] = v; }); Q.elbowDown = E; }
+    Q.hands = H; Q.dir = dirNow;
+    // Walking legs settle into standing (or start striding) instead of snapping
+    if (Q0.walk != null && Q.walk == null) { Q.walk = Q0.walk; Q.walkAmp = 1 - w; } else if (Q0.walk == null && Q.walk != null) Q.walkAmp = w;
+    if (Q0.hold && Q.hold && Q0.hold.a != null && Q.hold.a != null && Q0.hold.prop === Q.hold.prop) Q.hold = Object.assign({}, Q.hold, { a: lerp(Q0.hold.a, Q.hold.a, w) });
+    return Q; }
   // Pose for one person at this moment, plus any effects their action throws out (splashes, bangs, arrows)
   function poseCore(ch, st, t, P) {
     const water = P.set.water, Q = { x: st.x, dir: st.dir, sit: st.sit ? 1 : 0, lowSit: st.lowSit, mood: st.mood, hands: {}, eyes: st.sleep ? 'shut' : null, props: st.props.slice(), hdx: 0, hdy: Math.sin(t * 0.9 + ch.i) * 1.5, tilt: 0, bob: Math.sin(t * 1.7 + ch.i) * 2, kneel: st.kneel ? 1 : 0, rot: st.lying ? 1 : 0, fx: [], hold: null, hidden: false, inWater: st.wet };
@@ -3755,10 +3815,10 @@ const Story = (() => {
     if (SCRACT[a.k] && !SCRALIAS[a.k]) { poseScreen(Q, st, a, p, e, P); return Q; }
     if (PACK.acts[a.k]) { packPose(Q, st, PACK.acts[a.k], a, p, e); return Q; }
     if (MOVES.includes(g)) {
-      const x0 = st.walkFrom, x1 = st.walkTo, k = g === 'run' || g === 'charge' ? p : io(p), x = lerp(x0, x1, k); Q.x = x; Q.dir = x1 >= x0 ? 1 : -1; Q.eyes = null; Q.emote = null; Q.tilt = 0; Q.rot = 0; Q.kneel = 0;
+      const x0 = st.walkFrom, x1 = st.walkTo, k = g === 'run' || g === 'charge' ? runEase(p) : io(p), x = lerp(x0, x1, k); Q.x = x; Q.dir = x1 >= x0 ? 1 : -1; Q.eyes = null; Q.emote = null; Q.tilt = 0; Q.rot = 0; Q.kneel = 0;
       if (g === 'swim' || (st.wet && water)) { Q.swimming = true; Q.inWater = true; const ph = e * 6; Q.hop = -(0.58 * S + 14) + Math.sin(e * 3) * 4; Q.hands[Q.dir] = [Q.dir * 0.22 * S * Math.cos(ph), -0.02 * S + 0.14 * S * Math.sin(ph)]; Q.hands[-Q.dir] = [Q.dir * 0.22 * S * Math.cos(ph + Math.PI), -0.02 * S + 0.14 * S * Math.sin(ph + Math.PI)]; Q.noLegs = true; return Q; }
       Q.sit = st.sitAt ? cl((p - 0.85) / 0.15, 0, 1) : 0;
-      if (p > 0.02 && p < 0.97 && Math.abs(x1 - x0) > 5) { Q.walk = Math.abs(x - x0) / (0.12 * S) * Math.PI * 0.5 + 0.3; Q.bob = -Math.abs(Math.sin(Q.walk)) * 6; const sw = Math.sin(Q.walk); [-1, 1].forEach(sd => { Q.hands[sd] = [sd * 0.07 * S + Q.dir * sw * sd * 0.06 * S, 0.3 * S]; }); }
+      if (Math.abs(x1 - x0) > 5) { const amp = cl(Math.min(p, 1 - p) / 0.06, 0, 1); Q.walk = Math.abs(x - x0) / (0.12 * S) * Math.PI * 0.5 + 0.3; Q.walkAmp = amp; Q.bob = -Math.abs(Math.sin(Q.walk)) * 6 * amp; const sw = Math.sin(Q.walk) * amp; [-1, 1].forEach(sd => { Q.hands[sd] = [sd * 0.07 * S + Q.dir * sw * sd * 0.06 * S, lerp(0.31, 0.3, amp) * S]; }); }
       if (g === 'stagger') { const sw = Math.sin(e * 3.1); Q.x = x + Math.sin(e * 2.3) * 40 * Math.sin(p * Math.PI); Q.tilt = sw * 0.22; Q.lean = 0.2 + sw * 0.25; Q.hdx = Math.sin(e * 4) * 6; Q.eyes = 'shut'; Q.mood = 'happy'; Q.hands[Q.dir] = [Q.dir * 0.16 * S, 0.05 * S + sw * 0.08 * S]; Q.hands[-Q.dir] = [-Q.dir * 0.14 * S, 0.1 * S - sw * 0.08 * S]; if ((e % 1.6) < 0.5) Q.emote = { k: 'words', s: 'hic!', p: (e % 1.6) / 0.5, col: CH.white }; }
       if (g === 'sneak') { Q.lower = 0.55; [-1, 1].forEach(sd => Q.hands[sd] = [Q.dir * 0.1 * S + sd * 0.02 * S, 0.12 * S]); Q.emote = { k: '...', p }; }
       if (g === 'charge') { Q.mood = 'angry'; Q.talk = true; if (wpn === 'gun' || wpn === 'rifle') { Q.hands[Q.dir] = [Q.dir * 0.3 * S, 0.02 * S]; if (wpn === 'rifle') Q.hands[-Q.dir] = [Q.dir * 0.12 * S, 0.05 * S]; } else if (wpn === 'spear') { Q.hold = { a: 1.1 }; Q.hands[Q.dir] = [Q.dir * 0.16 * S, 0.06 * S]; Q.hands[-Q.dir] = [Q.dir * 0.02 * S, 0.04 * S]; } else { Q.hold = { a: -1.3 }; Q.hands[Q.dir] = [Q.dir * 0.12 * S, -0.22 * S]; } if (e < 1.2) Q.emote = { k: 'words', s: 'CHARGE!', p: cl(e / 0.4, 0, 1), col: CH.red }; Q.fast = true; }
@@ -3769,7 +3829,11 @@ const Story = (() => {
       else if (g === 'think') { Q.hands[front] = [front * 0.05 * S, -0.06 * S]; Q.tilt = -0.15 * Q.dir; Q.hdy = -4; }
       else if (g === 'whisper') { Q.hands[front] = [front * 0.08 * S, -0.09 * S]; Q.lean = 0.6; }
       else if (g === 'phone') { Q.hands[front] = [front * 0.04 * S, -0.13 * S]; Q.hold = { prop: 'phone', side: front }; }
-      else if (Q.swimming || Q.sit) { } else if (k2 === 'open') { Q.hands[front] = [front * 0.2 * S, 0.08 * S]; Q.hands[back] = [back * 0.17 * S, 0.12 * S]; } else if (k2 === 'talk') Q.hands[front] = [front * 0.18 * S, 0.1 * S]; else Q.hands[front] = [front * 0.3 * S, -0.02 * S];
+      else if (Q.swimming || Q.sit) { }
+      else { // Talking hands change gesture every so often, moving from one to the next rather than jumping
+        const gest = sl => { const r2 = rng(ch.i * 31 + sl + Math.round(a.start * 10))(), kk = r2 < 0.35 ? 'open' : r2 < 0.7 ? 'talk' : 'point'; return kk === 'open' ? [[0.2, 0.08], [0.17, 0.12]] : kk === 'talk' ? [[0.18, 0.1], [0.07, 0.31]] : [[0.3, -0.02], [0.07, 0.31]]; };
+        const now = gest(slot), was = slot > 0 ? gest(slot - 1) : [[0.07, 0.31], [0.07, 0.31]], q = io(cl((e - slot * 0.7) / 0.22, 0, 1));
+        Q.hands[front] = [front * lerp(was[0][0], now[0][0], q) * S, lerp(was[0][1], now[0][1], q) * S]; Q.hands[back] = [back * lerp(was[1][0], now[1][0], q) * S, lerp(was[1][1], now[1][1], q) * S]; }
       Q.hdx = Math.sin(e * 7) * 2; return Q; }
     const lift = (pp, a2, b2) => pp < a2 ? io(pp / a2) : pp > b2 ? 1 - io((pp - b2) / (1 - b2)) : 1;
     switch (g) {
@@ -3786,7 +3850,7 @@ const Story = (() => {
       case 'facepalm': { const k = lift(p, 0.25, 0.85); Q.hands[front] = [lerp(front * 0.07 * S, front * 0.03 * S, k), lerp(0.31 * S, -0.1 * S, k)]; Q.tilt = 0.2 * k * Q.dir; Q.hdy = 6 * k; break; }
       case 'clap': { const k = lift(p, 0.15, 0.85), c = Math.abs(Math.sin(e * 11)); [-1, 1].forEach(sd => Q.hands[sd] = [front * 0.14 * S * k + sd * (0.02 + 0.06 * c) * S * k + sd * 0.07 * S * (1 - k), lerp(0.31, 0.06, k) * S]); Q.mood = 'happy'; break; }
       case 'thumbs': { const k = lift(p, 0.2, 0.8); Q.hands[front] = [front * lerp(0.07, 0.2, k) * S, lerp(0.31, 0.02, k) * S]; Q.mood = 'happy'; if (k > 0.8) Q.fx.push({ k: 'thumb', side: front }); break; }
-      case 'handsup': { const k = lift(p, 0.15, 0.9); [-1, 1].forEach(sd => Q.hands[sd] = [sd * lerp(0.07, 0.12, k) * S, lerp(0.31, -0.3, k) * S]); Q.mood = 'shock'; break; }
+      case 'handsup': { const k = lift(p, 0.15, 0.8); [-1, 1].forEach(sd => Q.hands[sd] = [sd * lerp(0.07, 0.12, k) * S, lerp(0.31, -0.3, k) * S]); Q.mood = 'shock'; break; }
       case 'bow': { const k = lift(p, 0.25, 0.75); Q.lean = 1.6 * k; Q.hdy = 22 * k; Q.hands[front] = [front * 0.06 * S * (1 + k), 0.31 * S]; Q.hands[back] = [back * 0.03 * S + front * 0.04 * S * k, 0.31 * S]; break; }
       case 'hug': { const k = lift(p, 0.2, 0.85); Q.hands[front] = [front * lerp(0.07, 0.22, k) * S, lerp(0.31, 0.1, k) * S]; Q.hands[back] = [front * lerp(-0.07, 0.16, k) * S, lerp(0.31, 0.12, k) * S]; Q.lean = 0.5 * k; Q.mood = 'happy'; if (k > 0.9) Q.emote = { k: 'hearts' }; break; }
       case 'punch': { const j = p < 0.25 ? -io(p / 0.25) * 0.3 : p < 0.45 ? io((p - 0.25) / 0.2) : 1 - io((p - 0.5) / 0.5); Q.hands[front] = [front * lerp(0.1, 0.36, cl(j, 0, 1)) * S - front * 0.06 * S * Math.max(0, -j), 0.06 * S]; Q.hands[back] = [front * 0.06 * S, 0.1 * S]; Q.lean = 0.4 * Math.max(0, j); Q.mood = 'angry'; if (p > 0.4 && p < 0.7) Q.fx.push({ k: 'pow', side: front, p: (p - 0.4) / 0.3 }); Q.fast = p > 0.25 && p < 0.5; break; }
@@ -3803,7 +3867,7 @@ const Story = (() => {
       case 'swing': { const w2 = holding(st, ['sword', 'axe', 'spear']) || 'sword'; if (!st.props.includes(w2)) Q.hold = { prop: w2, side: front }; const k = p < 0.35 ? io(p / 0.35) : p < 0.5 ? 1 - io((p - 0.35) / 0.15) * 2 : -1 + io((p - 0.5) / 0.5); Q.bladeA = lerp(-1.6, 1.0, cl((1 - k) / 2, 0, 1)); Q.hands[front] = [front * lerp(0.2, 0.05, cl(k, 0, 1)) * S, lerp(0.05, -0.25, cl(k, 0, 1)) * S]; if (p > 0.35 && p < 0.6) Q.fx.push({ k: 'slash', side: front, p: (p - 0.35) / 0.25 }); Q.mood = 'angry'; Q.fast = p > 0.35 && p < 0.5; break; }
       case 'block': { const k = lift(p, 0.15, 0.85); if (st.props.includes('shield')) { Q.shieldFront = k; Q.hands[back] = [front * lerp(-0.07, 0.2, k) * S, lerp(0.31, 0.02, k) * S]; } else [-1, 1].forEach(sd => Q.hands[sd] = [front * 0.14 * S * k + sd * 0.03 * S, lerp(0.31, -0.08, k) * S]); Q.lean = -0.3 * k; Q.mood = 'scared'; break; }
       case 'jump': Q.hop = Math.sin(p * Math.PI) * 90; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.14 * S, lerp(0.3, -0.2, sn) * S]); Q.kick = sn * 20; break;
-      case 'dance': { const b2 = Math.sin(e * 8); Q.hop = Math.abs(b2) * 16; Q.hands[1] = [0.16 * S, (b2 > 0 ? -0.25 : 0.1) * S]; Q.hands[-1] = [-0.16 * S, (b2 > 0 ? 0.1 : -0.25) * S]; Q.tilt = b2 * 0.15; Q.mood = 'happy'; Q.emote = { k: 'notes' }; Q.dir = Math.sin(e * 4) > 0 ? 1 : -1; break; }
+      case 'dance': { const b2 = Math.sin(e * 8); Q.hop = Math.abs(b2) * 16; const hk = cl(b2 * 1.6, -1, 1), up2 = lerp(0.1, -0.25, (hk + 1) / 2), dn2 = lerp(0.1, -0.25, (1 - hk) / 2); Q.hands[1] = [0.16 * S, up2 * S]; Q.hands[-1] = [-0.16 * S, dn2 * S]; Q.tilt = b2 * 0.15; Q.mood = 'happy'; Q.emote = { k: 'notes' }; const sp = Math.sin(e * 4); Q.dir = sp > 0 ? 1 : -1; Q.turnK = Math.max(0.12, Math.min(1, Math.abs(sp) * 3)); if (Q.dir < 0) { const h1 = Q.hands[1]; Q.hands[1] = [-Q.hands[-1][0], Q.hands[-1][1]]; Q.hands[-1] = [-h1[0], h1[1]]; } break; }
       case 'sit': Q.sit = io(p); break;
       case 'stand': Q.sit = (st.sit ? 1 : 0) * (1 - io(p)); Q.kneel = A0.from && st.kneel ? 1 - io(p) : 0; Q.eyes = null; Q.emote = null; Q.tilt = 0; break;
       case 'kneel': Q.kneel = io(p); break;
@@ -3822,12 +3886,12 @@ const Story = (() => {
       case 'scared': Q.mood = 'scared'; Q.hdx = Math.sin(e * 40) * 3; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.05 * S, -0.02 * S]); Q.lower = 0.2; Q.emote = { k: 'sweat', e }; break;
       case 'love': Q.mood = 'happy'; Q.hands[-1] = [-0.03 * S, 0.05 * S]; Q.hands[1] = [0.03 * S, 0.05 * S]; Q.emote = { k: 'hearts' }; Q.tilt = Math.sin(e * 3) * 0.1; break;
       case 'happy': Q.mood = 'happy'; break; case 'sad': Q.mood = 'sad'; Q.hdy = 5 * io(p); break;
-      case 'stamp': { const k = p < 0.45 ? io(p / 0.45) : p < 0.55 ? 1 - io((p - 0.45) / 0.1) : 0; Q.hands[front] = [front * 0.17 * S, p < 0.45 ? lerp(0.25, -0.2, k) * S : 0.2 * S]; if (p >= 0.55 && p < 0.85) Q.fx.push({ k: 'stamp', side: front, p: (p - 0.55) / 0.3 }); break; }
+      case 'stamp': { const k = p < 0.45 ? io(p / 0.45) : p < 0.55 ? 1 - io((p - 0.45) / 0.1) : 0; Q.hands[front] = [front * 0.17 * S, p < 0.45 ? lerp(0.25, -0.2, k) * S : lerp(-0.2, 0.2, io(cl((p - 0.45) / 0.08, 0, 1))) * S]; if (p >= 0.55 && p < 0.85) Q.fx.push({ k: 'stamp', side: front, p: (p - 0.55) / 0.3 }); break; }
       case 'turn': Q.dir = p < 0.5 ? A0.from.dir : -A0.from.dir; break;
       case 'dive': case 'cannonball': { const x0 = st.walkFrom, x1 = st.walkTo, run = 0.3, cb = g === 'cannonball'; Q.eyes = null; Q.rot = 0;
         if (p < run) { const q = p / run, edge = lerp(x0, water ? (x1 > x0 ? water.x0 - 20 : water.x1 + 20) : x0, 1); Q.x = lerp(x0, edge, io(q)); Q.dir = x1 >= x0 ? 1 : -1; if (Math.abs(edge - x0) > 5) { Q.walk = Math.abs(Q.x - x0) / (0.12 * S) * Math.PI * 0.5; Q.bob = -Math.abs(Math.sin(Q.walk)) * 6; } }
         else { const q = (p - run) / (1 - run), edge = water ? (x1 > x0 ? water.x0 - 20 : water.x1 + 20) : x0, air = cl(q / 0.5, 0, 1); Q.dir = x1 >= x0 ? 1 : -1; Q.x = lerp(edge, x1, air);
-          if (q < 0.5) { Q.hop = Math.sin(air * Math.PI) * 260 - air * air * 120; if (cb) { Q.tuck = out3(cl(air * 3, 0, 1)); Q.hands[1] = [0.08 * S * Q.dir, 0.12 * S]; Q.hands[-1] = [0.12 * S * Q.dir, 0.1 * S]; Q.spin = air * 0.6; } else { Q.diveA = air * 2.2; [-1, 1].forEach(sd => Q.hands[sd] = [Q.dir * 0.05 * S, -0.3 * S]); } Q.fast = true; }
+          if (q < 0.5) { Q.hop = Math.sin(air * Math.PI) * 260 - air * air * 120; if (cb) { const tk = out3(cl(air * 3, 0, 1)); Q.tuck = tk; Q.hands[1] = [lerp(0.07, 0.08 * Q.dir, tk) * S, lerp(0.31, 0.12, tk) * S]; Q.hands[-1] = [lerp(-0.07, 0.12 * Q.dir, tk) * S, lerp(0.31, 0.1, tk) * S]; Q.spin = air * 0.6; } else { Q.diveA = air * 2.2; const ra = io(cl(air / 0.3, 0, 1)); [-1, 1].forEach(sd => Q.hands[sd] = [lerp(sd * 0.07, Q.dir * 0.05, ra) * S, lerp(0.31, -0.3, ra) * S]); } Q.fast = true; }
           else { Q.inWater = true; const sub = (q - 0.5) / 0.5; Q.hidden = sub < 0.5; Q.hop = -(0.58 * S + 14) - (1 - sub) * 120; Q.swimming = true; Q.noLegs = true; Q.mood = 'happy'; }
           if (q > 0.45 && q < 1) Q.fx.push({ k: 'splash', x: x1, big: cb, p: (q - 0.45) / 0.55 }); }
         break; }
@@ -3851,7 +3915,7 @@ const Story = (() => {
       case 'haymaker': { const I = HIT.haymaker.imp, wind = p < I ? io(p / I) : 0, sw = p >= I ? io(cl((p - I) / 0.14, 0, 1)) : 0, rec = p > I + 0.3 ? io((p - I - 0.3) / (0.7 - I)) : 0; Q.hands[front] = sw ? [front * lerp(-0.2, 0.38, sw) * S * (1 - rec * 0.7), lerp(-0.18, -0.02, sw) * S + rec * 0.3 * S] : [front * lerp(0.07, -0.22, wind) * S, lerp(0.31, -0.18, wind) * S]; Q.fingers = { [front]: 'fist' }; Q.lean = -0.3 * wind + 0.6 * sw * (1 - rec); Q.tilt = -0.1 * wind * Q.dir; Q.mood = 'angry'; if (p >= I && p < I + 0.3) Q.fx.push({ k: 'pow', side: front, p: (p - I) / 0.3 }); Q.fast = sw > 0 && sw < 1; break; }
       case 'uppercut': { const I = HIT.uppercut.imp, cr = p < I ? io(p / I) : 1 - io(cl((p - I) / 0.15, 0, 1)), up = p >= I ? io(cl((p - I) / 0.12, 0, 1)) * (1 - io(cl((p - I - 0.3) / 0.4, 0, 1))) : 0; Q.lower = 0.45 * cr; Q.hands[front] = up ? [front * 0.2 * S, lerp(0.2, -0.36, up) * S] : [front * 0.1 * S, lerp(0.31, 0.22, cr) * S]; Q.fingers = { [front]: 'fist' }; Q.hop = 18 * up; Q.mood = 'angry'; if (p >= I && p < I + 0.3) Q.fx.push({ k: 'pow', side: front, p: (p - I) / 0.3 }); Q.fast = up > 0 && up < 1; break; }
       case 'kickbaws': { const I = HIT.kickbaws.imp, ch2 = p < I ? io(p / I) * 0.4 : 0, kk = p >= I ? (p < I + 0.1 ? io((p - I) / 0.1) : 1 - io(cl((p - I - 0.15) / 0.3, 0, 1))) : 0; Q.kickF = Math.max(ch2, kk); Q.lean = -0.35 * Q.kickF; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.16 * S, 0.1 * S]); Q.mood = 'angry'; Q.fast = kk > 0 && kk < 1; break; }
-      case 'smash': { const I = HIT.smash.imp, pr = a.prop === 'chair' ? 'chair' : 'bottle', up = p < I ? io(p / I) : 0, dn = p >= I ? io(cl((p - I) / 0.08, 0, 1)) : 0; if (p < I + 0.04) Q.hold = { prop: pr, side: front, a: -1.2 + dn * 1.6 }; Q.hands[front] = [front * lerp(0.1, 0.3, dn) * S, lerp(lerp(0.2, -0.38, up), -0.08, dn) * S]; Q.hands[back] = Q.hands[front].slice(); Q.lean = -0.2 * up + 0.5 * dn; Q.mood = 'angry'; Q.fast = dn > 0 && dn < 1; break; }
+      case 'smash': { const I = HIT.smash.imp, pr = a.prop === 'chair' ? 'chair' : 'bottle', up = p < I ? io(p / I) : 1, dn = p >= I ? io(cl((p - I) / 0.08, 0, 1)) : 0; if (p < I + 0.04) Q.hold = { prop: pr, side: front, a: -1.2 + dn * 1.6 }; Q.hands[front] = [front * lerp(0.1, 0.3, dn) * S, lerp(lerp(0.2, -0.38, up), -0.08, dn) * S]; Q.hands[back] = Q.hands[front].slice(); Q.lean = -0.2 * up + 0.5 * dn; Q.mood = 'angry'; Q.fast = dn > 0 && dn < 1; break; }
       case 'chuck': { const I = HIT.chuck.imp, gr2 = p < 0.25 ? io(p / 0.25) : 1, lf = p >= 0.25 && p < I ? io((p - 0.25) / (I - 0.25)) : p >= I ? 1 - io(cl((p - I) / 0.3, 0, 1)) : 0; [-1, 1].forEach(sd => Q.hands[sd] = [front * lerp(0.14, 0.24, gr2) * S + sd * 4, lerp(lerp(0.31, 0.12, gr2), -0.28, lf) * S]); Q.lean = 0.5 * gr2 * (1 - lf) - 0.3 * lf; Q.mood = 'angry'; if (p > 0.25 && p < I) Q.emote = { k: 'words', s: 'OOT!', p: (p - 0.25) / (I - 0.25), col: CH.red }; break; }
       case 'stomp': { const k = lift(p, 0.06, 0.92), st2 = Math.abs(Math.sin(e * 9)); Q.kick = 50 * st2 * k; Q.lean = 0.25 * k; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.14 * S, 0.12 * S]); Q.mood = 'angry'; if (st2 < 0.25 && k > 0.5) Q.fx.push({ k: 'dust', p: st2 * 4 }); Q.fast = true; break; }
       case 'brawl': { const inC = p > 0.04 && p < 0.94; if (inC) { Q.hidden = true; Q.fx.push({ k: 'brawl', e, p, cx: Q.x + Q.dir * 0.15 * S }); } else { Q.mood = p > 0.9 ? 'happy' : 'angry'; if (p >= 0.94) { const c2 = Math.abs(Math.sin(e * 10)); [-1, 1].forEach(sd => Q.hands[sd] = [Q.dir * 0.12 * S + sd * 0.04 * S * c2, 0.08 * S]); } } break; }
@@ -3863,7 +3927,7 @@ const Story = (() => {
       case 'hit_lifted': { const up = p < 0.35 ? out3(p / 0.35) : 1 - io(cl((p - 0.35) / 0.3, 0, 1)); Q.hop = 140 * up; Q.rot = p > 0.35 ? io(cl((p - 0.35) / 0.35, 0, 1)) : 0; Q.fallBack = true; Q.eyes = 'x'; Q.mood = 'shock'; if (p < 0.85) Q.fx.push({ k: 'tooth', q: p / 0.85, away: st.hitAway || -Q.dir }); Q.emote = { k: 'stars', p }; Q.fast = true; break; }
       case 'hit_baws': { const k = p < 0.12 ? out3(p / 0.12) : 1; Q.lower = 0.6 * k; Q.lean = 1.0 * k; [-1, 1].forEach(sd => Q.hands[sd] = [Q.dir * 0.04 * S + sd * 3, 0.37 * S]); Q.kneel = p > 0.55 ? io((p - 0.55) / 0.45) : 0; Q.eyes = 'shut'; Q.mood = 'shock'; Q.hop = p < 0.25 ? Math.sin(p / 0.25 * Math.PI) * 30 : 0; if (p < 0.6) Q.fx.push({ k: 'word', s: 'OYAH!', p: p / 0.6, at: 'head', col: CH.white }); break; }
       case 'hit_smashed': { const fall = p > 0.35 ? io((p - 0.35) / 0.65) : 0; Q.rot = fall; Q.fallBack = true; Q.tilt = Math.sin(e * 16) * 0.12 * (1 - fall); Q.eyes = 'x'; Q.mood = 'shock'; Q.emote = { k: 'stars', p }; if (p < 0.5) Q.fx.push({ k: 'shards', p: p / 0.5, chair: a.src === 'chair' }); if (p < 0.3) Q.fx.push({ k: 'splat', p: p / 0.3 }); break; }
-      case 'hit_chucked': { const aw = st.hitAway || -Q.dir, fl = io(cl(p / 0.8, 0, 1)); Q.x += aw * 560 * fl; Q.hop = Math.sin(fl * Math.PI) * 300 + (p < 0.1 ? 0 : 0); Q.spin = fl * 5.5; Q.rot = p > 0.8 ? 1 : 0; Q.fallBack = true; Q.eyes = 'x'; Q.mood = 'shock'; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.18 * S, -0.2 * S]); Q.fast = p < 0.85; if (p > 0.78 && p < 1) Q.fx.push({ k: 'dust', p: (p - 0.78) / 0.22 }); break; }
+      case 'hit_chucked': { const aw = st.hitAway || -Q.dir, fl = io(cl(p / 0.8, 0, 1)); Q.x += aw * 560 * fl; Q.hop = Math.sin(fl * Math.PI) * 300 + (p < 0.1 ? 0 : 0); Q.rot = io(cl((p - 0.78) / 0.12, 0, 1)); Q.spin = Q.rot > 0 ? 0 : fl * Math.PI * 2; Q.lieSide = aw; Q.fallBack = true; Q.eyes = 'x'; Q.mood = 'shock'; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.18 * S, -0.2 * S]); Q.fast = p < 0.85; if (p > 0.78 && p < 1) Q.fx.push({ k: 'dust', p: (p - 0.78) / 0.22 }); break; }
       case 'hit_stomped': { const j = Math.abs(Math.sin(e * 9)); Q.rot = 1; Q.fallBack = true; Q.hop = 6 * (1 - j); Q.eyes = 'x'; Q.mood = 'shock'; Q.emote = { k: 'stars', p }; Q.blackEye = true; break; }
       case 'hit_brawled': Q.hidden = p < 0.97; break;
       // Shot or cut down: jolt, clutch it, stagger and drop dead (the ghost and the X eyes carry on once they are down)
@@ -4120,6 +4184,8 @@ const Story = (() => {
     const drawC = it => { const Q = poseOf(it.ch, it.st, lt, o); if (holesR.length) Q.noHalo = holesR.some(r => Q.x > r.x - 0.3 * S && Q.x < r.x + r.w + 0.3 * S && FL - (Q.hop || 0) - S < r.y + r.h && FL - (Q.hop || 0) > r.y); if (Q.x < -260 || Q.x > WW + 260 || Q.hidden) { if (Q.hidden) { Q.fx.filter(f => f.k === 'brawl').forEach(f => brawlCloud(g, f, lt)); Q.fx.filter(f => f.k === 'splash').forEach(f => drawSplash(g, f, wtr ? wtr.y : FL, lt)); if (wtr) for (let i = 0; i < 3; i++) { const by = wtr.y - ((lt * 90 + i * 30) % 70); line(g, circP(Q.x + Math.sin(lt * 6 + i) * 12, by, 6 + i * 2, 6 + i * 2, 0, 6.3, 10), CH.white, 3); } } drawn.push({ it, Q, F: null }); return; }
       g.save(); const clipW = Q.inWater && wtr; if (clipW) { g.beginPath(); g.rect(-400, -400, WW + 800, wtr.y + 400 + 8); g.clip(); }
       const sz = it.pe.size || 1; if (sz !== 1) { g.translate(Q.x, FL); g.scale(sz, sz); g.translate(-Q.x, -FL); }
+      // Turning round: squeezed to a sliver and opened out the other way
+      if (Q.turnK != null && Q.turnK < 0.999) { g.translate(Q.x, 0); g.scale(Q.turnK, 1); g.translate(-Q.x, 0); }
       if (Q.shrink && Q.shrink !== 1) { const py = FL - (Q.hop || 0) - 0.45 * S; g.translate(Q.x, py); g.scale(Q.shrink, Q.shrink); g.translate(-Q.x, -py); }
       const lying = Q.rot > 0.001, rotA = lying ? (Q.lieSide != null ? Q.lieSide : Q.fallBack ? -Q.dir : Q.dir) * Q.rot * Math.PI / 2 : Q.diveA ? Q.dir * Q.diveA : Q.spin ? Q.dir * Q.spin : 0;
       if (rotA) { const px = Q.x, py = Q.diveA || Q.spin ? FL - 0.43 * S - (Q.hop || 0) : FL; g.translate(px, py); g.rotate(rotA); g.translate(-px, -py); }
@@ -4310,15 +4376,15 @@ const Story = (() => {
     const edgeX = Q.x < r.cx ? E2.x0 : E2.x1;
     switch (a.k) {
       case 'bangtv': { Q.mood = 'angry'; const hits = SCRACT.bangtv.imp; let up = 0; hits.forEach(h => { const d = p - h; if (d > -0.12 && d < 0.06) up = Math.max(up, d < 0 ? 1 + d / 0.12 : 1 - d / 0.06); }); const tgt = toward(edgeX, Math.max(E2.top + 30, FL - 0.95 * S)); Q.hands[front] = [tgt[0], tgt[1] - 0.12 * S * up]; Q.lean = 0.25; Q.talk = p > 0.25; if (p > 0.25 && p < 0.85) Q.fx.push({ k: 'word', s: 'BANG!', p: ((p - 0.25) * 3) % 1, at: 'front', col: CH.white }); break; }
-      case 'kicktv': { const I = SCRACT.kicktv.imp, k = p < I ? io(p / I) : p < I + 0.1 ? 1 : 0; Q.kickF = k; Q.lean = -0.25 * k; Q.mood = 'angry';
+      case 'kicktv': { const I = SCRACT.kicktv.imp, k = p < I ? io(p / I) : p < I + 0.1 ? 1 : 1 - io(cl((p - I - 0.1) / 0.15, 0, 1)); Q.kickF = k; Q.lean = -0.25 * k; Q.mood = 'angry';
         if (p > I + 0.1) { const h = p - I - 0.1; Q.hop = Math.abs(Math.sin(h * 30)) * 26; Q.kick = 0.22 * S; Q.lower = 0.25; [-1, 1].forEach(sd => Q.hands[sd] = [front * 0.12 * S, 0.36 * S]); Q.mood = 'sad'; Q.eyes = 'shut'; if (h < 0.4) Q.fx.push({ k: 'word', s: 'OYAH!', p: h / 0.4, at: 'head', col: CH.red }); } Q.fast = p > I - 0.1 && p < I + 0.1; break; }
-      case 'buttv': { const I = SCRACT.buttv.imp, wind = p < I ? io(p / I) : 0, after = p >= I ? p - I : 0; Q.lean = p < I ? -0.5 * wind + (p > I - 0.08 ? 1.6 : 0) : Math.max(-0.4, 1.2 - after * 6); Q.hdx = p < I ? 0 : front * Math.max(0, 14 - after * 60); Q.mood = 'angry';
+      case 'buttv': { const I = SCRACT.buttv.imp, wind = p < I ? io(p / I) : 0, after = p >= I ? p - I : 0; Q.lean = p < I - 0.08 ? -0.5 * wind : p < I ? lerp(-0.5 * wind, 1.6, io((p - I + 0.08) / 0.08)) : Math.max(-0.4, 1.6 - after * 8); Q.hdx = p < I ? 0 : front * Math.max(0, 14 - after * 60); Q.mood = 'angry';
         if (p >= I) { Q.x -= front * 40 * io(Math.min(1, after * 3)); Q.tilt = Math.sin(e * 12) * 0.15; Q.eyes = after < 0.4 ? 'x' : null; Q.emote = after < 0.5 ? { k: 'stars', p } : null; if (after < 0.25) Q.fx.push({ k: 'word', s: 'BOSH!', p: after / 0.25, at: 'front', col: CH.yellow }); } Q.fast = Math.abs(p - I) < 0.08; break; }
       case 'smashtv': { const I = SCRACT.smashtv.imp, w = holding(st, ['bottle', 'axe', 'sword', 'gun', 'rifle']) || 'bottle'; Q.hold = p < I + 0.05 || w !== 'bottle' ? { prop: w, side: front } : null; Q.ap = Q.hold ? w : null;
         const up = p < I ? io(p / I) : 0, down = p >= I ? Math.min(1, (p - I) / 0.08) : 0, tgt = toward(edgeX, r.y + r.h * 0.4, 0.33); Q.hands[front] = p < I ? [front * 0.05 * S, lerp(0.2, -0.33, up) * S] : [lerp(front * 0.05 * S, tgt[0], down), lerp(-0.33 * S, tgt[1], down)]; Q.bladeA = p < I ? -1.4 : 0.6; Q.mood = 'angry'; Q.lean = p >= I ? 0.4 : -0.15 * up;
         if (p >= I && p < I + 0.15 && w === 'bottle') Q.fx.push({ k: 'shards', p: (p - I) / 0.15 }); if (p >= I && p < I + 0.25) Q.fx.push({ k: 'word', s: 'SMASH!', p: (p - I) / 0.25, at: 'front', col: CH.yellow }); Q.fast = Math.abs(p - I) < 0.08; break; }
       case 'leantv': { const k = lift(p, 0.15, 0.92), tgt = toward(edgeX + (Q.x < r.cx ? 6 : -6), Math.max(E2.top + 20, FL - 1.05 * S), 0.33); Q.hands[front] = [lerp(front * 0.07 * S, tgt[0], k), lerp(0.31 * S, tgt[1], k)]; Q.tilt = 0.12 * k * front; Q.wide = 1 - 0.7 * k; Q.mood = 'happy'; Q.hands[back] = [back * 0.04 * S, lerp(0.31, 0.2, k) * S]; break; }
-      case 'sittv': { const top = E2.top, sitH = FL - 0.06 * S, perch = Math.max(0, sitH - top), j = cl((p - 0.15) / 0.4, 0, 1); Q.x = lerp(st.walkTo != null ? st.walkTo : Q.x, r.cx, 0); Q.hop = perch * io(j) + Math.sin(j * Math.PI) * 60; Q.sit = j > 0.85 ? 1 : 0; Q.lowSit = true; if (j < 1) [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.15 * S, lerp(0.3, -0.2, Math.sin(j * Math.PI)) * S]); Q.mood = 'happy'; break; }
+      case 'sittv': { const top = E2.top, sitH = FL - 0.06 * S, perch = Math.max(0, sitH - top), j = cl((p - 0.15) / 0.4, 0, 1); Q.x = lerp(st.walkTo != null ? st.walkTo : Q.x, r.cx, 0); Q.hop = perch * io(j) + Math.sin(j * Math.PI) * 60; Q.sit = io(cl((j - 0.6) / 0.4, 0, 1)); Q.lowSit = true; if (j < 1) [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.15 * S, lerp(0.3, -0.2, Math.sin(j * Math.PI)) * S]); Q.mood = 'happy'; break; }
       case 'suckedtv': { const I = SCRACT.suckedtv.imp, k = cl((p - I) / 0.3, 0, 1), out2 = cl((p - 0.88) / 0.12, 0, 1), inside = p > I + 0.3 && p < 0.88, cy = r.cy;
         if (p < I) { Q.lean = -0.4 * io(p / I); Q.mood = 'shock'; Q.emote = { k: '!' }; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.18 * S, -0.1 * S]); }
         else if (!inside && out2 === 0) { Q.x = lerp(Q.x, r.cx, io(k)); Q.hop = (FL - 0.45 * S - cy) * io(k); Q.shrink = 1 - 0.8 * io(k); Q.spin = k * 5; Q.kick = Math.abs(Math.sin(e * 20)) * 0.2 * S; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.2 * S, -0.25 * S]); Q.mood = 'shock'; if (k < 0.6) Q.fx.push({ k: 'word', s: 'AAAAH!', p: k / 0.6, at: 'head', col: CH.white }); }
@@ -4326,9 +4392,9 @@ const Story = (() => {
         else { const b = io(out2); Q.x = lerp(r.cx, st.x, b); Q.hop = (FL - 0.45 * S - cy) * (1 - b) + Math.sin(b * Math.PI) * 80; Q.shrink = 0.2 + 0.8 * b; Q.spin = (1 - b) * -4; Q.mood = 'shock'; Q.eyes = 'x'; Q.emote = { k: 'stars', p }; } Q.fast = !inside; break; }
       case 'chucktv': { const I = SCRACT.chucktv.imp, tgt = toward(edgeX, r.cy, 0.33); if (p < I) { const k = io(p / I); [-1, 1].forEach(sd => Q.hands[sd] = [lerp(sd * 0.07 * S, tgt[0], k), lerp(0.31 * S, tgt[1] + sd * 10, k)]); Q.lean = -0.2 * k; Q.lower = 0.3 * k; Q.mood = 'angry'; }
         else { const k = Math.min(1, (p - I) / 0.12); [-1, 1].forEach(sd => Q.hands[sd] = [lerp(tgt[0], -front * 0.1 * S, k), lerp(tgt[1], -0.32 * S, k)]); Q.lean = lerp(-0.2, 0.5, k); Q.mood = 'happy'; if (p > I + 0.15) Q.emote = { k: 'stars', p }; } Q.fast = Math.abs(p - I) < 0.1; break; }
-      case 'remote': case 'offtv': { const k = lift(p, 0.2, 0.85), clk = Math.abs(p - SCRACT[a.k].imp) < 0.05 ? 1 : 0, tgt = toward(r.cx, r.cy, 0.32); Q.hold = { prop: 'remote', side: front }; Q.ap = 'remote'; Q.hands[front] = [lerp(front * 0.12 * S, tgt[0], k), lerp(0.2 * S, tgt[1], k) - clk * 6]; if (a.k === 'offtv' && p > 0.55) { Q.mood = 'angry'; Q.hands[back] = [front * 0.05 * S, 0.14 * S]; } break; }
+      case 'remote': case 'offtv': { const k = lift(p, 0.2, 0.85), clk = Math.abs(p - SCRACT[a.k].imp) < 0.05 ? 1 : 0, tgt = toward(r.cx, r.cy, 0.32); Q.hold = { prop: 'remote', side: front }; Q.ap = 'remote'; Q.hands[front] = [lerp(front * 0.12 * S, tgt[0], k), lerp(0.2 * S, tgt[1], k) - clk * 6]; if (a.k === 'offtv' && p > 0.5) { const q2 = io(cl((p - 0.5) / 0.15, 0, 1)); Q.mood = 'angry'; Q.hands[back] = [lerp(back * 0.07, front * 0.05, q2) * S, lerp(0.31, 0.14, q2) * S]; } break; }
       case 'droptv': { const k = out3(Math.min(1, p * 4)); Q.mood = 'shock'; Q.hop = Math.sin(Math.min(1, p * 3) * Math.PI) * 18; [-1, 1].forEach(sd => Q.hands[sd] = [sd * 0.05 * S, lerp(0.31, -0.12, k) * S]); Q.emote = { k: '!' }; if (p > 0.45 && p < 0.8) Q.fx.push({ k: 'word', s: 'NAW!', p: (p - 0.45) / 0.35, at: 'head', col: CH.red }); break; }
-      case 'swipetv': { const I = SCRACT.swipetv.imp, k = p < I ? io(p / I) : 1 - io(cl((p - I) / 0.5, 0, 1)), sw = cl((p - I + 0.1) / 0.15, 0, 1); Q.hands[front] = [front * lerp(0.1, 0.3, k) * S + front * lerp(-0.12, 0.14, sw) * S * (k > 0.5 ? 1 : 0), lerp(0.25, -0.05, k) * S]; Q.mood = 'angry'; Q.tilt = -0.08 * front * k; break; }
+      case 'swipetv': { const I = SCRACT.swipetv.imp, k = p < I ? io(p / I) : 1 - io(cl((p - I) / 0.5, 0, 1)), sw = cl((p - I + 0.1) / 0.15, 0, 1); Q.hands[front] = [front * lerp(0.1, 0.3, k) * S + front * lerp(-0.12, 0.14, sw) * S * cl((k - 0.35) / 0.3, 0, 1), lerp(0.25, -0.05, k) * S]; Q.mood = 'angry'; Q.tilt = -0.08 * front * k; break; }
     }
   }
 
@@ -4355,10 +4421,13 @@ const Story = (() => {
     if (A0 && A0[4] === 'text' && a.text === undefined) a.text = k === 'caption' ? 'Caption' : k === 'timejump' ? '6 hours later' : '';
     if (TALK.includes(k) && a.text) a.dur = r2(talkDur(a.text));
     if (A0 && A0[4] === 'spot' && !a.to) { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, ks = spotsFor(sc).filter(x => !x.startsWith('off')); a.to = ks.find(x => Math.abs(spotOf(o.set, x).x - st.x) > 80) || 'middle'; }
-    if (A0 && A0[4] === 'spot') { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, dx = Math.abs(spotOf(o.set, a.to, sim, st).x - st.x); a.dur = r2(cl(0.35 + dx / (k === 'run' || k === 'charge' ? 700 : k === 'sneak' ? 240 : k === 'swim' ? 300 : 430), 0.6, 8)); }
+    if (A0 && A0[4] === 'spot') { const sim = simScene(sc, o, rel), st = sim[who] || { x: 960 }, dx = Math.abs(spotOf(o.set, a.to, sim, st, who).x - st.x); a.dur = r2(cl(0.35 + dx / (k === 'run' || k === 'charge' ? 700 : k === 'sneak' ? 240 : k === 'swim' ? 300 : 430), 0.6, 8)); }
     if (k === 'give') { a.prop = a.prop || 'passport'; a.to = a.to || ((sc.people.find(p => p.pid !== who) || {}).pid || ''); }
     if ((AIMED.includes(k) || (PACK.acts[k] && PACK.acts[k].target)) && k !== 'give' && k !== 'spit' && !a.to) { const sim0 = simScene(sc, o, rel), me = sim0[who] || { x: 960 }, others = sc.people.filter(p => p.pid !== who && sim0[p.pid]).sort((p1, p2) => Math.abs(sim0[p1.pid].x - me.x) - Math.abs(sim0[p2.pid].x - me.x)); a.to = (others[0] || {}).pid || ''; }
     if (k === 'smash' && !a.prop) a.prop = 'bottle';
+    // Going for someone standing well away: walk up to them first, so the swing does not start with a dash across the board
+    if (HIT[k] && a.to && a.who && !extra.start0) { const sim0 = simScene(sc, o, rel), me = sim0[who], tq = sim0[a.to]; if (me && tq && !me.wet && !me.sit && !me.lying) { const far = Math.abs(tq.x - me.x) - 0.42 * S;
+      if (far > 0.3 * a.dur * 430 + 60) { const w = { id: nid('a'), who, k: 'walk', start: rel, dur: r2(cl(0.35 + far / 430, 0.6, 8)), to: '@' + a.to }; sc.acts = sc.acts || []; sc.acts.push(w); settle(sc, w); a.start = r2(w.start + w.dur); } } }
     if (k === 'take') a.prop = a.prop || 'phone';
     if (a.who) { sc.acts = sc.acts || []; sc.acts.push(a); } else { sc.extra = sc.extra || []; sc.extra.push(a); } settle(sc, a); return a;
   }
@@ -4403,7 +4472,7 @@ const Story = (() => {
       if (kind !== 'W') return null; const pe = sc.people.find(p => p.pid === pid); if (!pe) return null; const o = plan(cfg).scenes.find(x => x.sc.id === sid), lt = ctx && ctx.t != null && o ? ctx.t - o.t0 : 0;
       // Dragging moves where they are at the playhead: the end of their latest walk, or where they start
       const mv = (sc.acts || []).filter(a => a.who === pid && MOVES.includes(a.k) && a.start <= lt + 0.01).sort((a, b) => b.start - a.start)[0];
-      if (mv && o) { const sim = simScene(sc, o, Math.max(0, mv.start - 0.001)); return { sid, pid, aid: mv.id, x: spotOf(o.set, mv.to, sim, sim[pid]).x, size: pe.size || 1, swim: mv.k === 'swim' }; }
+      if (mv && o) { const sim = simScene(sc, o, Math.max(0, mv.start - 0.001)); return { sid, pid, aid: mv.id, x: spotOf(o.set, mv.to, sim, sim[pid], pid).x, size: pe.size || 1, swim: mv.k === 'swim' }; }
       return { sid, pid, x: spotOf(setOf(sc), pe.start).x, size: pe.size || 1 }; },
     move(cfg, id, s, dx, dy) { if (!s) return; const sc = scById(cfg, s.sid); if (!sc) return;
       if (s.qid) { const q = (sc.screens || []).find(x => x.id === s.qid); if (q) { q.x = Math.round(cl(s.x + dx, 0, WW)); q.y = Math.round(cl(s.y + (dy || 0), 0, WH)); } return; }
@@ -4623,7 +4692,7 @@ const Story = (() => {
         H('p', { className: 'hint' }, 'Tip: + Scene carries everyone on into the next place, walking in from the left.')));
     }
   }
-  const mod = { id: 'story', name: 'Story', packs, mediaAt, mediaFor, defaults, duration, draw, form: (root, cfg, changed) => panel(root, cfg, null, changed, null), editor, blurHint, _plan: plan, _sim: simScene, _set: buildSet, _cues: screenCues, ACT, PROPS, REGIONS, ERAS, PLACES, SCREENS };
+  const mod = { id: 'story', name: 'Story', packs, mediaAt, mediaFor, defaults, duration, draw, form: (root, cfg, changed) => panel(root, cfg, null, changed, null), editor, blurHint, _plan: plan, _sim: simScene, _pose: poseOf, _figure: figure, _newAct: newAct, _set: buildSet, _cues: screenCues, ACT, PROPS, REGIONS, ERAS, PLACES, SCREENS };
   // The B roll tab: the same chalk world, set up around a screen for real footage with a presenter beside it
   function brollDefaults() {
     const cast = [{ id: 'host', name: 'Host', sex: 'man', colour: 'orange', dress: 'kilt', hair: 'spiky', beard: 'short' }];

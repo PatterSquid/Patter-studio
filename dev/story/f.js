@@ -40,6 +40,8 @@
     const drawC = it => { const Q = poseOf(it.ch, it.st, lt, o); if (holesR.length) Q.noHalo = holesR.some(r => Q.x > r.x - 0.3 * S && Q.x < r.x + r.w + 0.3 * S && FL - (Q.hop || 0) - S < r.y + r.h && FL - (Q.hop || 0) > r.y); if (Q.x < -260 || Q.x > WW + 260 || Q.hidden) { if (Q.hidden) { Q.fx.filter(f => f.k === 'brawl').forEach(f => brawlCloud(g, f, lt)); Q.fx.filter(f => f.k === 'splash').forEach(f => drawSplash(g, f, wtr ? wtr.y : FL, lt)); if (wtr) for (let i = 0; i < 3; i++) { const by = wtr.y - ((lt * 90 + i * 30) % 70); line(g, circP(Q.x + Math.sin(lt * 6 + i) * 12, by, 6 + i * 2, 6 + i * 2, 0, 6.3, 10), CH.white, 3); } } drawn.push({ it, Q, F: null }); return; }
       g.save(); const clipW = Q.inWater && wtr; if (clipW) { g.beginPath(); g.rect(-400, -400, WW + 800, wtr.y + 400 + 8); g.clip(); }
       const sz = it.pe.size || 1; if (sz !== 1) { g.translate(Q.x, FL); g.scale(sz, sz); g.translate(-Q.x, -FL); }
+      // Turning round: squeezed to a sliver and opened out the other way
+      if (Q.turnK != null && Q.turnK < 0.999) { g.translate(Q.x, 0); g.scale(Q.turnK, 1); g.translate(-Q.x, 0); }
       if (Q.shrink && Q.shrink !== 1) { const py = FL - (Q.hop || 0) - 0.45 * S; g.translate(Q.x, py); g.scale(Q.shrink, Q.shrink); g.translate(-Q.x, -py); }
       const lying = Q.rot > 0.001, rotA = lying ? (Q.lieSide != null ? Q.lieSide : Q.fallBack ? -Q.dir : Q.dir) * Q.rot * Math.PI / 2 : Q.diveA ? Q.dir * Q.diveA : Q.spin ? Q.dir * Q.spin : 0;
       if (rotA) { const px = Q.x, py = Q.diveA || Q.spin ? FL - 0.43 * S - (Q.hop || 0) : FL; g.translate(px, py); g.rotate(rotA); g.translate(-px, -py); }
