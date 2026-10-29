@@ -40,7 +40,7 @@ const Studio = (() => {
     return cfg.room.asset === BUILTIN && !cfg.marksOwn ? Object.assign({}, cfg, { marks: STUDIO_MARKS }) : cfg; };
   function defaults() {
     return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
-      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo' }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
+      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
   function duration(cfg) {
@@ -442,9 +442,17 @@ const Studio = (() => {
 
   /* ---------- The PatterSquid neon sign on the wall under the window. It hums with the faintest flicker; every so often the
      squid blinks and slowly curls a tentacle. Drawn once per pose into its own picture, then laid on with its glow. ---------- */
-  const NEON0 = { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo' };
-  // Settings from the first neon version (no style yet) move to the logo sign in its own place
-  const neonOf = cfg => { const n = typeof cfg.neon === 'object' && cfg.neon ? cfg.neon : {}; return Object.assign({}, NEON0, n.style ? n : { on: n.on !== false }); };
+  // The sign's four corners (top left, top right, bottom right, bottom left) as fractions of the room picture, so it can sit
+  // at the same angle as the wall. By default it hangs in the top picture frame.
+  const SIGN_Q = hasBuiltin && STUDIO_MARKS.sign ? STUDIO_MARKS.sign : [[0.38, 0.03], [0.45, 0.044], [0.45, 0.166], [0.38, 0.153]];
+  const NEON0 = { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q };
+  // Older settings (the first neon, or a logo sign without corners) move to the new default spot in the top frame
+  const neonOf = cfg => { const n = typeof cfg.neon === 'object' && cfg.neon ? cfg.neon : {}; return Object.assign({}, NEON0, n.style && (n.q || n.style === 'neon') ? n : { on: n.on !== false }); };
+  const quadOf = (N, v) => N.q.map(m => P(m, v));
+  const qCentre = q => [q.reduce((a, p) => a + p[0], 0) / 4, q.reduce((a, p) => a + p[1], 0) / 4];
+  const qScale = (q, f) => { const c = qCentre(q); return q.map(p => [r4(c[0] + (p[0] - c[0]) * f), r4(c[1] + (p[1] - c[1]) * f)]); };
+  // A quad a little inside a frame's corners
+  const qInFrame = (fp, f = 0.84) => qScale(fp, f);
   const SQUID_H = 100;
   // The squid as tube lines, in units where it is 100 tall; curl (0..1) winds the tentacle tips in a little more
   function squidTubes(curl, k) {
@@ -471,7 +479,8 @@ const Studio = (() => {
   }
   // Where the sign sits and how big, in picture units (for drawing and for dragging it on the preview)
   const LOGO_D = 104;
-  function neonBox(cfg, v) { const N = neonOf(cfg), u = v.iw / 1920 * N.s, logo = N.style !== 'neon', w = ((logo ? LOGO_D + 14 : 80) + (N.text ? 330 : 0)) * u, h = (logo ? LOGO_D : SQUID_H) * u; return { x: N.x * v.iw - w / 2, y: N.y * v.ih - h / 2, w, h, u, logo }; }
+  function neonBox(cfg, v) { const N = neonOf(cfg); if (N.style !== 'neon') { const Q = quadOf(N, v), xs = Q.map(p => p[0]), ys = Q.map(p => p[1]), x = Math.min(...xs), y = Math.min(...ys); return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, u: v.iw / 1920, logo: true, Q }; }
+    const u = v.iw / 1920 * N.s, logo = false, w = ((logo ? LOGO_D + 14 : 80) + (N.text ? 330 : 0)) * u, h = (logo ? LOGO_D : SQUID_H) * u; return { x: N.x * v.iw - w / 2, y: N.y * v.ih - h / 2, w, h, u, logo }; }
   function drawNeon(ctx, cfg, v, t, L, room) {
     const N = neonOf(cfg); if (!N.on) return; const B = neonBox(cfg, v), px = B.u * (v.px || v.s);
     // Very subtle life: a blink every 10 to 15 seconds and a slow tentacle curl now and then, whole numbers per loop
@@ -486,26 +495,28 @@ const Studio = (() => {
     ctx.globalAlpha = lit; ctx.drawImage(spr, sx, sy, spr.width / px, spr.height / px); ctx.restore();
   }
 
-  // His own logo as a round lit sign: light glowing out from behind it onto the wall, the disc lit from within, and the squid
-  // blinking now and then. The name can glow in blue neon beside it.
+  // His own logo as a round lit sign, laid onto the wall at the wall's own angle (any four cornered shape), glowing onto the
+  // wall, the frame round it and the shelf below, lit from within, and the squid blinking now and then
+  const signBuf = {};
   function drawLogoSign(ctx, N, B, eyes, t, L, room, px) {
     const a = typeof Layers !== 'undefined' && Layers.assets[LOGO]; if (!a || !a.bmp) { ready(); return; }
-    const D = LOGO_D * B.u, x = B.x, y = B.y, cx = x + D / 2, cy = y + D / 2, hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]), lit = cl(room, 0, 1) * hum;
+    const Q = B.Q, [cx, cy] = qCentre(Q), side = Math.max(Math.hypot(Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]), Math.hypot(Q[3][0] - Q[0][0], Q[3][1] - Q[0][1])), hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]), lit = cl(room, 0, 1) * hum;
+    // Light thrown out onto everything round it, and down onto whatever is below
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.5 * lit; ctx.drawImage(glowSprite('rgba(120,165,255,0.6)'), cx - D * 1.25, cy - D * 1.15, D * 2.5, D * 2.3);
-    ctx.globalAlpha = 0.22 * lit; ctx.drawImage(glowSprite('rgba(120,165,255,0.5)'), cx - D * 1.4, y + D * 1.35, D * 2.8, D * 0.55); ctx.restore();
-    // A thin dark edge where the sign stands off the wall
-    ctx.save(); ctx.globalAlpha = 0.6; ctx.fillStyle = '#05070d'; ctx.beginPath(); ctx.arc(cx + D * 0.02, cy + D * 0.03, D * 0.515, 0, TAU); ctx.fill(); ctx.restore();
-    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, D / 2, 0, TAU); ctx.clip(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(a.bmp, x, y, D, D);
-    // The eyes close and open: lids the colour of his head come down over them
-    if (eyes < 0.999) { const k = 1 - eyes, er = D * 0.048; [[0.412, 0.373], [0.585, 0.373]].forEach(([ex, ey]) => { const X = x + ex * D, Y = y + ey * D; ctx.save(); ctx.beginPath(); ctx.arc(X, Y, er * 1.08, 0, TAU); ctx.clip(); ctx.fillStyle = '#e4dfd9'; ctx.fillRect(X - er * 1.2, Y - er * 1.2, er * 2.4, er * 2.4 * k); ctx.strokeStyle = 'rgba(90,80,70,0.7)'; ctx.lineWidth = Math.max(0.6, er * 0.14); ctx.beginPath(); ctx.moveTo(X - er * 1.1, Y - er * 1.2 + er * 2.4 * k); ctx.lineTo(X + er * 1.1, Y - er * 1.2 + er * 2.4 * k); ctx.stroke(); ctx.restore(); }); }
-    // Lit from within: a touch brighter in the middle, a soft bright rim
-    ctx.globalCompositeOperation = 'screen'; const g = ctx.createRadialGradient(cx, cy - D * 0.1, 0, cx, cy, D / 2); g.addColorStop(0, `rgba(170,190,255,${0.16 * lit})`); g.addColorStop(0.75, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(150,180,255,${0.35 * lit})`); ctx.fillStyle = g; ctx.fillRect(x, y, D, D);
-    if (lit < 0.98) { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(3,4,10,${cl((1 - lit) * 0.9, 0, 0.9)})`; ctx.fillRect(x, y, D, D); }
-    ctx.restore();
-    ctx.save(); ctx.globalAlpha = 0.55 * lit; ctx.strokeStyle = '#cfe0ff'; ctx.lineWidth = Math.max(0.8, D * 0.012); ctx.beginPath(); ctx.arc(cx, cy, D / 2, 0, TAU); ctx.stroke(); ctx.restore();
-    if (N.text) { const tx = x + D + 14 * B.u, sc = px * B.u / B.u; void sc; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = lit; ctx.font = `700 ${Math.round(46 * B.u)}px Kalam, "Gochi Hand", cursive`; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-      [['rgba(95,160,255,0.35)', 9, 18], ['#5fb4ff', 3.6, 8], ['#e6f2ff', 1.3, 0]].forEach(([c, w, bl]) => { ctx.strokeStyle = c; ctx.lineWidth = w * B.u; ctx.shadowColor = c; ctx.shadowBlur = bl * B.u * (px / B.u); ctx.strokeText('PatterSquid', tx, cy); }); ctx.restore(); }
+    ctx.globalAlpha = 0.42 * lit; ctx.drawImage(glowSprite('rgba(110,160,255,0.6)'), cx - side * 1.35, cy - side * 1.3, side * 2.7, side * 2.6);
+    ctx.globalAlpha = 0.2 * lit; ctx.drawImage(glowSprite('rgba(140,180,255,0.5)'), cx - side * 0.95, cy + side * 0.55, side * 1.9, side * 0.8); ctx.restore();
+    // The disc itself, drawn flat at the size it shows, then laid onto the corners
+    const n = Math.max(32, Math.min(640, Math.round(side * px * 1.25))); let c = signBuf.c; if (!c || c.width !== n) c = signBuf.c = mk(n, n); const g = c.getContext('2d'), D = n;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n); g.save(); g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 1, 0, TAU); g.clip(); g.imageSmoothingQuality = 'high'; g.drawImage(a.bmp, 0, 0, n, n);
+    if (eyes < 0.999) { const k = 1 - eyes, er = D * 0.048; [[0.412, 0.373], [0.585, 0.373]].forEach(([ex, ey]) => { const X = ex * D, Y = ey * D; g.save(); g.beginPath(); g.arc(X, Y, er * 1.08, 0, TAU); g.clip(); g.fillStyle = '#e4dfd9'; g.fillRect(X - er * 1.2, Y - er * 1.2, er * 2.4, er * 2.4 * k); g.strokeStyle = 'rgba(90,80,70,0.7)'; g.lineWidth = Math.max(0.6, er * 0.14); g.beginPath(); g.moveTo(X - er * 1.1, Y - er * 1.2 + er * 2.4 * k); g.lineTo(X + er * 1.1, Y - er * 1.2 + er * 2.4 * k); g.stroke(); g.restore(); }); }
+    g.globalCompositeOperation = 'screen'; const gr = g.createRadialGradient(n / 2, n * 0.42, 0, n / 2, n / 2, n / 2); gr.addColorStop(0, `rgba(170,190,255,${0.16 * lit})`); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(150,180,255,${0.35 * lit})`); g.fillStyle = gr; g.fillRect(0, 0, n, n);
+    if (lit < 0.98) { g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgba(3,4,10,${cl((1 - lit) * 0.9, 0, 0.9)})`; g.fillRect(0, 0, n, n); }
+    g.restore(); g.save(); g.globalAlpha = 0.6 * lit; g.strokeStyle = '#d4e3ff'; g.lineWidth = Math.max(1, n * 0.012); g.beginPath(); g.arc(n / 2, n / 2, n / 2 - g.lineWidth, 0, TAU); g.stroke(); g.restore();
+    // A soft shadow where it stands off the wall, nudged down and to the right
+    const sh = Q.map(p => [p[0] + side * 0.025, p[1] + side * 0.035]); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#05070d'; ctx.beginPath(); for (let i = 0; i <= 32; i++) { const an = i / 32 * TAU, p = onGlass(sh, 0.5 + 0.5 * Math.cos(an), 0.5 + 0.5 * Math.sin(an)); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); } ctx.fill(); ctx.restore();
+    // Laid on with one smooth slant (no seams): across follows the top and bottom edges, down follows the two sides
+    const ex = [(Q[1][0] - Q[0][0] + Q[2][0] - Q[3][0]) / 2, (Q[1][1] - Q[0][1] + Q[2][1] - Q[3][1]) / 2], ey = [(Q[3][0] - Q[0][0] + Q[2][0] - Q[1][0]) / 2, (Q[3][1] - Q[0][1] + Q[2][1] - Q[1][1]) / 2];
+    ctx.save(); ctx.transform(ex[0] / n, ex[1] / n, ey[0] / n, ey[1] / n, cx - (ex[0] + ey[0]) / 2, cy - (ex[1] + ey[1]) / 2); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(c, 0, 0); ctx.restore();
   }
 
   // While marking things up: outlines of everything the room knows about
@@ -627,12 +638,13 @@ const Studio = (() => {
         if (M.glass) M.glass.forEach((m, i) => out.push({ id: 'G:' + i, box: hb(m[0] * v.iw, m[1] * v.ih, 11), label: 'Window corner' }));
         return out; }
       (M.frames || []).forEach(f => { const p = f.p.map(m => P(m, v)); out.push({ id: 'F:' + f.id, box: [X(Math.min(...p.map(q => q[0]))), Y(Math.min(...p.map(q => q[1]))), X(Math.max(...p.map(q => q[0]))), Y(Math.max(...p.map(q => q[1])))], label: (f.name || 'Frame') + ': click to fill it' }); });
-      if (neonOf(cfg).on && cfg.neon !== false) { const B = neonBox(cfg, v); out.push({ id: 'NE', box: [X(B.x), Y(B.y), X(B.x + B.w), Y(B.y + B.h)], scale: true, label: 'PatterSquid sign: drag to move, corners to size' }); }
+      if (neonOf(cfg).on && cfg.neon !== false) { const B = neonBox(cfg, v); out.push({ id: 'NE', box: [X(B.x), Y(B.y), X(B.x + B.w), Y(B.y + B.h)], scale: !B.logo, label: B.logo ? 'PatterSquid sign: drag to move, drag the pink dots to tilt it' : 'PatterSquid sign: drag to move, corners to size' }); if (B.logo) B.Q.forEach((p, i) => out.push({ id: 'NQ:' + i, box: hb(p[0], p[1], 7), label: 'Corner of the sign' })); }
       const R = avatarRect(cfg, v); if (R) { const b = R.box, kx = R.w / R.fw, ky = R.h / R.fh; out.push({ id: 'AV', box: [X(R.x + b[0] * kx), Y(R.y + b[1] * ky), X(R.x + b[2] * kx), Y(R.y + b[3] * ky)], scale: true, label: 'You: drag to move, corners to size' }); }
       return out; },
     grab(cfg, id, g) { const v = view(cfg, g.W, g.H, g.t || 0); return { v, cfg: JSON.parse(JSON.stringify({ a: cfg.avatar, m: cfg.marks, n: neonOf(cfg) })) }; },
     move(cfg, id, snap, dx, dy) { const v = snap.v, du = dx / v.s / v.iw, dv = dy / v.s / v.ih, M = cfg.marks, M0 = snap.cfg.m, [k, a, b] = id.split(':'), mv = (dst, src) => { dst[0] = r4(cl(src[0] + du, -0.1, 1.1)); dst[1] = r4(cl(src[1] + dv, -0.1, 1.1)); };
-      if (k === 'NE') cfg.neon = Object.assign({}, snap.cfg.n, { x: r4(snap.cfg.n.x + du), y: r4(snap.cfg.n.y + dv) });
+      if (k === 'NE') cfg.neon = Object.assign({}, snap.cfg.n, { x: r4(snap.cfg.n.x + du), y: r4(snap.cfg.n.y + dv), q: snap.cfg.n.q.map(p => [r4(p[0] + du), r4(p[1] + dv)]) });
+      else if (k === 'NQ') { const q = snap.cfg.n.q.map(p => p.slice()); q[+a] = [r4(q[+a][0] + du), r4(q[+a][1] + dv)]; cfg.neon = Object.assign({}, snap.cfg.n, { q }); }
       else if (k === 'AV' && cfg.avatar) { cfg.avatar.x = r4(snap.cfg.a.x + du); cfg.avatar.y = r4(snap.cfg.a.y + dv); }
       else if (k === 'G') mv(M.glass[+a], M0.glass[+a]);
       else if (k === 'L' || k === 'SL' || k === 'R') { const key = k === 'L' ? 'lamps' : k === 'SL' ? 'street' : 'road'; mv(M[key][+a], M0[key][+a]); }
@@ -641,7 +653,7 @@ const Studio = (() => {
       else if (k === 'Fm') { const f = M.frames.find(x => x.id === a), o = M0.frames.find(x => x.id === a); if (f) f.p.forEach((p, i) => mv(p, o.p[i])); }
       else if (k === 'Fc') { const f = M.frames.find(x => x.id === a), o = M0.frames.find(x => x.id === a); if (f) mv(f.p[+b], o.p[+b]); } },
     resize(cfg, id, snap, f) { const [k, a] = id.split(':'), M = cfg.marks, M0 = snap.cfg.m;
-      if (k === 'NE') cfg.neon = Object.assign({}, snap.cfg.n, { s: r4(cl(snap.cfg.n.s * f, 0.3, 4)) });
+      if (k === 'NE') cfg.neon = Object.assign({}, snap.cfg.n, { s: r4(cl(snap.cfg.n.s * f, 0.3, 4)), q: qScale(snap.cfg.n.q, cl(f, 0.2, 5)) });
       else if (k === 'AV' && cfg.avatar) cfg.avatar.h = r4(cl(snap.cfg.a.h * f, 0.05, 3));
       else if (k === 'L') M.lamps[+a][2] = r4(cl((M0.lamps[+a][2] || 0.05) * f, 0.005, 0.4));
       else if (k === 'PL') { const o = M0.plants[+a], cx = (o[0] + o[2]) / 2, cy = (o[1] + o[3]) / 2, m = M.plants[+a]; m[0] = r4(cx + (o[0] - cx) * f); m[2] = r4(cx + (o[2] - cx) * f); m[1] = r4(cy + (o[1] - cy) * f); m[3] = r4(cy + (o[3] - cy) * f); }
@@ -667,7 +679,7 @@ const Studio = (() => {
     if (k === 'W') { const sh = (cfg.shows || []).find(q => q.id === a); if (sh) { showCard(sh); return; } }
     if (k === 'F' || k === 'Fm' || k === 'Fc') { const f = M.frames.find(x => x.id === a); if (f) { frameCard(f); return; } }
     if (k === 'AV') { avatarCard(); return; }
-    if (k === 'NE') { neonCard(true); return; }
+    if (k === 'NE' || k === 'NQ') { neonCard(true); return; }
     if (['L', 'SL', 'R', 'PL', 'O', 'G'].includes(k)) { const names = { L: 'Lamp', SL: 'Street lamp', R: 'Road point', PL: 'Plant', O: 'In front of the glass', G: 'Window corner' };
       root.append(card(names[k], H('p', { className: 'hint', textContent: k === 'PL' ? 'Drag it over the plant; a corner makes it bigger or smaller.' + (M.plants[+a] ? '' : '') : k === 'O' ? 'Whatever is inside this shape stays in front of the rain on the glass.' : k === 'L' ? 'Put it on the bulb; a corner sets how far its glow reaches.' : 'Drag it into place.' }),
         k === 'PL' && M.plants[+a] ? field('Fixed at', seg([['top', 'The top (hanging)'], ['bottom', 'The bottom (in a pot)']], M.plants[+a][4] || 'top', v => { M.plants[+a][4] = v; ch(); })) : '',
@@ -731,11 +743,15 @@ const Studio = (() => {
         H('div', { className: 'btnrow' }, btn('Fill the frame with the video', () => { A.x = 0.5; A.y = 0.5; A.h = 1; ch(); }), btn('Change video', pickVid), btn('Change to PNG sequence', pickPng), btn('Remove', () => { cfg.avatar = null; ch(); })), note, done ? foot() : ''));
     }
     function neonCard(sel) {
-      const N = neonOf(cfg), set = (k2, v2) => { cfg.neon = Object.assign({}, N, { [k2]: v2 }); };
-      root.append(card('PatterSquid sign', H('p', { className: 'hint', textContent: 'Your PatterSquid logo lit up on the wall under the window. Every so often the squid blinks. Drag it on the preview to move it, or a corner to change its size.' }),
-        field('Look', seg([['logo', 'Your logo, lit'], ['neon', 'Neon outline']], N.style === 'neon' ? 'neon' : 'logo', v2 => { set('style', v2); ch(); })),
-        grid2(field('Sign', seg([['1', 'On'], ['0', 'Off']], N.on ? '1' : '0', v2 => { set('on', v2 === '1'); ch(); })), field('Name next to it', seg([['1', 'Yes'], ['0', 'No']], N.text ? '1' : '0', v2 => { set('text', v2 === '1'); ch(); }))),
-        H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, text: N.text, style: N.style }); ch(); }), sel && done ? btn('Done', done) : '')));
+      const N = neonOf(cfg), set = (o) => { cfg.neon = Object.assign({}, N, o); }, fr = (eff(cfg).marks.frames || []);
+      const kids = [H('p', { className: 'hint', textContent: N.style === 'neon' ? 'A neon outline of the squid. Drag it on the preview to move it, or a corner to change its size.' : 'Your PatterSquid logo, lit up and set into the wall at the same angle, glowing onto the wall round it. Every so often the squid blinks. Drag it to move it, and drag the four pink dots to tilt it to match the wall.' }),
+        field('Look', seg([['logo', 'Your logo, lit'], ['neon', 'Neon outline']], N.style === 'neon' ? 'neon' : 'logo', v2 => { set({ style: v2 }); ch(); })),
+        field('Sign', seg([['1', 'On'], ['0', 'Off']], N.on ? '1' : '0', v2 => { set({ on: v2 === '1' }); ch(); }))];
+      if (N.style !== 'neon') kids.push(H('div', { className: 'btnrow' }, btn('Smaller', () => { set({ q: qScale(N.q, 0.9) }); ch(); }), btn('Bigger', () => { set({ q: qScale(N.q, 1.1) }); ch(); }), btn('Straighten', () => { const c2 = qCentre(N.q), w2 = (Math.hypot(N.q[1][0] - N.q[0][0], N.q[1][1] - N.q[0][1]) + Math.hypot(N.q[2][0] - N.q[3][0], N.q[2][1] - N.q[3][1])) / 4, h2 = w2 * 1920 / 1080; set({ q: [[c2[0] - w2, c2[1] - h2], [c2[0] + w2, c2[1] - h2], [c2[0] + w2, c2[1] + h2], [c2[0] - w2, c2[1] + h2]].map(p => p.map(r4)) }); ch(); })),
+        fr.length ? field('Hang it in a frame', sel('', [['', 'Choose a frame…'], ...fr.map(f => [f.id, f.name || 'Frame'])], v2 => { const f = fr.find(x => x.id === v2); if (f) { set({ q: qInFrame(f.p) }); ch(); } }, 'Hang it in a frame')) : '');
+      else kids.push(field('Name next to it', seg([['1', 'Yes'], ['0', 'No']], N.text ? '1' : '0', v2 => { set({ text: v2 === '1' }); ch(); })));
+      kids.push(H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, style: N.style }); ch(); }), sel && done ? btn('Done', done) : ''));
+      root.append(card('PatterSquid sign', ...kids));
     }
     function framesCard() {
       if (!M.frames.length) return; const list = H('div', { className: 'vid-list' }, ...M.frames.map(f => { const n = (cfg.shows || []).filter(sh => sh.frame === f.id).length; return H('div', { className: 'vid-row' }, H('i', { style: 'background:#b0458f' }), H('span', { className: 'vid-name', textContent: f.name || 'Frame' }), H('span', { className: 'vid-len', textContent: n ? n + ' on show' : 'empty' }), btn('Show something', () => { const sh = addShow(f.id); hooks.select && hooks.select('W:' + sh.id); }));

@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.29.14",
+  "version": "2026.10.29.15",
   "file": "app/patter-studio.html",
-  "notes": "Studio: fixed the flickering square behind the plant on the windowsill."
+  "notes": "Studio: your logo now hangs in the top frame at the same angle as the wall, glowing onto the wall around it. Tilt it with its corner dots."
 }
