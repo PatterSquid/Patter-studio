@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.29.7",
+  "version": "2026.10.29.8",
   "file": "app/patter-studio.html",
-  "notes": "Studio sound is back without the rain: thunder, cars outside, wind in snow, and the lights going."
+  "notes": "Your studio is now built in: the Studio tab opens already animated, with clouds drifting outside and the odd car going past."
 }

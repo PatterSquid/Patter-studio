@@ -130,6 +130,7 @@
   function finishEdit() { const e = state.edit; if (!e) return; const it = vItem(e.id); if (it && state.cfg[e.mod]) it.cfg = state.cfg[e.mod]; state.cfg[e.mod] = (state.stash && state.stash[e.mod]) || MODULES[e.mod].defaults(); if (state.stash) delete state.stash[e.mod]; state.edit = null; save(); }
   function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = state.cfg.video.items.indexOf(it) + 1;
     el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
+  if (typeof Studio !== 'undefined' && Studio.ready) Studio.ready().then(() => { if (Layers.hooks.onAsset) Layers.hooks.onAsset(Studio.BUILTIN); });
   if (typeof Studio !== 'undefined') Object.assign(Studio.hooks, { cfg: () => state.cfg.studio || Studio.defaults(), select: id => { if (ed) ed.select(id); buildInspector(); } });
   if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
   drawTabs(); syncLook(); buildForm(); commit();

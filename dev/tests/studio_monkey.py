@@ -39,7 +39,7 @@ async def main():
         for tab in TABS:
             await pg.evaluate(f"()=>document.querySelector('button[data-mod={tab}]').click()"); await pg.wait_for_timeout(1200)
             if tab=='studio':
-                await pg.click('button:has-text("Add a picture of your room")'); await pg.wait_for_timeout(3000)
+                await pg.wait_for_timeout(2000)
             trace=[]; e0=len(errs)
             for i in range(N):
                 w=await pg.evaluate(PICK, random.random()); trace.append(w); await pg.wait_for_timeout(60)

@@ -28,8 +28,15 @@ const Studio = (() => {
     snow: { distant: 0, beads: 0.08, runners: 0, light: 0, snow: 1, fog: 0.5 },
   };
   const STINGS = [['thunder', 'Thunder and lightning'], ['lightning', 'Lightning flash'], ['flicker', 'Lights flicker'], ['lightsoff', 'Lights off'], ['blackout', 'Blackout']];
+  /* His studio is built in: the picture and everything marked in it come with the app, so the tab opens already animated */
+  const BUILTIN = 'studio-builtin', hasBuiltin = typeof STUDIO_ROOM !== 'undefined';
+  const builtinMarks = () => JSON.parse(JSON.stringify(hasBuiltin ? STUDIO_MARKS : { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }));
+  let readyP = null;
+  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Layers.setAsset(BUILTIN, STUDIO_ROOM).catch(() => null) : Promise.resolve());
+  // Older settings with no room picture use the built-in studio
+  const eff = cfg => (!cfg || cfg.room || !hasBuiltin) ? cfg : Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marks && cfg.marks.glass ? cfg.marks : builtinMarks() });
   function defaults() {
-    return { room: null, marks: { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }, weather: 'rain', rain: 1, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, drift: 'gentle', loop: 20, len: 0,
+    return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
       avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
@@ -42,7 +49,7 @@ const Studio = (() => {
 
   /* ---------- Where the room sits on screen. The picture always fills the frame; a vertical frame follows you (or the
      middle of the room), and an optional slow drift keeps the shot breathing. ---------- */
-  const roomBmp = cfg => { const a = cfg.room && typeof Layers !== 'undefined' && Layers.assets[cfg.room.asset]; return a && a.bmp ? a.bmp : null; };
+  const roomBmp = cfg => { cfg = eff(cfg); if (!cfg.room || typeof Layers === 'undefined') return null; const a = Layers.assets[cfg.room.asset]; if (!a && cfg.room.asset === BUILTIN) ready(); return a && a.bmp ? a.bmp : null; };
   function view(cfg, W, H, t) {
     const bmp = roomBmp(cfg), iw = bmp ? bmp.width : 1920, ih = bmp ? bmp.height : 1080, L = loopOf(cfg);
     const dr = cfg.mark ? 0 : cfg.drift === 'more' ? 1 : cfg.drift === 'off' ? 0 : 0.5;
@@ -85,7 +92,40 @@ const Studio = (() => {
     const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0), half = mk(w / 2, h / 2), hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high'; hg.drawImage(bmp, x0, y0, w, h, 0, 0, half.width, half.height);
     // Misted: a blurred copy laid lightly over the view makes wet glass, and makes the drops (which stay sharp) stand out
     const tiny = mk(w * 0.09, h * 0.09); tiny.getContext('2d').drawImage(half, 0, 0, tiny.width, tiny.height); const mist = mk(w / 2, h / 2), mg = mist.getContext('2d'); mg.imageSmoothingQuality = 'high'; mg.drawImage(tiny, 0, 0, mist.width, mist.height);
-    R = { x0, y0, w, h, soft: half, mist, k: half.width / w }; if (roomCache.size > 6) roomCache.clear(); roomCache.set(key, R); return R;
+    R = { x0, y0, w, h, soft: half, mist, k: half.width / w, sky: skyMask(bmp, x0, y0, w, h, pts) }; if (roomCache.size > 6) roomCache.clear(); roomCache.set(key, R); return R;
+  }
+  /* The open sky out of the window: for each column, from the top down until the buildings start. Clouds only drift there */
+  function skyMask(bmp, x0, y0, w, h, G) {
+    const W = Math.round(w), Hh = Math.round(h), c = mk(W, Hh), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, x0, y0, w, h, 0, 0, W, Hh); const d = g.getImageData(0, 0, W, Hh).data;
+    const skyish = (x, y) => { const k = (y * W + x) * 4, r = d[k], gg = d[k + 1], b = d[k + 2], lum = r * 0.3 + gg * 0.59 + b * 0.11; return b >= r + 6 && lum > 40 && lum < 235; };
+    const line = new Float32Array(W);
+    // Start under the top edge of the glass (the blind hangs above it)
+    const topAt = x => { const f = (x + x0 - G[0][0]) / Math.max(1, G[1][0] - G[0][0]); return Math.max(0, Math.round(lerp(G[0][1], G[1][1], cl(f, 0, 1)) - y0 + 6)); };
+    for (let x = 0; x < W; x++) { let y = topAt(x); while (y < Hh && !skyish(x, y)) y++; let miss = 0, last = y; for (; y < Hh; y++) { if (skyish(x, y)) { miss = 0; last = y; } else if (++miss > 8) break; } line[x] = last; }
+    // Smooth the skyline a little and keep it off the rooftops
+    const sm2 = new Float32Array(W); for (let x = 0; x < W; x++) { let m = 1e9; for (let k = -3; k <= 3; k++) { const v = line[Math.min(W - 1, Math.max(0, x + k))]; if (v < m) m = v; } sm2[x] = m - 4; }
+    const out = mk(W / 2, Hh / 2), og = out.getContext('2d'), id = og.createImageData(out.width, out.height), o = id.data, f = 14;
+    for (let y = 0; y < out.height; y++) for (let x = 0; x < out.width; x++) { const sy = y * 2, edge = sm2[Math.min(W - 1, x * 2)], a = cl((edge - sy) / f, 0, 1); o[(y * out.width + x) * 4 + 3] = Math.round(255 * a * a * (3 - 2 * a)); }
+    og.putImageData(id, 0, 0); return out;
+  }
+  // Soft cloud shapes that tile side to side, made once
+  function cloudTex(seed, dark) { const k = 'cl' + seed + dark; if (SPR[k]) return SPR[k]; const W = 512, Hh = 192, c = mk(W, Hh), g = c.getContext('2d'), id = g.createImageData(W, Hh), d = id.data, r = rng(seed);
+    const lat = []; for (let o = 0; o < 5; o++) { const nx = 4 << o, ny = Math.max(2, Math.round((4 << o) * Hh / W * 1.6)), L2 = []; for (let i = 0; i < nx * ny; i++) L2.push(r()); lat.push({ nx, ny, L2 }); }
+    const vn = (o, x, y) => { const { nx, ny, L2 } = lat[o], fx = x * nx, fy = y * ny, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, at = (i, j) => L2[((j % ny + ny) % ny) * nx + ((i % nx + nx) % nx)], sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      return lerp(lerp(at(ix, iy), at(ix + 1, iy), sx), lerp(at(ix, iy + 1), at(ix + 1, iy + 1), sx), sy); };
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let n = 0, a = 0.55, tot = 0; for (let o = 0; o < 5; o++) { n += vn(o, x / W, y / Hh) * a; tot += a; a *= 0.5; } n /= tot;
+      const m = sm((n - (dark ? 0.5 : 0.56)) / 0.22), q = (y * W + x) * 4; if (dark) { d[q] = 34; d[q + 1] = 40; d[q + 2] = 62; } else { d[q] = 176; d[q + 1] = 186; d[q + 2] = 212; } d[q + 3] = Math.round(255 * m * (dark ? 0.9 : 0.75)); }
+    g.putImageData(id, 0, 0); return (SPR[k] = c); }
+  // Clouds drifting slowly across the sky; each layer moves a whole tile per loop so the loop is seamless
+  const cloudBuf = {};
+  function clouds(ctx, R, tl, L, fl) {
+    if (!R.sky) return; const w = Math.max(2, Math.round(R.w / 2)), h = Math.max(2, Math.round(R.h / 2)); let c = cloudBuf.c; if (!c || c.width !== w || c.height !== h) c = cloudBuf.c = mk(w, h); const g = c.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h);
+    const layer = (tex, tw, th, y, tiles, a) => { const off = (tl / L) * tw * tiles; g.globalAlpha = a; for (let x = -tw + (off % tw); x < w; x += tw) g.drawImage(tex, x, y, tw, th); };
+    layer(cloudTex(7, true), w * 1.4, h * 0.75, h * 0.02, 1, 0.42);
+    layer(cloudTex(19, false), w * 1.1, h * 0.6, h * 0.08, 2, 0.16 + 0.5 * cl(fl.e, 0, 1));
+    g.globalAlpha = 1; g.globalCompositeOperation = 'destination-in'; g.drawImage(R.sky, 0, 0, w, h);
+    ctx.drawImage(c, R.x0, R.y0, R.w, R.h);
   }
   // A point on the glass from (0..1, 0..1) across and down it; the glass may be a slanted four sided shape
   const onGlass = (Q, a, b) => { const top = [lerp(Q[0][0], Q[1][0], a), lerp(Q[0][1], Q[1][1], a)], bot = [lerp(Q[3][0], Q[2][0], a), lerp(Q[3][1], Q[2][1], a)]; return [lerp(top[0], bot[0], b), lerp(top[1], bot[1], b)]; };
@@ -121,6 +161,7 @@ const Studio = (() => {
   /* ---------- Drawing ---------- */
   function draw(ctx, t, cfg, look, W, H) { drawAt(ctx, t, t + (cfg.avatar ? +cfg.avatar.inPt || 0 : 0), cfg, look, W, H); }
   function drawAt(ctx, t, tAv, cfg, look, W, H) {
+    cfg = eff(cfg);
     const bmp = roomBmp(cfg); ctx.save();
     if (!bmp) { ctx.fillStyle = '#0d1424'; ctx.fillRect(0, 0, W, H); if (look && look.preview) emptyCard(ctx, W, H); drawAvatarAlone(ctx, cfg, tAv, W, H); ctx.restore(); return; }
     const v = view(cfg, W, H, t), M = cfg.marks || {}, L = loopOf(cfg), w = WX[cfg.weather] || WX.rain, tl = pmod(t, L);
@@ -143,6 +184,7 @@ const Studio = (() => {
   function drawWindow(ctx, cfg, M, v, t, tl, L, w, fl) {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v); if (!R) return; const amt = cl(+cfg.rain, 0, 2);
     ctx.save(); pathOf(ctx, Q); ctx.clip();
+    if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
     if (cfg.outside !== false) outside(ctx, cfg, M, v, t, L, fl);
     if (fl.e > 0.01) sky(ctx, Q, R, fl, v);
     if (w.distant * amt > 0) distantRain(ctx, R, tl, L, w.distant * amt, v);
@@ -167,7 +209,7 @@ const Studio = (() => {
     const road = (M.road || []).map(m => P(m, v)); if (road.length >= 2) {
       const lens = [0]; for (let i = 1; i < road.length; i++) lens.push(lens[i - 1] + Math.hypot(road[i][0] - road[i - 1][0], road[i][1] - road[i - 1][1])); const tot = lens[lens.length - 1] || 1;
       const at = d => { d = cl(d, 0, tot); let i = 1; while (i < lens.length - 1 && lens[i] < d) i++; const f = (d - lens[i - 1]) / Math.max(1e-6, lens[i] - lens[i - 1]); return [lerp(road[i - 1][0], road[i][0], f), lerp(road[i - 1][1], road[i][1], f)]; };
-      const n = Math.max(1, Math.round(L / 9)), r = rng(77), wl = glowSprite('rgba(255,245,215,0.95)'), rl = glowSprite('rgba(255,60,40,0.9)');
+      const n = Math.max(1, Math.round(L / 15)), r = rng(77), wl = glowSprite('rgba(255,245,215,0.95)'), rl = glowSprite('rgba(255,60,40,0.9)');
       for (let k = 0; k < n; k++) { const st = (k + r() * 0.6) * L / n, dur = 4 + r() * 3, dir = r() < 0.5 ? 1 : -1, u = pmod(t - st, L) / dur; if (u >= 1) continue;
         const d = dir > 0 ? u * tot : (1 - u) * tot, p = at(d), q = at(d + dir * 3), ang = Math.atan2(q[1] - p[1], q[0] - p[0]), fade = sm(u / 0.08) * sm((1 - u) / 0.08), sz = v.iw * 0.0045;
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade;
@@ -412,7 +454,7 @@ const Studio = (() => {
     if (cfg.weather === 'snow') { let brown = 0, brownR = 0, lp2 = 0; for (let i = 0; i < N; i++) { const t = i / sr, gust = 1 + 0.5 * wob(t, L, 71, [1, 2, 3]), w1 = r() * 2 - 1, w2 = r() * 2 - 1; brown = (brown + 0.02 * w1) * 0.996; brownR = (brownR + 0.02 * w2) * 0.996; lp2 += 0.04 * (brown - lp2); const wa = 0.5 * (0.6 + 0.4 * gust); Lc[i] += lp2 * wa; Rc[i] += (brownR * 0.6 + lp2 * 0.4) * wa; } }
     const add = (t0, fn, len, pan) => { const i0 = Math.floor(t0 * sr), n = Math.floor(len * sr), gl = Math.sqrt(1 - pan) * 0.9, gr = Math.sqrt(pan) * 0.9; for (let k = 0; k < n; k++) { const j = i0 + k; if (j < 0 || j >= N) continue; const v = fn(k / sr); Lc[j] += v * gl; Rc[j] += v * gr; } };
     // A car going by outside
-    if (S0.cars !== false && cfg.outside !== false && ((cfg.marks && cfg.marks.road) || []).length >= 2) { const n = Math.max(1, Math.round(L / 9)), rc = rng(77); for (let k = 0; k < n; k++) { const st = (k + rc() * 0.6) * L / n, dur = 4 + rc() * 3, dir = rc() < 0.5 ? 1 : -1; for (let tt = st; tt < total + tail; tt += L) { let lp = 0; const nr = rng(hash('car' + k + tt));
+    if (S0.cars !== false && cfg.outside !== false && ((cfg.marks && cfg.marks.road) || []).length >= 2) { const n = Math.max(1, Math.round(L / 15)), rc = rng(77); for (let k = 0; k < n; k++) { const st = (k + rc() * 0.6) * L / n, dur = 4 + rc() * 3, dir = rc() < 0.5 ? 1 : -1; for (let tt = st; tt < total + tail; tt += L) { let lp = 0; const nr = rng(hash('car' + k + tt));
           add(tt, x => { const u = x / dur, e = Math.sin(Math.PI * cl(u, 0, 1)) ** 2; lp += 0.08 * ((nr() * 2 - 1) - lp); return lp * e * 0.14; }, dur, dir > 0 ? 0.3 : 0.7); } } }
     // Thunder: a crack for the close ones, then a long rumble rolling round
     if (S0.thunder !== false) { const hits = []; flashTimes(cfg).forEach(f => { for (let tt = f.t; tt < total + tail; tt += L) hits.push({ t: tt, big: f.big, seed: f.seed }); }); (cfg.stings || []).forEach(s2 => { if (s2.k === 'thunder') hits.push({ t: +s2.start || 0, big: true, seed: hash(s2.id), pow: +s2.pow || 1 }); });
@@ -459,7 +501,7 @@ const Studio = (() => {
     inspect(root, cfg, id, changed, done) { panel(root, cfg, changed, id, done); },
     scene(root, cfg, changed) { panel(root, cfg, changed, null, null); },
     /* On the preview: drag yourself about, click a frame to choose what it shows; while marking, drag the marks */
-    hits(cfg, look, t, W, H) { const v = view(cfg, W, H, t), X = x => v.ox + x * v.s, Y = y => v.oy + y * v.s, out = [], M = cfg.marks || {}, hb = (x, y, r) => [X(x) - r, Y(y) - r, X(x) + r, Y(y) + r];
+    hits(cfg, look, t, W, H) { cfg = eff(cfg); const v = view(cfg, W, H, t), X = x => v.ox + x * v.s, Y = y => v.oy + y * v.s, out = [], M = cfg.marks || {}, hb = (x, y, r) => [X(x) - r, Y(y) - r, X(x) + r, Y(y) + r];
       if (!roomBmp(cfg)) { return out; }
       if (cfg.mark) {
         (M.plants || []).forEach((m, i) => out.push({ id: 'PL:' + i, box: [X(m[0] * v.iw), Y(m[1] * v.ih), X(m[2] * v.iw), Y(m[3] * v.ih)], scale: true, label: 'Plant' }));
@@ -499,6 +541,7 @@ const Studio = (() => {
     const seg = (items, cur, fn) => H('div', { className: 'st-seg wrap' }, ...items.map(([k, l]) => H('button', { type: 'button', className: String(k) === String(cur) ? 'on' : '', textContent: l, 'aria-pressed': String(String(k) === String(cur)), on: { click: () => fn(k) } })));
     const range = (v0, min, max, step, fn, label, fmt = x => Math.round(x * 100) + '%') => { const out = H('span', { className: 'st-rv', textContent: fmt(v0) }), inp = H('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(v0), 'aria-label': label, on: { input: e => { const x = +e.target.value; out.textContent = fmt(x); fn(x); changed(false); }, change: () => changed() } }); return H('div', { className: 'st-range' }, inp, out); };
     const foot = (...b) => H('div', { className: 'btnrow' }, ...b, done ? btn('Done', done) : '');
+    if (!cfg.room && hasBuiltin) { cfg.room = { asset: BUILTIN, name: 'Your studio' }; if (!(cfg.marks && cfg.marks.glass)) cfg.marks = builtinMarks(); if (cfg.clouds == null) cfg.clouds = true; }
     const M = cfg.marks = Object.assign({ glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }, cfg.marks || {});
     const now = () => (typeof Layers !== 'undefined' && Layers.hooks && Layers.hooks.time ? Layers.hooks.time() : 0);
     const [k, a] = (id || '').split(':');
@@ -520,7 +563,7 @@ const Studio = (() => {
           cfg.mark = true; ch(); } catch (e) { note.textContent = 'That picture could not be read.'; } }; inp.click(); };
       if (!has) { root.append(card('Your studio', H('p', { className: 'hint', textContent: 'Add a picture of your room. Patter Studio finds the window, the lamps and the lights outside by itself, then you can mark picture frames, plants and anything standing in front of the window.' }), H('div', { className: 'btnrow' }, btn('Add a picture of your room', pick, 'primary')), note)); return; }
       const cnt = (n, one, many) => n + ' ' + (n === 1 ? one : many);
-      const kids = [H('p', { className: 'hint', textContent: '🖼 ' + (cfg.room.name || 'Room') + '. ' + [M.glass ? 'window found' : 'no window yet', cnt(M.lamps.length, 'lamp', 'lamps'), cnt(M.frames.length, 'frame', 'frames'), cnt(M.plants.length, 'plant', 'plants'), cnt(M.lit.length, 'light outside', 'lights outside')].join(', ') + '.' }),
+      const kids = [cfg.room.asset === BUILTIN ? H('p', { className: 'hint', textContent: 'Your studio, already animated: rain on the window, clouds drifting, lamps, the flats outside and the odd car going past. Change the weather and light below, or add your avatar.' }) : '', H('p', { className: 'hint', textContent: '🖼 ' + (cfg.room.name || 'Room') + '. ' + [M.glass ? 'window found' : 'no window yet', cnt(M.lamps.length, 'lamp', 'lamps'), cnt(M.frames.length, 'frame', 'frames'), cnt(M.plants.length, 'plant', 'plants'), cnt(M.lit.length, 'light outside', 'lights outside')].join(', ') + '.' }),
         H('label', { className: 'chk' }, H('input', { type: 'checkbox', checked: !!cfg.mark, on: { change: e => { cfg.mark = e.target.checked; ch(); } } }), ' Mark things on the preview')];
       if (cfg.mark) { const add = (label, fn) => btn(label, () => { fn(); changed(); redo(); }), c = 0.5;
         kids.push(H('p', { className: 'hint', textContent: 'Drag the outlines on the preview so they sit on the real things. Drag a corner to resize. Select one and press Delete to remove it. Untick when you are done.' }),
@@ -531,7 +574,7 @@ const Studio = (() => {
             M.glass ? '' : add('+ Window', () => { M.glass = [[0.6, 0.1], [0.95, 0.1], [0.95, 0.55], [0.6, 0.55]]; }),
             btn('Find the lights again', () => { const bmp = roomBmp(cfg); if (!bmp) return; const d = detect(bmp, M.glass); M.lit = d.lit; M.street = d.street; if (!M.lamps.length) M.lamps = d.lamps; changed(); redo(); })));
       }
-      kids.push(H('div', { className: 'btnrow' }, btn('Change picture', pick)), note);
+      kids.push(H('div', { className: 'btnrow' }, cfg.room.asset === BUILTIN ? '' : hasBuiltin ? btn('Back to my studio', () => { cfg.room = { asset: BUILTIN, name: 'Your studio' }; cfg.marks = builtinMarks(); cfg.mark = false; ch(); }, 'primary') : '', btn(cfg.room.asset === BUILTIN ? 'Use a different room picture' : 'Change picture', pick)), note);
       root.append(card('Your studio', ...kids));
     }
     function weatherCard() {
@@ -542,6 +585,7 @@ const Studio = (() => {
         w === 'storm' ? field('Lightning', seg([[0, 'None'], [0.6, 'Now and then'], [1, 'Some'], [2, 'Lots']], +cfg.lightning, v => { cfg.lightning = +v; ch(); })) : '',
         field('Lamp glow', range(cl(+cfg.lamps, 0, 2), 0, 2, 0.05, v => { cfg.lamps = r2(v); }, 'Lamp glow')),
         field('Lamp flicker', range(cl(+cfg.flicker, 0, 1), 0, 1, 0.05, v => { cfg.flicker = r2(v); }, 'Lamp flicker')),
+        field('Clouds drifting', seg([['1', 'On'], ['0', 'Off']], cfg.clouds !== false ? '1' : '0', v => { cfg.clouds = v === '1'; ch(); })),
         grid2(field('Life outside', seg([['1', 'On'], ['0', 'Off']], cfg.outside !== false ? '1' : '0', v => { cfg.outside = v === '1'; ch(); })), field('Plants sway', seg([['1', 'On'], ['0', 'Off']], cfg.sway !== false ? '1' : '0', v => { cfg.sway = v === '1'; ch(); }))),
         field('Camera drift', seg([['off', 'Still'], ['gentle', 'Gentle'], ['more', 'More']], cfg.drift || 'gentle', v => { cfg.drift = v; ch(); })),
         grid2(field('Repeats every (seconds)', num(L, v => { cfg.loop = r2(v); changed(); }, 4, 120, 1, 'Loop length'), 'Everything repeats exactly, so it loops without a join.'), field('Clip length (seconds, 0 = automatic)', num(+cfg.len || 0, v => { cfg.len = r2(v); changed(); }, 0, 1800, 1, 'Clip length'), cfg.avatar ? 'Automatic follows your avatar video.' : 'Automatic is one loop.')),
@@ -601,5 +645,5 @@ const Studio = (() => {
     }
   }
 
-  return { id: 'studio', name: 'Studio', editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass } };
+  return { id: 'studio', name: 'Studio', ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
 })();

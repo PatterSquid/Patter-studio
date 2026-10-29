@@ -12,11 +12,13 @@ SRC = os.path.join(ROOT, 'src')
 DIST = os.path.join(ROOT, 'dist')
 os.makedirs(DIST, exist_ok=True)
 
+# His studio, built in: the room picture and what is marked in it
+open(os.path.join(SRC, 'studio_room.js'), 'w').write('const STUDIO_ROOM = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-room.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_MARKS = ' + open(os.path.join(ROOT, 'assets', 'studio-marks.json')).read() + ';\n')
 order = open(os.path.join(ROOT, 'story', 'ORDER')).read().split()
 open(os.path.join(SRC, 'story.js'), 'w').write(''.join(open(os.path.join(ROOT, 'story', f)).read() for f in order))
 
 FILES = ['mp4mux.js', 'engine.js', 'ui.js', 'charts.js', 'timeline.js', 'picto.js', 'geodata.js', 'globegl.js', 'globe.js', 'routes.js',
-         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'video.js', 'studio.js', 'layers.js', 'editor.js', 'render.js', 'app.js']
+         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'video.js', 'studio_room.js', 'studio.js', 'layers.js', 'editor.js', 'render.js', 'app.js']
 VERSION = open(os.path.join(ROOT, 'VERSION')).read().strip()
 html = open(os.path.join(SRC, 'index.html')).read()
 css = open(os.path.join(SRC, 'style.css')).read()

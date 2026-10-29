@@ -45,6 +45,7 @@ const Render = (() => {
           const mod = allMods().find(x => x.id === m.modId); if (!mod) throw new Error('Unknown clip type');
           if (m.needsMap) { await GeoData.load(); if (GeoData.full) await GeoData.full; if (GeoData.state.status !== 'ready') throw new Error('Map unavailable in worker'); }
           if (m.assets && typeof Layers !== 'undefined') await Layers.setAssets(m.assets);
+          if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready();
           if (m.media && typeof Media !== 'undefined') Media.load(m.media);
           if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
           fps = m.fps; R = frameRenderer(mod, m.cfg, m.look, m.W, m.H, m.fps, m.blur, false, m.t0 || 0); R.mod = mod; R.cfg = m.cfg; R.look = m.look; R.t0 = m.t0 || 0;
