@@ -35,7 +35,9 @@ const Studio = (() => {
   const LOGO = 'pattersquid-logo';
   const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null]).catch(() => null) : Promise.resolve());
   // Older settings with no room picture use the built-in studio
-  const eff = cfg => (!cfg || cfg.room || !hasBuiltin) ? cfg : Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marks && cfg.marks.glass ? cfg.marks : builtinMarks() });
+  // and his own studio always uses the marks that come with the app (so fixes to them reach him), unless he has marked it himself
+  const eff = cfg => { if (!cfg || !hasBuiltin) return cfg; if (!cfg.room) return Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marksOwn && cfg.marks && cfg.marks.glass ? cfg.marks : STUDIO_MARKS });
+    return cfg.room.asset === BUILTIN && !cfg.marksOwn ? Object.assign({}, cfg, { marks: STUDIO_MARKS }) : cfg; };
   function defaults() {
     return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
       neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo' }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
@@ -667,7 +669,7 @@ const Studio = (() => {
       if (!has) { root.append(card('Your studio', H('p', { className: 'hint', textContent: 'Add a picture of your room. Patter Studio finds the window, the lamps and the lights outside by itself, then you can mark picture frames, plants and anything standing in front of the window.' }), H('div', { className: 'btnrow' }, btn('Add a picture of your room', pick, 'primary')), note)); return; }
       const cnt = (n, one, many) => n + ' ' + (n === 1 ? one : many);
       const kids = [cfg.room.asset === BUILTIN ? H('p', { className: 'hint', textContent: 'Your studio, already animated: rain on the window, clouds drifting, lamps, the flats outside and the odd car going past. Change the weather and light below, or add your avatar.' }) : '', H('p', { className: 'hint', textContent: '🖼 ' + (cfg.room.name || 'Room') + '. ' + [M.glass ? 'window found' : 'no window yet', cnt(M.lamps.length, 'lamp', 'lamps'), cnt(M.frames.length, 'frame', 'frames'), cnt(M.plants.length, 'plant', 'plants'), cnt(M.lit.length, 'light outside', 'lights outside')].join(', ') + '.' }),
-        H('label', { className: 'chk' }, H('input', { type: 'checkbox', checked: !!cfg.mark, on: { change: e => { cfg.mark = e.target.checked; ch(); } } }), ' Mark things on the preview')];
+        H('label', { className: 'chk' }, H('input', { type: 'checkbox', checked: !!cfg.mark, on: { change: e => { cfg.mark = e.target.checked; if (cfg.mark && cfg.room.asset === BUILTIN && !cfg.marksOwn) { cfg.marks = builtinMarks(); cfg.marksOwn = true; } ch(); } } }), ' Mark things on the preview')];
       if (cfg.mark) { const add = (label, fn) => btn(label, () => { fn(); changed(); redo(); }), c = 0.5;
         kids.push(H('p', { className: 'hint', textContent: 'Drag the outlines on the preview so they sit on the real things. Drag a corner to resize. Select one and press Delete to remove it. Untick when you are done.' }),
           H('div', { className: 'btnrow' }, add('+ Lamp', () => M.lamps.push([c, 0.3, 0.05])), add('+ Picture frame', () => M.frames.push({ id: nid('f'), name: 'Frame ' + (M.frames.length + 1), p: [[0.42, 0.2], [0.54, 0.2], [0.54, 0.4], [0.42, 0.4]] })), add('+ Plant', () => M.plants.push([0.45, 0.3, 0.52, 0.5, 'top'])),
@@ -677,7 +679,7 @@ const Studio = (() => {
             M.glass ? '' : add('+ Window', () => { M.glass = [[0.6, 0.1], [0.95, 0.1], [0.95, 0.55], [0.6, 0.55]]; }),
             btn('Find the lights again', () => { const bmp = roomBmp(cfg); if (!bmp) return; const d = detect(bmp, M.glass); M.lit = d.lit; M.street = d.street; if (!M.lamps.length) M.lamps = d.lamps; changed(); redo(); })));
       }
-      kids.push(H('div', { className: 'btnrow' }, cfg.room.asset === BUILTIN ? '' : hasBuiltin ? btn('Back to my studio', () => { cfg.room = { asset: BUILTIN, name: 'Your studio' }; cfg.marks = builtinMarks(); cfg.mark = false; ch(); }, 'primary') : '', btn(cfg.room.asset === BUILTIN ? 'Use a different room picture' : 'Change picture', pick)), note);
+      kids.push(H('div', { className: 'btnrow' }, cfg.room.asset === BUILTIN ? '' : hasBuiltin ? btn('Back to my studio', () => { cfg.room = { asset: BUILTIN, name: 'Your studio' }; cfg.marks = builtinMarks(); cfg.marksOwn = false; cfg.mark = false; ch(); }, 'primary') : '', btn(cfg.room.asset === BUILTIN ? 'Use a different room picture' : 'Change picture', pick)), note);
       root.append(card('Your studio', ...kids));
     }
     function weatherCard() {
