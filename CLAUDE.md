@@ -64,7 +64,7 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
 
 * **His studio is built in and is the default.** `dev/assets/studio-room.jpg` and `dev/assets/studio-marks.json` are
   embedded at build time (`src/studio_room.js`, generated) as the asset `studio-builtin`, so the tab opens already
-  animated with nothing to set up. Clouds drift across the sky above the skyline (found per column, below the blind). In snow, snow lies on the rooftops (skyline caps), ledges and the marked `ground` polygons, and piles on the ledge along the bottom of the glass. A PatterSquid neon sign (his brand: white squid, the name in blue) sits on the wall under the window (`cfg.neon`, on by default, draggable); very subtle life: a blink and a slow tentacle curl every 10 to 15 seconds. He
+  animated with nothing to set up. Clouds drift across the sky above the skyline (found per column, below the blind). In snow, snow lies on the rooftops (skyline caps), ledges and the marked `ground` polygons, and piles on the ledge along the bottom of the glass. His PatterSquid logo (`dev/assets/pattersquid.jpg`, the white squid on a saltire disc, cut from his channel picture) is a round lit sign on the wall under the window (`cfg.neon`, style 'logo', on by default, draggable); very subtle life: the squid blinks every 10 to 15 seconds. He did not like a traced neon outline: use his real logo. He
   can still swap in another room picture, and "Back to my studio" returns to his.
 * `cfg.room.asset` is the picture; `cfg.marks` holds what is in it, as fractions of the picture: `glass` (four corners),
   `front` (polygons kept in front of the glass), `lamps` `[x, y, r]`, `frames` `{ id, name, p: [4 corners] }`, `plants`

@@ -32,12 +32,13 @@ const Studio = (() => {
   const BUILTIN = 'studio-builtin', hasBuiltin = typeof STUDIO_ROOM !== 'undefined';
   const builtinMarks = () => JSON.parse(JSON.stringify(hasBuiltin ? STUDIO_MARKS : { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }));
   let readyP = null;
-  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Layers.setAsset(BUILTIN, STUDIO_ROOM).catch(() => null) : Promise.resolve());
+  const LOGO = 'pattersquid-logo';
+  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null]).catch(() => null) : Promise.resolve());
   // Older settings with no room picture use the built-in studio
   const eff = cfg => (!cfg || cfg.room || !hasBuiltin) ? cfg : Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marks && cfg.marks.glass ? cfg.marks : builtinMarks() });
   function defaults() {
     return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
-      neon: { on: true, x: 0.724, y: 0.662, s: 0.92, text: true }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
+      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo' }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
   function duration(cfg) {
@@ -421,8 +422,9 @@ const Studio = (() => {
 
   /* ---------- The PatterSquid neon sign on the wall under the window. It hums with the faintest flicker; every so often the
      squid blinks and slowly curls a tentacle. Drawn once per pose into its own picture, then laid on with its glow. ---------- */
-  const NEON0 = { on: true, x: 0.724, y: 0.662, s: 0.92, text: true };
-  const neonOf = cfg => Object.assign({}, NEON0, typeof cfg.neon === 'object' && cfg.neon ? cfg.neon : {});
+  const NEON0 = { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo' };
+  // Settings from the first neon version (no style yet) move to the logo sign in its own place
+  const neonOf = cfg => { const n = typeof cfg.neon === 'object' && cfg.neon ? cfg.neon : {}; return Object.assign({}, NEON0, n.style ? n : { on: n.on !== false }); };
   const SQUID_H = 100;
   // The squid as tube lines, in units where it is 100 tall; curl (0..1) winds the tentacle tips in a little more
   function squidTubes(curl, k) {
@@ -448,18 +450,42 @@ const Studio = (() => {
     if (neonCache.size > 60) neonCache.clear(); neonCache.set(key, c); c.ox = ox; c.oy = oy; return c;
   }
   // Where the sign sits and how big, in picture units (for drawing and for dragging it on the preview)
-  function neonBox(cfg, v) { const N = neonOf(cfg), u = v.iw / 1920 * N.s, w = (80 + (N.text ? 330 : 0)) * u, h = SQUID_H * u; return { x: N.x * v.iw - w / 2, y: N.y * v.ih - h / 2, w, h, u }; }
+  const LOGO_D = 104;
+  function neonBox(cfg, v) { const N = neonOf(cfg), u = v.iw / 1920 * N.s, logo = N.style !== 'neon', w = ((logo ? LOGO_D + 14 : 80) + (N.text ? 330 : 0)) * u, h = (logo ? LOGO_D : SQUID_H) * u; return { x: N.x * v.iw - w / 2, y: N.y * v.ih - h / 2, w, h, u, logo }; }
   function drawNeon(ctx, cfg, v, t, L, room) {
     const N = neonOf(cfg); if (!N.on) return; const B = neonBox(cfg, v), px = B.u * (v.px || v.s);
     // Very subtle life: a blink every 10 to 15 seconds and a slow tentacle curl now and then, whole numbers per loop
     const nb = Math.max(1, Math.round(L / 12)), r = rng(616); let eyes = 1, curl = 0, k = 0;
     for (let i = 0; i < nb; i++) { const tb = (i + 0.2 + r() * 0.6) * L / nb, dt = pmod(t - tb, L); if (dt < 0.22) eyes = Math.min(eyes, Math.abs(1 - dt / 0.11)); const tc = pmod(t - tb - L / nb / 2, L), kk = [0, 5, 1, 4, 2, 3][i % 6]; if (tc < 2.4) { const c = Math.sin(tc / 2.4 * Math.PI); if (c > curl) { curl = c; k = kk; } } }
+    if (B.logo) { drawLogoSign(ctx, N, B, eyes, t, L, room, px); return; }
     const spr = neonSprite(N, px, curl, k, eyes < 0.15 ? 0 : eyes), hum = 0.965 + 0.025 * Math.sin(t * TAU * 50) * 0 + 0.02 * wob(t, L, 77, [41, 67, 97]), lit = cl(room, 0, 1) * hum;
     const sx = B.x - spr.ox / px + 40 * B.u * 0, sy = B.y - spr.oy / px;
     // Its light on the wall and spilling down onto the floor
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.32 * lit; const cx = B.x + B.w * 0.45, cy = B.y + B.h * 0.5, rr = B.w * 0.75; ctx.drawImage(glowSprite('rgba(110,160,255,0.55)'), cx - rr, cy - rr * 0.8, rr * 2, rr * 1.6);
     ctx.globalAlpha = 0.18 * lit; ctx.drawImage(glowSprite('rgba(110,160,255,0.5)'), cx - rr * 1.1, B.y + B.h * 1.3 - rr * 0.25, rr * 2.2, rr * 0.5);
     ctx.globalAlpha = lit; ctx.drawImage(spr, sx, sy, spr.width / px, spr.height / px); ctx.restore();
+  }
+
+  // His own logo as a round lit sign: light glowing out from behind it onto the wall, the disc lit from within, and the squid
+  // blinking now and then. The name can glow in blue neon beside it.
+  function drawLogoSign(ctx, N, B, eyes, t, L, room, px) {
+    const a = typeof Layers !== 'undefined' && Layers.assets[LOGO]; if (!a || !a.bmp) { ready(); return; }
+    const D = LOGO_D * B.u, x = B.x, y = B.y, cx = x + D / 2, cy = y + D / 2, hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]), lit = cl(room, 0, 1) * hum;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.5 * lit; ctx.drawImage(glowSprite('rgba(120,165,255,0.6)'), cx - D * 1.25, cy - D * 1.15, D * 2.5, D * 2.3);
+    ctx.globalAlpha = 0.22 * lit; ctx.drawImage(glowSprite('rgba(120,165,255,0.5)'), cx - D * 1.4, y + D * 1.35, D * 2.8, D * 0.55); ctx.restore();
+    // A thin dark edge where the sign stands off the wall
+    ctx.save(); ctx.globalAlpha = 0.6; ctx.fillStyle = '#05070d'; ctx.beginPath(); ctx.arc(cx + D * 0.02, cy + D * 0.03, D * 0.515, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, D / 2, 0, TAU); ctx.clip(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(a.bmp, x, y, D, D);
+    // The eyes close and open: lids the colour of his head come down over them
+    if (eyes < 0.999) { const k = 1 - eyes, er = D * 0.048; [[0.412, 0.373], [0.585, 0.373]].forEach(([ex, ey]) => { const X = x + ex * D, Y = y + ey * D; ctx.save(); ctx.beginPath(); ctx.arc(X, Y, er * 1.08, 0, TAU); ctx.clip(); ctx.fillStyle = '#e4dfd9'; ctx.fillRect(X - er * 1.2, Y - er * 1.2, er * 2.4, er * 2.4 * k); ctx.strokeStyle = 'rgba(90,80,70,0.7)'; ctx.lineWidth = Math.max(0.6, er * 0.14); ctx.beginPath(); ctx.moveTo(X - er * 1.1, Y - er * 1.2 + er * 2.4 * k); ctx.lineTo(X + er * 1.1, Y - er * 1.2 + er * 2.4 * k); ctx.stroke(); ctx.restore(); }); }
+    // Lit from within: a touch brighter in the middle, a soft bright rim
+    ctx.globalCompositeOperation = 'screen'; const g = ctx.createRadialGradient(cx, cy - D * 0.1, 0, cx, cy, D / 2); g.addColorStop(0, `rgba(170,190,255,${0.16 * lit})`); g.addColorStop(0.75, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(150,180,255,${0.35 * lit})`); ctx.fillStyle = g; ctx.fillRect(x, y, D, D);
+    if (lit < 0.98) { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(3,4,10,${cl((1 - lit) * 0.9, 0, 0.9)})`; ctx.fillRect(x, y, D, D); }
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha = 0.55 * lit; ctx.strokeStyle = '#cfe0ff'; ctx.lineWidth = Math.max(0.8, D * 0.012); ctx.beginPath(); ctx.arc(cx, cy, D / 2, 0, TAU); ctx.stroke(); ctx.restore();
+    if (N.text) { const tx = x + D + 14 * B.u, sc = px * B.u / B.u; void sc; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = lit; ctx.font = `700 ${Math.round(46 * B.u)}px Kalam, "Gochi Hand", cursive`; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      [['rgba(95,160,255,0.35)', 9, 18], ['#5fb4ff', 3.6, 8], ['#e6f2ff', 1.3, 0]].forEach(([c, w, bl]) => { ctx.strokeStyle = c; ctx.lineWidth = w * B.u; ctx.shadowColor = c; ctx.shadowBlur = bl * B.u * (px / B.u); ctx.strokeText('PatterSquid', tx, cy); }); ctx.restore(); }
   }
 
   // While marking things up: outlines of everything the room knows about
@@ -686,9 +712,10 @@ const Studio = (() => {
     }
     function neonCard(sel) {
       const N = neonOf(cfg), set = (k2, v2) => { cfg.neon = Object.assign({}, N, { [k2]: v2 }); };
-      root.append(card('PatterSquid sign', H('p', { className: 'hint', textContent: 'A neon squid and your name on the wall under the window. Every so often the squid blinks and curls a tentacle. Drag it on the preview to move it, or a corner to change its size.' }),
+      root.append(card('PatterSquid sign', H('p', { className: 'hint', textContent: 'Your PatterSquid logo lit up on the wall under the window. Every so often the squid blinks. Drag it on the preview to move it, or a corner to change its size.' }),
+        field('Look', seg([['logo', 'Your logo, lit'], ['neon', 'Neon outline']], N.style === 'neon' ? 'neon' : 'logo', v2 => { set('style', v2); ch(); })),
         grid2(field('Sign', seg([['1', 'On'], ['0', 'Off']], N.on ? '1' : '0', v2 => { set('on', v2 === '1'); ch(); })), field('Name next to it', seg([['1', 'Yes'], ['0', 'No']], N.text ? '1' : '0', v2 => { set('text', v2 === '1'); ch(); }))),
-        H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, text: N.text }); ch(); }), sel && done ? btn('Done', done) : '')));
+        H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, text: N.text, style: N.style }); ch(); }), sel && done ? btn('Done', done) : '')));
     }
     function framesCard() {
       if (!M.frames.length) return; const list = H('div', { className: 'vid-list' }, ...M.frames.map(f => { const n = (cfg.shows || []).filter(sh => sh.frame === f.id).length; return H('div', { className: 'vid-row' }, H('i', { style: 'background:#b0458f' }), H('span', { className: 'vid-name', textContent: f.name || 'Frame' }), H('span', { className: 'vid-len', textContent: n ? n + ' on show' : 'empty' }), btn('Show something', () => { const sh = addShow(f.id); hooks.select && hooks.select('W:' + sh.id); }));

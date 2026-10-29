@@ -13,7 +13,7 @@ DIST = os.path.join(ROOT, 'dist')
 os.makedirs(DIST, exist_ok=True)
 
 # His studio, built in: the room picture and what is marked in it
-open(os.path.join(SRC, 'studio_room.js'), 'w').write('const STUDIO_ROOM = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-room.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_MARKS = ' + open(os.path.join(ROOT, 'assets', 'studio-marks.json')).read() + ';\n')
+open(os.path.join(SRC, 'studio_room.js'), 'w').write('const STUDIO_ROOM = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-room.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_LOGO = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'pattersquid.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_MARKS = ' + open(os.path.join(ROOT, 'assets', 'studio-marks.json')).read() + ';\n')
 order = open(os.path.join(ROOT, 'story', 'ORDER')).read().split()
 open(os.path.join(SRC, 'story.js'), 'w').write(''.join(open(os.path.join(ROOT, 'story', f)).read() for f in order))
 
