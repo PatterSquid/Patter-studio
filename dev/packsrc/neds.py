@@ -19,7 +19,8 @@ hats = [{'id': 'gothhair', 'label': 'Goth hair', 'paths': goth, 'top': 1.3}]
 A = lambda who, k, start, dur=None, **kw: dict({'who': who, 'k': k, 'start': start, **({'dur': dur} if dur else {})}, **kw)
 N1, N2, G = 'ned', 'ned2', 'goth'
 sc = {'region': 'europe', 'era': 'modern', 'place': 'outdoors', 'weather': 'rain', 'label': 'Glasgow',
-      'people': [{'pid': N1, 'start': 'left', 'holding': 'bottle'}, {'pid': N2, 'start': 660, 'holding': 'bottle'}, {'pid': G, 'start': 'off right', 'holding': ''}],
+      # The goth goes first so older versions (which place people in list order) aim at where he really is
+      'people': [{'pid': G, 'start': 'off right', 'holding': ''}, {'pid': N1, 'start': 'left', 'holding': 'bottle'}, {'pid': N2, 'start': 660, 'holding': 'bottle'}],
       'acts': [
           A(N1, 'drink', 0.4, 1.8), A(N2, 'drink', 0.9, 1.8),
           A(G, 'walk', 1.2, 3.4, to=1240),
@@ -39,7 +40,7 @@ sc = {'region': 'europe', 'era': 'modern', 'place': 'outdoors', 'weather': 'rain
 cast = [{'role': N1, 'name': 'Tam', 'sex': 'man', 'colour': 'white', 'hat': 'cap'},
         {'role': N2, 'name': 'Scotty', 'sex': 'man', 'colour': 'blue', 'hat': 'cap', 'beard': 'stubble'},
         {'role': G, 'name': 'Damien', 'sex': 'man', 'colour': 'black', 'hat': 'gothhair'}]
-pack = {'format': 1, 'id': 'neds', 'name': 'Neds and a goth', 'version': 1,
+pack = {'format': 1, 'id': 'neds', 'name': 'Neds and a goth', 'version': 2,
         'description': 'Goth hair and the Buckie ambush: two neds on the Buckie, a goth walking past, a bottle, a pish and a runner.',
         'hats': hats, 'setpieces': [{'id': 'buckie_ambush', 'name': 'Buckie ambush', 'note': 'Two neds slag a goth, bottle him, pish on him and leg it.', 'cast': cast, 'scenes': [sc], 'layers': []}]}
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'packs', 'neds.json')
