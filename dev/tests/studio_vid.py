@@ -17,8 +17,6 @@ async def main():
         for a in range(0,n,30):
             fs,ms=await pg.evaluate(CHUNK,[a,min(n,a+30),fps,W,H]); tot+=ms
             for i,u in enumerate(fs): open(f'{d}/{a+i:05d}.jpg','wb').write(base64.b64decode(u.split(',')[1]))
-        u=await pg.evaluate("async(dur)=>{ const d=Studio.soundData(window.__cfg,null,dur); const b=Studio.wav(d); return await new Promise(r=>{const f=new FileReader(); f.onload=()=>r(f.result); f.readAsDataURL(b);}); }", dur)
-        open('/tmp/claude-0/st2/snd_tmp.wav','wb').write(base64.b64decode(u.split(',')[1]))
         print('avg draw ms',round(tot/n,1), errs[:3]); await b.close()
-    subprocess.run(f'ffmpeg -v error -y -framerate {fps} -i {d}/%05d.jpg -i /tmp/claude-0/st2/snd_tmp.wav -c:v libx264 -pix_fmt yuv420p -crf 18 -c:a aac -b:a 192k -shortest {out}',shell=True)
+    subprocess.run(f'ffmpeg -v error -y -framerate {fps} -i {d}/%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 18 {out}',shell=True)
 asyncio.run(main())

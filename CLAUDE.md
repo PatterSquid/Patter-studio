@@ -71,10 +71,10 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   Character Animator, so no furniture is added. It is lit to match the room (grade, warm and cool edges, floor shadow).
 * `cfg.stings` (thunder, lightning, flicker, lights off, blackout) and `cfg.shows` (a picture, headline or clip from another tab
   in one of the frames) are timeline bars.
-* `Studio.soundData` makes the matching rain, wind, tyres, drips and thunder as a separate WAV (volume, heaviness, on or off).
+* No studio sound: he tried a generated rain and thunder track and did not want it.
 * In the Video tab, "Avatar gaps: Your studio" shows the studio in every [ME] gap, with his avatar video carrying on from gap
   to gap (one take, lines in order). `projects/my-studio.patter.json` is his room, already marked.
-* Tests: `dev/tests/studio_*.py` (frames, video with sound, worker parity, seamless loop, Video gaps, random clicking).
+* Tests: `dev/tests/studio_*.py` (frames, video, worker parity, seamless loop, Video gaps, random clicking).
 
 ## Packs (data only, no code)
 

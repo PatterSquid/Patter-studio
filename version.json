@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.29.5",
+  "version": "2026.10.29.6",
   "file": "app/patter-studio.html",
-  "notes": "New Studio tab: your room with rain on the window, lamps, life outside, lightning, frames that show pictures and headlines, your avatar lit to match, and a rain and thunder sound file. Video tab gaps can show your studio. New caption presets: name title, source tag, subscribe."
+  "notes": "Studio: the rain and thunder sound file is gone."
 }
