@@ -117,16 +117,16 @@ const Studio = (() => {
     for (let i = 0; i < W * Hh; i++) { const r = d[i * 4], gg = d[i * 4 + 1], b = d[i * 4 + 2]; lum[i] = r * 0.3 + gg * 0.59 + b * 0.11; warm[i] = r > 130 && r > b + 25 ? 1 : 0; }
     const line = R.sky && R.sky.line, sn = new Float32Array(W * Hh), rr = rng(4242);
     if (line) for (let x = 0; x < W; x++) { const t = Math.round(line[x] + 5); for (let k = 0; k < 4; k++) { const y = t + k; if (y >= 0 && y < Hh) sn[y * W + x] = Math.max(sn[y * W + x], 1 - k * 0.17); } }
-    for (let y = 2; y < Hh - 2; y++) { const skyY = y; for (let x = 1; x < W - 1; x++) { if (line && skyY <= line[x] + 8) continue; const i = y * W + x, gy = lum[i + W] - lum[i - W], gx = lum[i + 1] - lum[i - 1]; if (gy < -14 && Math.abs(gx) < 10) sn[i] = Math.max(sn[i], 0.65 + rr() * 0.2); } }
+    for (let y = 2; y < Hh - 2; y++) { const skyY = y; for (let x = 1; x < W - 1; x++) { if (line && skyY <= line[x] + 8) continue; const i = y * W + x, gy = lum[i + W] - lum[i - W], gx = lum[i + 1] - lum[i - 1]; if (gy < -14 && Math.abs(gx) < 10) sn[i] = Math.max(sn[i], 0.55); } }
     // The marked ground
     // The marked ground, with soft edges: grass takes the most, dark things (trees, posts, fences) poke through, paths and the
     // road stay slushy
-    if (ground && ground.length) { const gc = mk(W, Hh), gg2 = gc.getContext('2d', { willReadFrequently: true }); gg2.filter = 'blur(5px)'; gg2.fillStyle = '#fff'; ground.forEach(poly => { pathOf(gg2, poly.map(p => [p[0] - R.x0, p[1] - R.y0])); gg2.fill(); }); const gd = gg2.getImageData(0, 0, W, Hh).data;
-      for (let i = 0; i < W * Hh; i++) { const m = gd[i * 4 + 3] / 255; if (m <= 0.01) continue; const L0 = lum[i], k = L0 < 16 ? 0.25 : L0 < 24 ? lerp(0.25, 0.8, (L0 - 16) / 8) : L0 < 42 ? 0.8 : L0 < 60 ? lerp(0.8, 0.4, (L0 - 42) / 18) : 0.35; sn[i] = Math.max(sn[i], k * (0.8 + rr() * 0.2) * m); } }
+    if (ground && ground.length) { const gc = mk(W, Hh), gg2 = gc.getContext('2d', { willReadFrequently: true }); gg2.filter = 'blur(12px)'; gg2.fillStyle = '#fff'; ground.forEach(poly => { pathOf(gg2, poly.map(p => [p[0] - R.x0, p[1] - R.y0])); gg2.fill(); }); const gd = gg2.getImageData(0, 0, W, Hh).data;
+      for (let i = 0; i < W * Hh; i++) { const m = gd[i * 4 + 3] / 255; if (m <= 0.01) continue; const L0 = lum[i], k = L0 < 16 ? 0.25 : L0 < 24 ? lerp(0.25, 0.8, (L0 - 16) / 8) : L0 < 42 ? 0.8 : L0 < 60 ? lerp(0.8, 0.4, (L0 - 42) / 18) : 0.35; const x = i % W, y = (i - x) / W, nz = 0.82 + 0.18 * Math.sin(x * 0.09 + Math.sin(y * 0.13) * 2) * Math.sin(y * 0.11 + x * 0.02); sn[i] = Math.max(sn[i], k * nz * m * 0.85); } }
     const out = c.getContext('2d').createImageData(W, Hh), o = out.data;
     // The snow keeps a little of the light and shade of what it lies on
-    for (let i = 0; i < W * Hh; i++) { if (warm[i]) continue; const a = sn[i]; if (a <= 0) continue; const sh = cl(0.78 + lum[i] / 260, 0.78, 1); o[i * 4] = 214 * sh; o[i * 4 + 1] = 222 * sh; o[i * 4 + 2] = 240 * sh; o[i * 4 + 3] = Math.round(255 * Math.min(1, a)); }
-    g.putImageData(out, 0, 0); return (R.snowCv = c);
+    for (let i = 0; i < W * Hh; i++) { if (warm[i]) continue; const a = sn[i]; if (a <= 0) continue; const sh = cl(0.62 + lum[i] / 180, 0.62, 0.95); o[i * 4] = 205 * sh; o[i * 4 + 1] = 214 * sh; o[i * 4 + 2] = 236 * sh; o[i * 4 + 3] = Math.round(255 * Math.min(1, a)); }
+    g.putImageData(out, 0, 0); const soft = mk(W, Hh), sg = soft.getContext('2d'); sg.filter = 'blur(0.8px)'; sg.drawImage(c, 0, 0); return (R.snowCv = soft);
   }
   // Soft cloud shapes that tile side to side, made once
   function cloudTex(seed, dark) { const k = 'cl' + seed + dark; if (SPR[k]) return SPR[k]; const W = 512, Hh = 192, c = mk(W, Hh), g = c.getContext('2d'), id = g.createImageData(W, Hh), d = id.data, r = rng(seed);
@@ -214,10 +214,12 @@ const Studio = (() => {
     if ((w.beads || w.snow) && amt > 0) { ctx.save(); ctx.globalAlpha = cl(0.22 * w.fog * (0.5 + amt * 0.5), 0, 0.5); ctx.drawImage(R.mist, R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (w.fog) { const g = ctx.createLinearGradient(0, R.y0 + R.h * 0.55, 0, R.y0 + R.h); g.addColorStop(0, 'rgba(150,165,200,0)'); g.addColorStop(1, `rgba(150,165,200,${0.07 * w.fog})`); ctx.fillStyle = g; ctx.fillRect(R.x0, R.y0, R.w, R.h); }
     if ((w.beads || w.runners) && amt > 0) glass(ctx, Q, R, tl, L, w, amt, v);
-    // Snow piled up on the ledge outside, along the bottom of the glass
-    if (w.snow) { const S = v.iw / 1672, rs = rng(808), pts = [], n = 40; for (let i = 0; i <= n; i++) { const a = i / n, p = onGlass(Q, a, 1), hgt = (5 + 3 * Math.sin(a * 9 + 1) + 2 * Math.sin(a * 23) + rs() * 1.5 + (a < 0.04 || a > 0.96 ? 4 : 0)) * S * Math.max(0.6, amt); pts.push([p[0], p[1] - hgt]); }
-      const b0 = onGlass(Q, 1, 1), b1 = onGlass(Q, 0, 1); ctx.save(); ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.lineTo(b0[0], b0[1] + 4); ctx.lineTo(b1[0], b1[1] + 4); ctx.closePath();
-      const gr = ctx.createLinearGradient(0, b1[1] - 12 * S, 0, b1[1]); gr.addColorStop(0, 'rgba(225,232,248,0.95)'); gr.addColorStop(1, 'rgba(150,160,190,0.95)'); ctx.fillStyle = gr; ctx.fill(); ctx.restore(); }
+    // Snow gathered against the bottom of the glass: soft, heavier in the corners, with a faint frosting above it
+    if (w.snow) { const S = v.iw / 1672, b1 = onGlass(Q, 0, 1), b0 = onGlass(Q, 1, 1), hh = R.h * 0.07 * Math.max(0.6, amt);
+      const fr = ctx.createLinearGradient(0, b1[1] - hh * 2.2, 0, b1[1]); fr.addColorStop(0, 'rgba(200,210,235,0)'); fr.addColorStop(1, 'rgba(200,210,235,0.16)'); ctx.fillStyle = fr; ctx.fillRect(R.x0, b1[1] - hh * 2.2, R.w, hh * 2.2 + 4);
+      const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48, p = onGlass(Q, a, 1), corner = Math.max(sm((0.12 - a) / 0.12), sm((a - 0.88) / 0.12)), hgt = (3.5 + 1.6 * Math.sin(a * 11 + 1) + 1.1 * Math.sin(a * 29) + corner * 16) * S * Math.max(0.6, amt); pts.push([p[0], p[1] - hgt]); }
+      ctx.save(); ctx.filter = 'blur(' + (1.2 * (v.px || v.s)).toFixed(2) + 'px)'; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.lineTo(b0[0], b0[1] + 6); ctx.lineTo(b1[0], b1[1] + 6); ctx.closePath();
+      const gr = ctx.createLinearGradient(0, b1[1] - 20 * S, 0, b1[1]); gr.addColorStop(0, 'rgba(196,206,232,0.85)'); gr.addColorStop(1, 'rgba(120,132,165,0.9)'); ctx.fillStyle = gr; ctx.fill(); ctx.restore(); }
     ctx.restore();
     // Things on the sill (a plant, a mug) stay in front of the glass
     const bmp = roomBmp(cfg);
@@ -264,10 +266,13 @@ const Studio = (() => {
       ctx.stroke(); }
     ctx.restore();
   }
+  // Falling snow: soft flakes at three depths (far ones small, slow and faint, near ones bigger and quicker), drifting side to
+  // side, fading in at the top and out before they reach the bottom so none of them pops
   function snow(ctx, R, tl, L, amt, v) {
-    const n = Math.round(160 * amt), r = rng(777); ctx.save(); ctx.fillStyle = 'rgba(235,240,255,0.85)';
-    for (let i = 0; i < n; i++) { const k = 2 + Math.floor(r() * 4), spd = k * (R.h + 20) / L, y = R.y0 - 10 + pmod(r() * (R.h + 20) + spd * tl, R.h + 20), sw = Math.sin(TAU * (1 + Math.floor(r() * 3)) * tl / L + r() * TAU) * (6 + r() * 10), x = R.x0 + pmod(r() * R.w + sw, R.w), s = 0.8 + r() * 1.8;
-      ctx.globalAlpha = 0.5 + 0.5 * (s / 2.6); ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill(); }
+    const n = Math.round(230 * amt), r = rng(777), S = v.iw / 1672 * 1.3, fl = glowSprite('rgba(240,244,255,0.95)'); ctx.save();
+    for (let i = 0; i < n; i++) { const depth = r(), k = depth < 0.55 ? 1 + Math.floor(r() * 2) : depth < 0.9 ? 2 + Math.floor(r() * 2) : 3 + Math.floor(r() * 2), span = R.h + 60, y = R.y0 - 30 + pmod(r() * span + k * span * tl / L, span), sw = Math.sin(TAU * (1 + Math.floor(r() * 3)) * tl / L + r() * TAU) * (5 + r() * 9) * (0.5 + depth), x = R.x0 + pmod(r() * R.w + sw, R.w), s = (depth < 0.55 ? 0.7 : depth < 0.9 ? 1.2 : 2.1) * (0.8 + r() * 0.5) * S;
+      const f = sm((y - R.y0 + 20) / 40) * sm((R.y0 + R.h - 24 - y) / 70), a = (depth < 0.55 ? 0.45 : depth < 0.9 ? 0.7 : 0.85) * f; if (a <= 0.01) continue;
+      ctx.globalAlpha = a; ctx.drawImage(fl, x - s * 2.2, y - s * 2.2, s * 4.4, s * 4.4); }
     ctx.restore();
   }
   // A drop that bends the view behind it: a little upside-down, slightly magnified copy of what is outside
