@@ -244,7 +244,7 @@ const E = (() => {
     const toPng = c => c.convertToBlob ? c.convertToBlob({ type: 'image/png' }) : new Promise(r => c.toBlob(r, 'image/png'));
     for (let i = 0; i < n; i++) {
       if (signal && signal.aborted) throw new Error('Export cancelled.');
-      if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps));
+      if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, lookX));
       R.render(i);
       const blob = await toPng(R.canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
       if (dir) { const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(blob); await w.close(); }

@@ -2,9 +2,9 @@
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
-  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll' };
+  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video' };
   const KEY = 'patter-studio-v1';
   const $ = id => document.getElementById(id);
   const uid = () => 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -108,7 +108,7 @@
   function layoutPanels() {
     const ex = mod().editor, e = !!ex && !ex.formIsScene, btn = $('manualBtn'); btn.hidden = !e;
     const show = !ex || (e && !!state.manual); $('modForm').hidden = !show; btn.textContent = state.manual ? 'Hide manual inputs' : 'Show manual inputs'; btn.setAttribute('aria-expanded', String(!!state.manual));
-    $('resetMod').hidden = false;
+    $('resetMod').hidden = false; $('resetMod').textContent = state.module === 'video' ? 'Start the video again from the example' : 'Reset this clip to the example';
   }
   $('manualBtn').addEventListener('click', () => { state.manual = !state.manual; if (state.manual) buildForm(); layoutPanels(); save(); });
   // Undo history, per clip type
@@ -117,11 +117,19 @@
   function restore(snap) { state.cfg[state.module] = JSON.parse(snap); lastSnap = snap; save(); refreshAll(); }
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); }
+  function refreshAll() { buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); }); const chalkOnly = state.module === 'story' || state.module === 'broll'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
-  function switchTab(m) { state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
+  function switchTab(m) { if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
+  /* ---------- Editing a clip from the Video tab: it is opened in its own tab (that tab's usual clip is put aside), and goes
+     back into the video when you return to the Video tab ---------- */
+  const vItem = id => ((state.cfg.video && state.cfg.video.items) || []).find(x => x.id === id);
+  function openItem(id) { const it = vItem(id); if (!it || !MODULES[it.mod]) return; if (state.edit) finishEdit(); state.stash = state.stash || {}; state.stash[it.mod] = state.cfg[it.mod] || null; state.cfg[it.mod] = it.cfg = Object.assign(MODULES[it.mod].defaults(), it.cfg || {}); state.edit = { id, mod: it.mod }; switchTab(it.mod); say('Editing this clip from your video. Press Back to the video when you are done.'); }
+  function finishEdit() { const e = state.edit; if (!e) return; const it = vItem(e.id); if (it && state.cfg[e.mod]) it.cfg = state.cfg[e.mod]; state.cfg[e.mod] = (state.stash && state.stash[e.mod]) || MODULES[e.mod].defaults(); if (state.stash) delete state.stash[e.mod]; state.edit = null; save(); }
+  function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = state.cfg.video.items.indexOf(it) + 1;
+    el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
+  if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
   drawTabs(); syncLook(); buildForm(); commit();
   $('resetMod').addEventListener('click', () => { commit(); state.cfg[state.module] = mod().defaults(); commit(); refreshAll(); save(); begin(); });
 
@@ -259,7 +267,7 @@
   const thumbEl = src => src ? H('img', { src, alt: '', className: 'thumb' }) : H('div', { className: 'thumb none' });
   function confirmBtn(label, fn) { let armed = false; const b = H('button', { type: 'button', textContent: label, on: { click: () => { if (!armed) { armed = true; b.textContent = 'Sure?'; b.classList.add('warn'); setTimeout(() => { armed = false; b.textContent = label; b.classList.remove('warn'); }, 2500); return; } fn(); } } }); return b; }
   // Drop pictures no clip uses any more (from deleted image layers), so projects don't keep growing
-  function pruneAssets(st) { const used = new Set(); Object.values(st.cfg || {}).forEach(c => ((c && c.layers) || []).forEach(L => { if (L.asset) used.add(L.asset); })); Object.keys(st.assets || {}).forEach(id => { if (!used.has(id)) delete st.assets[id]; }); return st; }
+  function pruneAssets(st) { const used = new Set(), walk = c => { ((c && c.layers) || []).forEach(L => { if (L.asset) used.add(L.asset); }); ((c && c.items) || []).forEach(it => it && walk(it.cfg)); }; Object.values(st.cfg || {}).forEach(walk); Object.values(st.stash || {}).forEach(walk); Object.keys(st.assets || {}).forEach(id => { if (!used.has(id)) delete st.assets[id]; }); return st; }
   function applyState(s, msg) {
     state = pruneAssets(adopt(s)); if (!MODULES[state.module]) state.module = state.module === 'board' ? 'story' : 'charts'; fillDefaults(); Layers.setAssets(state.assets);
     drawTabs(); syncLook(); layoutPreview(); updateExportLabel(); hist = []; fut = []; lastSnap = null; commit(); if (ed) { ed.select(null); ed.resetZoom(); } player.setLoop(null); syncLoopBtn(); pq.value = state.pq || 'normal'; player.setMode(pq.value);

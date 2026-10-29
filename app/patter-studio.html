@@ -219,11 +219,22 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
 .pack-row { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(0,0,0,0.18); }
 .pack-row .lib-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pack-row > button { flex: none; width: auto; }
+
+/* Shown while a clip from the Video tab is being edited in its own tab */
+.edit-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border-radius: 10px; background: #3a1f33; border: 1px solid #a03a6a; color: #fff; }
+.edit-banner[hidden] { display: none; }
+.vid-list { display: flex; flex-direction: column; gap: 6px; }
+.vid-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,0.2); }
+.vid-row i { width: 10px; height: 26px; border-radius: 3px; flex: none; }
+.vid-row .vid-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vid-row .vid-len { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.vid-row button { flex: none; padding: 4px 10px; }
 </style></head>
 <body>
 <header>
   <div class="brand"><b>PATTER</b> STUDIO</div>
   <nav id="tabs" aria-label="Clip types">
+    <button data-mod="video">Video</button>
     <button data-mod="charts">Charts</button>
     <button data-mod="timeline">Timeline</button>
     <button data-mod="map">World map</button>
@@ -257,6 +268,7 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
       <label class="check"><input type="checkbox" id="texture"> Halftone texture on the background</label>
       <label class="check"><input type="checkbox" id="transparent"> Transparent background (exports a PNG sequence)</label>
     </section>
+    <div id="editBanner" class="edit-banner" hidden></div>
     <div id="inspector" style="display:flex;flex-direction:column;gap:12px"></div>
     <button id="manualBtn" type="button" aria-expanded="false">Show manual inputs</button>
     <div id="modForm" style="display:flex;flex-direction:column;gap:12px"></div>
@@ -290,7 +302,7 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
   </section>
 </main>
 <dialog id="dlg" aria-label="Dialog"></dialog>
-<script id="patter-js">window.PATTER_APP_VERSION='2026.10.28.1';
+<script id="patter-js">window.PATTER_APP_VERSION='2026.10.29.1';
 /* Minimal MP4 (ISO BMFF) muxer for one H.264 video track.
    Samples are AVC length prefixed access units, as produced by WebCodecs with avc.format = 'avc'. */
 const MP4Mux = (() => {
@@ -607,7 +619,7 @@ const E = (() => {
     const toPng = c => c.convertToBlob ? c.convertToBlob({ type: 'image/png' }) : new Promise(r => c.toBlob(r, 'image/png'));
     for (let i = 0; i < n; i++) {
       if (signal && signal.aborted) throw new Error('Export cancelled.');
-      if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps));
+      if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, lookX));
       R.render(i);
       const blob = await toPng(R.canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
       if (dir) { const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(blob); await w.close(); }
@@ -4622,6 +4634,123 @@ const Story = (() => {
   return mod;
 })();
 
+/* Video: a whole video in one running order. Clips made in the other tabs play one after another, with gaps where the video
+   cuts to the presenter's avatar talking to camera. Each clip keeps its own settings and can be opened in its own tab to edit.
+   Avatar gaps export as plain black (or green, or see through in a PNG sequence) so the avatar footage drops straight in. */
+const Video = (() => {
+  const { H, field, sel, txt, area, btn, card } = UI;
+  const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  const NAMES = { charts: 'Chart', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll' };
+  const COLS = { charts: '#3b7dd8', timeline: '#2f9a8a', map: '#3c8f4a', flights: '#4f6fd0', flyover: '#2d7a6a', picto: '#b0703a', news: '#8a8a8a', story: '#7d6420', broll: '#6d4f9a', avatar: '#a03a6a' };
+  const raw = k => ({ charts: typeof Charts !== 'undefined' && Charts, timeline: typeof Timeline !== 'undefined' && Timeline, map: typeof MapMod !== 'undefined' && MapMod, flights: typeof Flights !== 'undefined' && Flights, flyover: typeof Flyover !== 'undefined' && Flyover, picto: typeof Picto !== 'undefined' && Picto, news: typeof News !== 'undefined' && News, story: typeof Story !== 'undefined' && Story, broll: typeof Broll !== 'undefined' && Broll })[k] || null;
+  const modOf = k => { const m = raw(k); return m ? (typeof Layers !== 'undefined' ? Layers.wrap(m) : m) : null; };
+  const hooks = {};
+  const nid = p => p + Math.random().toString(36).slice(2, 9);
+  // Each clip plays in the look of the video, except the chalk tabs, which always use the chalkboard
+  const lookFor = (it, look) => { const L = Object.assign({}, look, it.look || {}); if (it.mod === 'story' || it.mod === 'broll') L.scheme = 'chalk'; return L; };
+  const WPS = 2.6; // words a second when talking, for sizing an avatar gap from its line
+  const fitWords = s => r2(cl(String(s || '').trim().split(/\s+/).filter(Boolean).length / WPS + 0.6, 1.2, 120));
+  const r2 = v => Math.round(v * 100) / 100;
+
+  // How long one item plays: a clip's own length (less anything trimmed off the start), plus any hold on its last frame
+  function natural(it, look) { const M = modOf(it.mod); if (!M || !it.cfg) return 3; let d = 3; try { d = M.duration(it.cfg, lookFor(it, look)); } catch (e) { } return d > 0 && isFinite(d) ? d : 3; }
+  function lenOf(it, look) { if (it.kind === 'avatar') return cl(+it.dur || 3, 0.3, 600); const d = natural(it, look), a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)); return Math.max(0.2, d - a + cl(+it.hold || 0, 0, 600)); }
+  function layout(cfg, look) { let t = 0; return (cfg.items || []).map((it, i) => { const d = lenOf(it, look), o = { it, i, t0: t, d }; t += d; return o; }); }
+  function at(cfg, look, t) { const L = layout(cfg, look); if (!L.length) return null; let o = L[0]; for (const x of L) { if (x.t0 <= t + 1e-9) o = x; else break; } return o; }
+  // Where in the clip itself this moment falls: trims and holds included
+  const inner = (o, t, look) => { const it = o.it, d = natural(it, look), a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)); return Math.min(d - 1e-4, a + Math.max(0, t - o.t0)); };
+
+  function defaults() {
+    const clip = k => { const M = raw(k); return M ? { id: nid('i'), kind: 'clip', mod: k, name: '', cfg: M.defaults(), inPt: 0, hold: 0 } : null; };
+    return { gap: 'black', items: [clip('broll'), { id: nid('i'), kind: 'avatar', text: 'Aye, ye heard that right. Wait till ye see the next bit.', dur: fitWords('Aye, ye heard that right. Wait till ye see the next bit.') }, clip('charts')].filter(Boolean) };
+  }
+  function duration(cfg, look) { const L = layout(cfg, look); const last = L[L.length - 1]; return last ? Math.max(0.5, last.t0 + last.d) : 1; }
+
+  function draw(ctx, t, cfg, look, W, H) {
+    const o = at(cfg, look, t);
+    if (!o) { ctx.fillStyle = '#0b1424'; ctx.fillRect(0, 0, W, H); if (look.preview) label(ctx, W, H, 'Add clips to your video', 'Use + Clip and + Avatar gap above the timeline', null); return; }
+    if (o.it.kind === 'avatar') return drawGap(ctx, o, t, cfg, look, W, H);
+    const M = modOf(o.it.mod); if (!M) return;
+    ctx.save(); try { M.draw(ctx, inner(o, t, look), o.it.cfg, lookFor(o.it, look), W, H); } finally { ctx.restore(); }
+  }
+  // The avatar gap: blank in the export, a labelled card in the preview so you can see where you come in and what you say
+  function drawGap(ctx, o, t, cfg, look, W, H) {
+    const g = cfg.gap || 'black';
+    if (look.transparent || g === 'clear') ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = g === 'green' ? '#00b140' : '#000000'; ctx.fillRect(0, 0, W, H); }
+    if (!look.preview) return;
+    label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
+  }
+  function label(ctx, W, H, big, small, left) {
+    const u = Math.min(W, H) / 1080; ctx.save(); ctx.fillStyle = 'rgba(160,58,106,0.18)'; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([18 * u, 14 * u]); ctx.lineWidth = 4 * u; ctx.strokeRect(30 * u, 30 * u, W - 60 * u, H - 60 * u); ctx.setLineDash([]);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff'; ctx.font = `800 ${Math.round(110 * u)}px Anton, Impact, sans-serif`; ctx.fillText(big, W / 2, H * 0.4);
+    if (small) { ctx.font = `500 ${Math.round(46 * u)}px Lora, Georgia, serif`; const words = String(small).split(/\s+/), lines = []; let cur = ''; words.forEach(w => { const tr = cur ? cur + ' ' + w : w; if (ctx.measureText(tr).width > W * 0.8 && cur) { lines.push(cur); cur = w; } else cur = tr; }); if (cur) lines.push(cur); lines.slice(0, 5).forEach((ln, i) => ctx.fillText(ln, W / 2, H * 0.55 + i * 58 * u)); }
+    if (left != null) { ctx.font = `600 ${Math.round(34 * u)}px system-ui, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText(left.toFixed(1) + ' s left, not in the export', W / 2, H * 0.86); }
+    ctx.restore();
+  }
+
+  // Exports: hand the clip's own video and motion blur hints through
+  function mediaFor(cfg) { const ids = new Set(); (cfg.items || []).forEach(it => { const M = it.kind === 'clip' && modOf(it.mod); if (M && M.mediaFor) (M.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }); return [...ids]; }
+  function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, o = at(cfg, lk, t); if (!o || o.it.kind !== 'clip') return []; const M = modOf(o.it.mod); return M && M.mediaAt ? M.mediaAt(o.it.cfg, inner(o, t, lk)) : []; }
+  function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip') return 1; const M = modOf(o.it.mod); return M && M.blurHint ? M.blurHint(o.it.cfg, lookFor(o.it, look), inner(o, t, look), fps, W, H) : null; }
+  const needsMap = cfg => (cfg.items || []).some(it => it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover'));
+
+  /* ---------- Timeline: one lane, the video in order. Drag a bar to move it in the running order, drag its end to hold the
+     last frame longer (or make an avatar gap longer or shorter) ---------- */
+  const byId = (cfg, id) => (cfg.items || []).find(x => 'I:' + x.id === id);
+  const nameOf = it => it.kind === 'avatar' ? '🎙 ' + (it.text ? it.text : 'Avatar') : (it.name || NAMES[it.mod] || it.mod);
+  const editor = { formIsScene: true,
+    tracks(cfg, look) { return [{ id: 'video', name: 'Video', colour: '#c9a640', items: layout(cfg, look).map(o => ({ id: 'I:' + o.it.id, start: o.t0, end: o.t0 + o.d, label: (o.i + 1) + '. ' + nameOf(o.it), colour: COLS[o.it.kind === 'avatar' ? 'avatar' : o.it.mod] || '#666', move: true, trim: 'end', minLen: 0.3, title: o.it.kind === 'avatar' ? 'Avatar gap: drag the end to fit your voiceover' : 'Drag to move it in the running order, drag the end to hold the last frame longer' })) }]; },
+    update(cfg, id, ch) {
+      const it = byId(cfg, id); if (!it) return; const look = hooks.look ? hooks.look() : { format: '16:9' }, L = layout(cfg, look), o = L.find(x => x.it === it); if (!o) return;
+      const len = ch.end - ch.start;
+      if (Math.abs(len - o.d) > 0.02) { if (it.kind === 'avatar') it.dur = r2(cl(len, 0.3, 600)); else { const d = natural(it, look), a = cl(+it.inPt || 0, 0, d), extra = len - (d - a); it.hold = r2(Math.max(0, extra)); if (extra < 0) it.inPt = r2(cl(a - extra, 0, d - 0.2)); } }
+      if (Math.abs(ch.start - o.t0) > 0.05) { const mid = ch.start + o.d / 2, others = L.filter(x => x.it !== it); let i = others.findIndex(x => mid < x.t0 + x.d / 2); if (i < 0) i = others.length; const arr = others.map(x => x.it); arr.splice(i, 0, it); cfg.items = arr; }
+    },
+    adds: [
+      { label: 'Clip', title: 'Add a clip after the one at the playhead: a copy of what is on that tab now, which you can then change', choices: () => Object.keys(NAMES).filter(k => raw(k)).map(k => ({ label: NAMES[k], key: k, icon: c => { const g = c.getContext('2d'); g.fillStyle = COLS[k]; g.fillRect(0, 0, c.width, c.height); } })),
+        fn(cfg, t, sel, ch) { if (!ch || !ch.key) return null; const src = hooks.tabCfg ? hooks.tabCfg(ch.key) : null, it = { id: nid('i'), kind: 'clip', mod: ch.key, name: '', cfg: src ? JSON.parse(JSON.stringify(src)) : raw(ch.key).defaults(), inPt: 0, hold: 0 }; insertAt(cfg, t, it); return 'I:' + it.id; } },
+      { label: 'Avatar gap', title: 'Leave a gap where the video cuts to you talking to camera', fn(cfg, t) { const it = { id: nid('i'), kind: 'avatar', text: '', dur: 3 }; insertAt(cfg, t, it); return 'I:' + it.id; } },
+    ],
+    remove(cfg, id) { cfg.items = (cfg.items || []).filter(x => 'I:' + x.id !== id); },
+    duplicate(cfg, id) { const it = byId(cfg, id); if (!it) return null; const c = JSON.parse(JSON.stringify(it)); c.id = nid('i'); const i = cfg.items.indexOf(it); cfg.items.splice(i + 1, 0, c); return 'I:' + c.id; },
+    inspect(root, cfg, id, changed, done) { const it = byId(cfg, id); if (!it) return; root.append(itemCard(cfg, it, changed, done)); },
+    scene(root, cfg, changed) { root.append(overview(cfg, changed)); },
+  };
+  function insertAt(cfg, t, it) { cfg.items = cfg.items || []; const look = hooks.look ? hooks.look() : { format: '16:9' }, o = at(cfg, look, t); const i = o ? o.i + 1 : cfg.items.length; cfg.items.splice(i, 0, it); }
+
+  /* ---------- Panels ---------- */
+  function itemCard(cfg, it, changed, done) {
+    const look = hooks.look ? hooks.look() : { format: '16:9' }, i = cfg.items.indexOf(it), move = d => { const j = i + d; if (j < 0 || j >= cfg.items.length) return; cfg.items.splice(i, 1); cfg.items.splice(j, 0, it); changed(); };
+    const f = [];
+    if (it.kind === 'avatar') {
+      f.push(field('What you say here (shows on the preview only)', area(it.text, v => { it.text = v; changed(false); }, 'Your line to camera', 3, 'Avatar line')));
+      f.push(field('Length in seconds', txt(String(it.dur), v => { const n = parseFloat(v); if (isFinite(n)) { it.dur = r2(cl(n, 0.3, 600)); changed(); } }, '3', 'Length in seconds'), 'Or drag the end of its bar on the timeline.'));
+      f.push(H('div', { className: 'btnrow' }, btn('Fit the length to the words', () => { it.dur = fitWords(it.text); changed(); })));
+    } else {
+      const d = natural(it, look);
+      f.push(field('Name on the timeline', txt(it.name || '', v => { it.name = v; changed(false); }, NAMES[it.mod], 'Clip name')));
+      f.push(H('p', { className: 'hint', textContent: NAMES[it.mod] + ' clip, ' + d.toFixed(1) + ' s long on its own.' }));
+      f.push(field('Start part way in (seconds cut off the start)', txt(String(it.inPt || 0), v => { const n = parseFloat(v); if (isFinite(n)) { it.inPt = r2(cl(n, 0, Math.max(0, d - 0.2))); changed(); } }, '0', 'Seconds cut from the start')));
+      f.push(field('Hold the last frame for (seconds)', txt(String(it.hold || 0), v => { const n = parseFloat(v); if (isFinite(n)) { it.hold = r2(cl(n, 0, 600)); changed(); } }, '0', 'Hold on the last frame'), 'Handy when your voiceover runs longer than the clip.'));
+      f.push(H('div', { className: 'btnrow' }, btn('Edit this clip in the ' + (NAMES[it.mod] || '') + ' tab', () => hooks.openItem && hooks.openItem(it.id), 'primary')));
+    }
+    f.push(H('div', { className: 'btnrow' }, btn('◀ Earlier', () => move(-1)), btn('Later ▶', () => move(1)), btn('Done', done)));
+    return card((i + 1) + '. ' + (it.kind === 'avatar' ? 'Avatar gap' : (it.name || NAMES[it.mod])), ...f);
+  }
+  function overview(cfg, changed) {
+    const look = hooks.look ? hooks.look() : { format: '16:9' }, L = layout(cfg, look), tot = L.length ? L[L.length - 1].t0 + L[L.length - 1].d : 0, m = Math.floor(tot / 60), s = Math.round(tot - m * 60);
+    const list = H('div', { className: 'vid-list' }, ...L.map(o => H('div', { className: 'vid-row' }, H('i', { style: 'background:' + (COLS[o.it.kind === 'avatar' ? 'avatar' : o.it.mod] || '#666') }),
+      H('span', { className: 'vid-name', textContent: (o.i + 1) + '. ' + nameOf(o.it) }), H('span', { className: 'vid-len', textContent: o.d.toFixed(1) + ' s' }),
+      o.it.kind === 'clip' ? btn('Edit', () => hooks.openItem && hooks.openItem(o.it.id)) : '', btn('Select', () => hooks.select && hooks.select('I:' + o.it.id)))));
+    return card('Your video, ' + (m ? m + ' min ' : '') + s + ' s',
+      H('p', { className: 'hint', textContent: 'Clips play in this order. Add them with + Clip and + Avatar gap above the timeline, drag bars to change the order, and press Edit to change a clip in its own tab.' }),
+      L.length ? list : H('p', { className: 'hint', textContent: 'Nothing in the video yet.' }),
+      field('Avatar gaps in the export', sel(cfg.gap || 'black', [['black', 'Black'], ['green', 'Green screen'], ['clear', 'See through (PNG sequence only)']], v => { cfg.gap = v; changed(); }, 'Avatar gap colour')));
+  }
+
+  return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, form: (root, cfg, changed) => root.append(overview(cfg, changed)) };
+})();
+
 /* Layers: text, shapes, stamps, images and props drawn over any clip, with keyframes, quick in and out animations and
    effects (fire, smoke, explosions, collapsing buildings, cash, sparkles). Every clip type is wrapped by Layers.wrap, so the
    preview, the export and the render workers all draw exactly the same thing. Everything is a pure function of time. */
@@ -4650,7 +4779,7 @@ const Layers = (() => {
     hooks.onAsset && hooks.onAsset(id);
   }
   const setAssets = map => Promise.all(Object.entries(map || {}).map(([id, url]) => setAsset(id, url)));
-  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); return out; };
+  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); ((cfg && cfg.items) || []).forEach(it => { if (it && it.cfg) Object.assign(out, assetsFor(it.cfg)); }); return out; };
   const hooks = {};
 
   // Easing between keyframes
@@ -5860,7 +5989,7 @@ const Editor = (() => {
 const Render = (() => {
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
   const mk = (w, h) => { if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
+  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll, typeof Video !== 'undefined' && Video].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
 
   // Draws frame i. 'smart' blur draws once, measures how much the picture moved since the last frame this renderer drew,
   // and only redraws with motion blur when the movement is fast enough to need it.
@@ -5906,18 +6035,18 @@ const Render = (() => {
           if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
           fps = m.fps; R = frameRenderer(mod, m.cfg, m.look, m.W, m.H, m.fps, m.blur, false, m.t0 || 0); R.mod = mod; R.cfg = m.cfg; R.look = m.look; R.t0 = m.t0 || 0;
           mod.duration(m.cfg, m.look);
-          self.postMessage({ type: 'ready', gpu: typeof GlobeGL !== 'undefined' && (m.modId === 'map' || m.modId === 'flights' || m.modId === 'flyover') ? GlobeGL.available : null });
+          self.postMessage({ type: 'ready', gpu: typeof GlobeGL !== 'undefined' && (m.modId === 'map' || m.modId === 'flights' || m.modId === 'flyover' || m.needsMap) ? GlobeGL.available : null });
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err) }); }
       } else if (m.type === 'pframe') {
         // Preview cache: a smaller frame, squeezed to a JPEG so a whole clip fits comfortably in memory
-        try { if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, m.t)); const s = m.scale, w = Math.max(2, Math.round(R.canvas.width * s)), h = Math.max(2, Math.round(R.canvas.height * s));
+        try { if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, m.t, R.look)); const s = m.scale, w = Math.max(2, Math.round(R.canvas.width * s)), h = Math.max(2, Math.round(R.canvas.height * s));
           if (!R.small || R.small.width !== w) { R.small = new OffscreenCanvas(w, h); R.sctx = R.small.getContext('2d', { alpha: false }); }
           const c = R.sctx, W = R.canvas.width, H = R.canvas.height; c.setTransform(s, 0, 0, s, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, W, H); R.mod.draw(c, m.t, R.cfg, R.look, W, H);
           const blob = await R.small.convertToBlob({ type: 'image/jpeg', quality: 0.86 }); self.postMessage({ type: 'pframe', i: m.i, blob });
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err), i: m.i }); }
       } else if (m.type === 'frame') {
         try {
-          if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, R.t0 + m.i / fps));
+          if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, R.t0 + m.i / fps, R.look));
           const t0 = performance.now(), n = R.render(m.i), vf = new VideoFrame(R.canvas, { timestamp: Math.round(m.i * 1e6 / fps), duration: Math.round(1e6 / fps) });
           self.postMessage({ type: 'frame', i: m.i, frame: vf, n, ms: performance.now() - t0 }, [vf]);
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err), i: m.i }); }
@@ -5951,7 +6080,7 @@ const Render = (() => {
     const workers = [];
     try {
       for (let k = 0; k < n; k++) workers.push(new Worker(url));
-      const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover';
+      const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover' || !!(mod.needsMap && mod.needsMap(cfg));
       await Promise.all(workers.map(w => new Promise((res, rej) => {
         const to = setTimeout(() => rej(new Error('Worker start timed out')), 45000);
         w.onmessage = e => { if (e.data.type === 'ready') { clearTimeout(to); workers.gpu = e.data.gpu; res(); } else if (e.data.type === 'error') { clearTimeout(to); rej(new Error(e.data.msg)); } };
@@ -5974,7 +6103,7 @@ const Render = (() => {
       const R = frameRenderer(mod, cfg, look, W, H, fps, blur, false, t0); let drawMs = 0;
       for (let i = 0; i < n; i++) {
         if (signal && signal.aborted) throw new Error('Export cancelled.');
-        if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps));
+        if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, look));
         const tA = performance.now(); R.render(i); drawMs += performance.now() - tA; if (i === n - 1) onInfo && onInfo({ drawMs: drawMs / n }); const vf = new VideoFrame(R.canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
         await onFrame(vf, i); if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
@@ -6026,9 +6155,9 @@ const Render = (() => {
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
-  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll' };
+  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video' };
   const KEY = 'patter-studio-v1';
   const $ = id => document.getElementById(id);
   const uid = () => 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -6132,7 +6261,7 @@ const Render = (() => {
   function layoutPanels() {
     const ex = mod().editor, e = !!ex && !ex.formIsScene, btn = $('manualBtn'); btn.hidden = !e;
     const show = !ex || (e && !!state.manual); $('modForm').hidden = !show; btn.textContent = state.manual ? 'Hide manual inputs' : 'Show manual inputs'; btn.setAttribute('aria-expanded', String(!!state.manual));
-    $('resetMod').hidden = false;
+    $('resetMod').hidden = false; $('resetMod').textContent = state.module === 'video' ? 'Start the video again from the example' : 'Reset this clip to the example';
   }
   $('manualBtn').addEventListener('click', () => { state.manual = !state.manual; if (state.manual) buildForm(); layoutPanels(); save(); });
   // Undo history, per clip type
@@ -6141,11 +6270,19 @@ const Render = (() => {
   function restore(snap) { state.cfg[state.module] = JSON.parse(snap); lastSnap = snap; save(); refreshAll(); }
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); }
+  function refreshAll() { buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); }); const chalkOnly = state.module === 'story' || state.module === 'broll'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
-  function switchTab(m) { state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
+  function switchTab(m) { if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
+  /* ---------- Editing a clip from the Video tab: it is opened in its own tab (that tab's usual clip is put aside), and goes
+     back into the video when you return to the Video tab ---------- */
+  const vItem = id => ((state.cfg.video && state.cfg.video.items) || []).find(x => x.id === id);
+  function openItem(id) { const it = vItem(id); if (!it || !MODULES[it.mod]) return; if (state.edit) finishEdit(); state.stash = state.stash || {}; state.stash[it.mod] = state.cfg[it.mod] || null; state.cfg[it.mod] = it.cfg = Object.assign(MODULES[it.mod].defaults(), it.cfg || {}); state.edit = { id, mod: it.mod }; switchTab(it.mod); say('Editing this clip from your video. Press Back to the video when you are done.'); }
+  function finishEdit() { const e = state.edit; if (!e) return; const it = vItem(e.id); if (it && state.cfg[e.mod]) it.cfg = state.cfg[e.mod]; state.cfg[e.mod] = (state.stash && state.stash[e.mod]) || MODULES[e.mod].defaults(); if (state.stash) delete state.stash[e.mod]; state.edit = null; save(); }
+  function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = state.cfg.video.items.indexOf(it) + 1;
+    el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
+  if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
   drawTabs(); syncLook(); buildForm(); commit();
   $('resetMod').addEventListener('click', () => { commit(); state.cfg[state.module] = mod().defaults(); commit(); refreshAll(); save(); begin(); });
 
@@ -6283,7 +6420,7 @@ const Render = (() => {
   const thumbEl = src => src ? H('img', { src, alt: '', className: 'thumb' }) : H('div', { className: 'thumb none' });
   function confirmBtn(label, fn) { let armed = false; const b = H('button', { type: 'button', textContent: label, on: { click: () => { if (!armed) { armed = true; b.textContent = 'Sure?'; b.classList.add('warn'); setTimeout(() => { armed = false; b.textContent = label; b.classList.remove('warn'); }, 2500); return; } fn(); } } }); return b; }
   // Drop pictures no clip uses any more (from deleted image layers), so projects don't keep growing
-  function pruneAssets(st) { const used = new Set(); Object.values(st.cfg || {}).forEach(c => ((c && c.layers) || []).forEach(L => { if (L.asset) used.add(L.asset); })); Object.keys(st.assets || {}).forEach(id => { if (!used.has(id)) delete st.assets[id]; }); return st; }
+  function pruneAssets(st) { const used = new Set(), walk = c => { ((c && c.layers) || []).forEach(L => { if (L.asset) used.add(L.asset); }); ((c && c.items) || []).forEach(it => it && walk(it.cfg)); }; Object.values(st.cfg || {}).forEach(walk); Object.values(st.stash || {}).forEach(walk); Object.keys(st.assets || {}).forEach(id => { if (!used.has(id)) delete st.assets[id]; }); return st; }
   function applyState(s, msg) {
     state = pruneAssets(adopt(s)); if (!MODULES[state.module]) state.module = state.module === 'board' ? 'story' : 'charts'; fillDefaults(); Layers.setAssets(state.assets);
     drawTabs(); syncLook(); layoutPreview(); updateExportLabel(); hist = []; fut = []; lastSnap = null; commit(); if (ed) { ed.select(null); ed.resetZoom(); } player.setLoop(null); syncLoopBtn(); pq.value = state.pq || 'normal'; player.setMode(pq.value);

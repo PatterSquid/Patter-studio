@@ -26,7 +26,7 @@ const Layers = (() => {
     hooks.onAsset && hooks.onAsset(id);
   }
   const setAssets = map => Promise.all(Object.entries(map || {}).map(([id, url]) => setAsset(id, url)));
-  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); return out; };
+  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); ((cfg && cfg.items) || []).forEach(it => { if (it && it.cfg) Object.assign(out, assetsFor(it.cfg)); }); return out; };
   const hooks = {};
 
   // Easing between keyframes

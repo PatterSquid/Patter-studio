@@ -9,6 +9,7 @@
 <header>
   <div class="brand"><b>PATTER</b> STUDIO</div>
   <nav id="tabs" aria-label="Clip types">
+    <button data-mod="video">Video</button>
     <button data-mod="charts">Charts</button>
     <button data-mod="timeline">Timeline</button>
     <button data-mod="map">World map</button>
@@ -42,6 +43,7 @@
       <label class="check"><input type="checkbox" id="texture"> Halftone texture on the background</label>
       <label class="check"><input type="checkbox" id="transparent"> Transparent background (exports a PNG sequence)</label>
     </section>
+    <div id="editBanner" class="edit-banner" hidden></div>
     <div id="inspector" style="display:flex;flex-direction:column;gap:12px"></div>
     <button id="manualBtn" type="button" aria-expanded="false">Show manual inputs</button>
     <div id="modForm" style="display:flex;flex-direction:column;gap:12px"></div>

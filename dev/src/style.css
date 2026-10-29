@@ -213,3 +213,13 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
 .pack-row { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(0,0,0,0.18); }
 .pack-row .lib-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pack-row > button { flex: none; width: auto; }
+
+/* Shown while a clip from the Video tab is being edited in its own tab */
+.edit-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border-radius: 10px; background: #3a1f33; border: 1px solid #a03a6a; color: #fff; }
+.edit-banner[hidden] { display: none; }
+.vid-list { display: flex; flex-direction: column; gap: 6px; }
+.vid-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,0.2); }
+.vid-row i { width: 10px; height: 26px; border-radius: 3px; flex: none; }
+.vid-row .vid-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vid-row .vid-len { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.vid-row button { flex: none; padding: 4px 10px; }

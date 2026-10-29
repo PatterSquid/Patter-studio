@@ -36,6 +36,18 @@ git add -A && git commit && git push origin main
   the original session; adjust paths before running.
 * Headless Chromium cannot encode H.264, so check exports with PNG sequences or by drawing frames directly.
 
+## The Video tab (dev/src/video.js)
+
+The Video tab strings clips from the other tabs into one running order with avatar gaps (where the video cuts to the
+user's avatar talking to camera; he uses full cuts). `cfg.items` is a list of `{ kind: 'clip', mod, cfg, name, inPt, hold }`
+and `{ kind: 'avatar', text, dur }`. Each clip keeps a full config for its tab. Pressing Edit opens the clip in its own tab
+(the tab's own clip is put aside in `state.stash`) and Back to the video writes it back (`state.edit`). Gaps export black,
+green or see through, and show a labelled card only in the preview.
+
+When he sends a script, build it as a Video tab project: one clip per beat (Story scenes for sketches, charts, maps,
+newspapers where they fit), an avatar gap for every line marked [ME], new drawings as a pack. Hand it over as a
+.patter.json project file plus an MP4 preview.
+
 ## Packs (data only, no code)
 
 A pack is a JSON file in `packs/`: `{ format: 1, id, name, version, description, places, props, hats, actions, setpieces }`.

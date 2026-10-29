@@ -3,7 +3,7 @@
 const Render = (() => {
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
   const mk = (w, h) => { if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
+  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll, typeof Video !== 'undefined' && Video].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
 
   // Draws frame i. 'smart' blur draws once, measures how much the picture moved since the last frame this renderer drew,
   // and only redraws with motion blur when the movement is fast enough to need it.
@@ -49,18 +49,18 @@ const Render = (() => {
           if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
           fps = m.fps; R = frameRenderer(mod, m.cfg, m.look, m.W, m.H, m.fps, m.blur, false, m.t0 || 0); R.mod = mod; R.cfg = m.cfg; R.look = m.look; R.t0 = m.t0 || 0;
           mod.duration(m.cfg, m.look);
-          self.postMessage({ type: 'ready', gpu: typeof GlobeGL !== 'undefined' && (m.modId === 'map' || m.modId === 'flights' || m.modId === 'flyover') ? GlobeGL.available : null });
+          self.postMessage({ type: 'ready', gpu: typeof GlobeGL !== 'undefined' && (m.modId === 'map' || m.modId === 'flights' || m.modId === 'flyover' || m.needsMap) ? GlobeGL.available : null });
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err) }); }
       } else if (m.type === 'pframe') {
         // Preview cache: a smaller frame, squeezed to a JPEG so a whole clip fits comfortably in memory
-        try { if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, m.t)); const s = m.scale, w = Math.max(2, Math.round(R.canvas.width * s)), h = Math.max(2, Math.round(R.canvas.height * s));
+        try { if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, m.t, R.look)); const s = m.scale, w = Math.max(2, Math.round(R.canvas.width * s)), h = Math.max(2, Math.round(R.canvas.height * s));
           if (!R.small || R.small.width !== w) { R.small = new OffscreenCanvas(w, h); R.sctx = R.small.getContext('2d', { alpha: false }); }
           const c = R.sctx, W = R.canvas.width, H = R.canvas.height; c.setTransform(s, 0, 0, s, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, W, H); R.mod.draw(c, m.t, R.cfg, R.look, W, H);
           const blob = await R.small.convertToBlob({ type: 'image/jpeg', quality: 0.86 }); self.postMessage({ type: 'pframe', i: m.i, blob });
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err), i: m.i }); }
       } else if (m.type === 'frame') {
         try {
-          if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, R.t0 + m.i / fps));
+          if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, R.t0 + m.i / fps, R.look));
           const t0 = performance.now(), n = R.render(m.i), vf = new VideoFrame(R.canvas, { timestamp: Math.round(m.i * 1e6 / fps), duration: Math.round(1e6 / fps) });
           self.postMessage({ type: 'frame', i: m.i, frame: vf, n, ms: performance.now() - t0 }, [vf]);
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err), i: m.i }); }
@@ -94,7 +94,7 @@ const Render = (() => {
     const workers = [];
     try {
       for (let k = 0; k < n; k++) workers.push(new Worker(url));
-      const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover';
+      const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover' || !!(mod.needsMap && mod.needsMap(cfg));
       await Promise.all(workers.map(w => new Promise((res, rej) => {
         const to = setTimeout(() => rej(new Error('Worker start timed out')), 45000);
         w.onmessage = e => { if (e.data.type === 'ready') { clearTimeout(to); workers.gpu = e.data.gpu; res(); } else if (e.data.type === 'error') { clearTimeout(to); rej(new Error(e.data.msg)); } };
@@ -117,7 +117,7 @@ const Render = (() => {
       const R = frameRenderer(mod, cfg, look, W, H, fps, blur, false, t0); let drawMs = 0;
       for (let i = 0; i < n; i++) {
         if (signal && signal.aborted) throw new Error('Export cancelled.');
-        if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps));
+        if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, look));
         const tA = performance.now(); R.render(i); drawMs += performance.now() - tA; if (i === n - 1) onInfo && onInfo({ drawMs: drawMs / n }); const vf = new VideoFrame(R.canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
         await onFrame(vf, i); if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       }
