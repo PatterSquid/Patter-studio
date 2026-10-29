@@ -106,7 +106,26 @@ const Studio = (() => {
     const sm2 = new Float32Array(W); for (let x = 0; x < W; x++) { let m = 1e9; for (let k = -3; k <= 3; k++) { const v = line[Math.min(W - 1, Math.max(0, x + k))]; if (v < m) m = v; } sm2[x] = m - 4; }
     const out = mk(W / 2, Hh / 2), og = out.getContext('2d'), id = og.createImageData(out.width, out.height), o = id.data, f = 14;
     for (let y = 0; y < out.height; y++) for (let x = 0; x < out.width; x++) { const sy = y * 2, edge = sm2[Math.min(W - 1, x * 2)], a = cl((edge - sy) / f, 0, 1); o[(y * out.width + x) * 4 + 3] = Math.round(255 * a * a * (3 - 2 * a)); }
-    og.putImageData(id, 0, 0); return out;
+    og.putImageData(id, 0, 0); out.line = sm2; return out;
+  }
+  /* Snow lying outside: caps along every rooftop on the skyline, a dusting on ledges (where it is lighter just above a dark
+     line), and the ground and low roofs marked in the room covered over, thinner on paths and roads. Worked out once. */
+  function snowCover(bmp, R, G, ground) {
+    if (R.snowCv) return R.snowCv; const W = Math.round(R.w), Hh = Math.round(R.h), c = mk(W, Hh), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, R.x0, R.y0, R.w, R.h, 0, 0, W, Hh);
+    const d = g.getImageData(0, 0, W, Hh).data, lum = new Float32Array(W * Hh), warm = new Uint8Array(W * Hh);
+    for (let i = 0; i < W * Hh; i++) { const r = d[i * 4], gg = d[i * 4 + 1], b = d[i * 4 + 2]; lum[i] = r * 0.3 + gg * 0.59 + b * 0.11; warm[i] = r > 130 && r > b + 25 ? 1 : 0; }
+    const line = R.sky && R.sky.line, sn = new Float32Array(W * Hh), rr = rng(4242);
+    if (line) for (let x = 0; x < W; x++) { const t = Math.round(line[x] + 5); for (let k = 0; k < 4; k++) { const y = t + k; if (y >= 0 && y < Hh) sn[y * W + x] = Math.max(sn[y * W + x], 1 - k * 0.17); } }
+    for (let y = 2; y < Hh - 2; y++) { const skyY = y; for (let x = 1; x < W - 1; x++) { if (line && skyY <= line[x] + 8) continue; const i = y * W + x, gy = lum[i + W] - lum[i - W], gx = lum[i + 1] - lum[i - 1]; if (gy < -14 && Math.abs(gx) < 10) sn[i] = Math.max(sn[i], 0.65 + rr() * 0.2); } }
+    // The marked ground
+    // The marked ground, with soft edges: grass takes the most, dark things (trees, posts, fences) poke through, paths and the
+    // road stay slushy
+    if (ground && ground.length) { const gc = mk(W, Hh), gg2 = gc.getContext('2d', { willReadFrequently: true }); gg2.filter = 'blur(5px)'; gg2.fillStyle = '#fff'; ground.forEach(poly => { pathOf(gg2, poly.map(p => [p[0] - R.x0, p[1] - R.y0])); gg2.fill(); }); const gd = gg2.getImageData(0, 0, W, Hh).data;
+      for (let i = 0; i < W * Hh; i++) { const m = gd[i * 4 + 3] / 255; if (m <= 0.01) continue; const L0 = lum[i], k = L0 < 16 ? 0.25 : L0 < 24 ? lerp(0.25, 0.8, (L0 - 16) / 8) : L0 < 42 ? 0.8 : L0 < 60 ? lerp(0.8, 0.4, (L0 - 42) / 18) : 0.35; sn[i] = Math.max(sn[i], k * (0.8 + rr() * 0.2) * m); } }
+    const out = c.getContext('2d').createImageData(W, Hh), o = out.data;
+    // The snow keeps a little of the light and shade of what it lies on
+    for (let i = 0; i < W * Hh; i++) { if (warm[i]) continue; const a = sn[i]; if (a <= 0) continue; const sh = cl(0.78 + lum[i] / 260, 0.78, 1); o[i * 4] = 214 * sh; o[i * 4 + 1] = 222 * sh; o[i * 4 + 2] = 240 * sh; o[i * 4 + 3] = Math.round(255 * Math.min(1, a)); }
+    g.putImageData(out, 0, 0); return (R.snowCv = c);
   }
   // Soft cloud shapes that tile side to side, made once
   function cloudTex(seed, dark) { const k = 'cl' + seed + dark; if (SPR[k]) return SPR[k]; const W = 512, Hh = 192, c = mk(W, Hh), g = c.getContext('2d'), id = g.createImageData(W, Hh), d = id.data, r = rng(seed);
@@ -185,6 +204,7 @@ const Studio = (() => {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v); if (!R) return; const amt = cl(+cfg.rain, 0, 2);
     ctx.save(); pathOf(ctx, Q); ctx.clip();
     if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
+    if (w.snow) { const sc = snowCover(roomBmp(cfg), R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (cfg.outside !== false) outside(ctx, cfg, M, v, t, L, fl);
     if (fl.e > 0.01) sky(ctx, Q, R, fl, v);
     if (w.distant * amt > 0) distantRain(ctx, R, tl, L, w.distant * amt, v);
@@ -192,6 +212,10 @@ const Studio = (() => {
     if ((w.beads || w.snow) && amt > 0) { ctx.save(); ctx.globalAlpha = cl(0.22 * w.fog * (0.5 + amt * 0.5), 0, 0.5); ctx.drawImage(R.mist, R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (w.fog) { const g = ctx.createLinearGradient(0, R.y0 + R.h * 0.55, 0, R.y0 + R.h); g.addColorStop(0, 'rgba(150,165,200,0)'); g.addColorStop(1, `rgba(150,165,200,${0.07 * w.fog})`); ctx.fillStyle = g; ctx.fillRect(R.x0, R.y0, R.w, R.h); }
     if ((w.beads || w.runners) && amt > 0) glass(ctx, Q, R, tl, L, w, amt, v);
+    // Snow piled up on the ledge outside, along the bottom of the glass
+    if (w.snow) { const S = v.iw / 1672, rs = rng(808), pts = [], n = 40; for (let i = 0; i <= n; i++) { const a = i / n, p = onGlass(Q, a, 1), hgt = (5 + 3 * Math.sin(a * 9 + 1) + 2 * Math.sin(a * 23) + rs() * 1.5 + (a < 0.04 || a > 0.96 ? 4 : 0)) * S * Math.max(0.6, amt); pts.push([p[0], p[1] - hgt]); }
+      const b0 = onGlass(Q, 1, 1), b1 = onGlass(Q, 0, 1); ctx.save(); ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.lineTo(b0[0], b0[1] + 4); ctx.lineTo(b1[0], b1[1] + 4); ctx.closePath();
+      const gr = ctx.createLinearGradient(0, b1[1] - 12 * S, 0, b1[1]); gr.addColorStop(0, 'rgba(225,232,248,0.95)'); gr.addColorStop(1, 'rgba(150,160,190,0.95)'); ctx.fillStyle = gr; ctx.fill(); ctx.restore(); }
     ctx.restore();
     // Things on the sill (a plant, a mug) stay in front of the glass
     const bmp = roomBmp(cfg);
