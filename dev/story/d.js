@@ -41,7 +41,10 @@
     if (k && k[0] === '@' && sim && sim[k.slice(1)]) { const o = sim[k.slice(1)], side = me && me.x < o.x ? -1 : 1; return { x: o.x + side * 0.42 * S }; }
     if (SPOTS[k] != null && !(set.marks[k])) return { x: SPOTS[k] }; return set.marks[k] || set.marks.middle || { x: 960 };
   }
-  function simScene(sc, P, t) {
+  function simScene(sc, P, t, noRef) {
+    // Where everyone was at an earlier moment: walking up to someone, or swinging at them, aims for where that person
+    // actually is when the move starts, even if they are listed after the mover or have walked since the scene began
+    const refs = {}, refAt = ts => noRef ? null : (refs[ts] || (refs[ts] = simScene(sc, P, ts, true)));
     const set = P.set, out = {}, water = set.water, inW = x => !!water && x > water.x0 + 30 && x < water.x1 - 30;
     sc.people.forEach(pe => { const sp = spotOf(set, pe.start), x = sp.x; out[pe.pid] = { x, dir: pe.start === 'off right' ? -1 : pe.start === 'off left' ? 1 : (x < 960 ? 1 : -1), sit: !!sp.sit, lowSit: !!sp.low, behind: !!sp.behind, wet: !!sp.water, sleep: false, lying: false, kneel: false, mood: 'ok', active: null, props: pe.holding ? [pe.holding] : [] }; if (inW(x)) out[pe.pid].wet = true; const inj = pe.injury || ''; out[pe.pid].blackEye = inj === 'blackeye'; out[pe.pid].bandage = inj === 'bandage'; out[pe.pid].plaster = inj === 'plaster'; });
     // Props change hands at fixed moments
@@ -56,7 +59,7 @@
         if (!done) st.active = { a, p: cl(p, 0, 1), e: t - a.start, from: { x: st.x, dir: st.dir, wet: st.wet, lying: st.lying } };
         // Hugs, punches and hand-overs walk up to the other person first if they are standing apart
         if (a.k === 'shoot' && a.to && out[a.to] && out[a.to] !== st) { if (!done) { st.dir = out[a.to].x >= st.x ? 1 : -1; st.active.tx = out[a.to].x; st.active.miss = a.how === 'miss'; } }
-        else if (AIMED.includes(a.k) && a.to && out[a.to] && out[a.to] !== st && !st.wet && !st.sit && !st.lying) { const tq = out[a.to], tx = tq.x + (tq.lying && tq.lieSide ? tq.lieSide * 0.5 * S : a.k === 'stomp' && !tq.lying ? (tq.x >= st.x ? 1 : -1) * 0.5 * S : 0), sd = tx >= st.x ? 1 : -1, gap = ({ hug: 0.3, brawl: 0.3, stomp: 0.32, chuck: 0.3, spit: 0.7, swing: 0.6 }[a.k] || 0.42) * S, stand = tx - sd * gap, far = Math.abs(tx - st.x) > gap + 40 && tx > -100 && tx < WW + 100, fixed = !!HIT[a.k];
+        else if (AIMED.includes(a.k) && a.to && out[a.to] && out[a.to] !== st && !st.wet && !st.sit && !st.lying) { const r0 = refAt(Math.max(0, a.start - 0.001)), tq = (r0 && r0[a.to]) || out[a.to], tx = tq.x + (tq.lying && tq.lieSide ? tq.lieSide * 0.5 * S : a.k === 'stomp' && !tq.lying ? (tq.x >= st.x ? 1 : -1) * 0.5 * S : 0), sd = tx >= st.x ? 1 : -1, gap = ({ hug: 0.3, brawl: 0.3, stomp: 0.32, chuck: 0.3, spit: 0.7, swing: 0.6 }[a.k] || 0.42) * S, stand = tx - sd * gap, far = Math.abs(tx - st.x) > gap + 40 && tx > -100 && tx < WW + 100, fixed = !!HIT[a.k];
           if (far || fixed) { const ap = fixed ? 0.3 : cl(Math.abs(stand - st.x) / 430 / a.dur, 0.1, 0.45); if (!done) { st.walkFrom = st.x; st.walkTo = far ? stand : st.x; st.active.ap = ap; st.active.p = cl((p - ap) / (1 - ap), 0, 1); st.active.walking = p < ap && far ? p / ap : null; } else { if (far) st.x = stand; st.dir = sd; } } }
         // Walking up to a screen to bang it, kick it, lean on it or climb on it
         if (SCRACT[a.k] && SCRACT[a.k].go && !st.wet && !st.lying) { const sp = scrStand(sc, a, st.x); if (sp) { const far = Math.abs(sp.x - st.x) > 30; if (!done) { if (st.perch) st.perch = null; st.walkFrom = st.x; st.walkTo = far ? sp.x : st.x; st.active.ap = 0.3; st.active.p = cl((p - 0.3) / 0.7, 0, 1); st.active.walking = p < 0.3 && far ? p / 0.3 : null; st.sit = false; } else { st.x = sp.x; st.dir = sp.x < sp.E.r.cx ? 1 : -1; } } }
@@ -65,7 +68,7 @@
         if (a.synthetic && out[a.by]) { const hx = out[a.by].x; st.hitAway = a.away || (st.x >= hx ? 1 : -1); if (!done) st.dir = -st.hitAway; }
         if (MOVES.includes(a.k) || a.k === 'dive' || a.k === 'cannonball' || a.k === 'climbout') {
           let sp; if (a.k === 'dive' || a.k === 'cannonball') sp = { x: water ? cl(st.x < (water.x0 + water.x1) / 2 ? water.x0 + 170 : water.x1 - 170, water.x0 + 60, water.x1 - 60) : st.x + st.dir * 300, water: !!water };
-          else if (a.k === 'climbout') sp = { x: water ? (st.x < (water.x0 + water.x1) / 2 ? water.x0 - 110 : water.x1 + 110) : st.x }; else sp = spotOf(set, a.to, out, st);
+          else if (a.k === 'climbout') sp = { x: water ? (st.x < (water.x0 + water.x1) / 2 ? water.x0 - 110 : water.x1 + 110) : st.x }; else sp = spotOf(set, a.to, (String(a.to || '')[0] === '@' && refAt(a.start)) || out, st);
           if (a.k === 'swim' && water) sp = { x: cl(sp.x, water.x0 + 60, water.x1 - 60), water: true };
           if (done) { st.dir = sp.x >= st.x ? 1 : -1; if (Math.abs(sp.x - st.x) < 1) st.dir = st.active ? st.dir : st.dir; st.x = sp.x; st.sit = !!sp.sit && !['charge', 'swim'].includes(a.k); st.lowSit = !!sp.low; st.behind = !!sp.behind; st.sleep = false; st.lying = false; st.kneel = false; st.wet = a.k === 'climbout' ? false : !!sp.water || (a.k === 'swim' && st.wet) || inW(st.x); }
           else { st.walkFrom = st.x; st.walkTo = sp.x; st.sitAt = !!sp.sit; st.toWater = !!sp.water; } }

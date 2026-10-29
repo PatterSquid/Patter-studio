@@ -5,6 +5,12 @@
       "name": "Bank robbery",
       "version": 1,
       "file": "bank_robbery.json"
+    },
+    {
+      "id": "neds",
+      "name": "Neds and a goth",
+      "version": 1,
+      "file": "neds.json"
     }
   ]
 }

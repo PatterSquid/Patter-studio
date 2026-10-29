@@ -1,0 +1,4 @@
+async()=>{ const data=await (await fetch('/tmp_pack.json')).json(); Story.packs.install(data); const cfg=Story.defaults(); cfg.scenes=[]; cfg.cast=[]; cfg.layers=[]; Story.packs.addSetPiece(cfg,'buckie_ambush',0);
+ const M=Layers.wrap(Story), look={scheme:'chalk',format:'16:9'}; const d=M.duration(cfg,look); const N=18; const C=document.createElement('canvas'); C.width=6*400; C.height=3*225; const G=C.getContext('2d'); const errs=[];
+ for(let i=0;i<N;i++){ const t=0.6+i*(d-0.7)/(N-1); const c=document.createElement('canvas'); c.width=400; c.height=225; const g=c.getContext('2d'); g.scale(400/1920,400/1920); try{M.draw(g,t,cfg,look,1920,1080);}catch(e){errs.push(e.message)} G.drawImage(c,(i%6)*400,Math.floor(i/6)*225); G.fillStyle='#ff0'; G.font='13px sans-serif'; G.fillText(t.toFixed(1),(i%6)*400+3,Math.floor(i/6)*225+13); }
+ window.__nedcfg=cfg; return {d, errs, imgs:[C.toDataURL('image/jpeg',0.85)], cfg:JSON.stringify(cfg)}; }

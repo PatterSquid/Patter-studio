@@ -1,3 +1,11 @@
 {
-  "projects": []
+  "projects": [
+    {
+      "id": "buckie-ambush",
+      "name": "Buckie ambush",
+      "note": "Two neds, a goth and a bottle of Buckie",
+      "rev": "d315c82d39cc",
+      "file": "buckie-ambush.patter.json"
+    }
+  ]
 }
