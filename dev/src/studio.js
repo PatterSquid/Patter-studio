@@ -204,6 +204,16 @@ const Studio = (() => {
 
   /* The window: the world outside first (lights in the flats, street lamps, cars, lightning, rain or snow falling), then the
      water on the glass in front of it, then anything standing in front of the glass is put back on top */
+  // Something on the sill in front of the glass, cut out of the room picture once with a soft edge, so it sits cleanly over
+  // the rain or snow without a hard box round it
+  const frontCache = new Map();
+  function frontPiece(v, f) {
+    if (!f.p || f.p.length < 3) return null; const B = v.B, key = JSON.stringify(f.p) + ':' + B.k + ':' + B.c.width; let F = frontCache.get(key); if (F) return F;
+    const pts = f.p.map(m => P(m, v)), x0 = Math.max(0, Math.min(...pts.map(p => p[0])) - 3), y0 = Math.max(0, Math.min(...pts.map(p => p[1])) - 3), x1 = Math.min(v.iw, Math.max(...pts.map(p => p[0])) + 3), y1 = Math.min(v.ih, Math.max(...pts.map(p => p[1])) + 3); if (x1 <= x0 || y1 <= y0) return null;
+    const k = B.k, c = mk((x1 - x0) * k, (y1 - y0) * k), g = c.getContext('2d'); g.drawImage(B.c, x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k, 0, 0, c.width, c.height);
+    const m = mk(c.width, c.height), mg = m.getContext('2d'); mg.filter = 'blur(' + (1.1 * k).toFixed(2) + 'px)'; mg.fillStyle = '#fff'; pathOf(mg, pts.map(p => [(p[0] - x0) * k, (p[1] - y0) * k])); mg.fill();
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0); F = { c, x0, y0, w: x1 - x0, h: y1 - y0 }; if (frontCache.size > 20) frontCache.clear(); frontCache.set(key, F); return F;
+  }
   function drawWindow(ctx, cfg, M, v, t, tl, L, w, fl) {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v); if (!R) return; const amt = cl(+cfg.rain, 0, 2);
     ctx.save(); pathOf(ctx, Q); ctx.clip();
@@ -225,7 +235,7 @@ const Studio = (() => {
     ctx.restore();
     // Things on the sill (a plant, a mug) stay in front of the glass
     const bmp = roomBmp(cfg);
-    (M.front || []).forEach(f => { if (!f.p || f.p.length < 3) return; const pts = f.p.map(m => P(m, v)), x0 = Math.max(0, Math.min(...pts.map(p => p[0])) - 2), y0 = Math.max(0, Math.min(...pts.map(p => p[1])) - 2), x1 = Math.min(v.iw, Math.max(...pts.map(p => p[0])) + 2), y1 = Math.min(v.ih, Math.max(...pts.map(p => p[1])) + 2); if (x1 <= x0 || y1 <= y0) return; ctx.save(); pathOf(ctx, pts); ctx.clip(); roomPart(ctx, v.B, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.restore(); });
+    (M.front || []).forEach(f => { const F = frontPiece(v, f); if (F) ctx.drawImage(F.c, F.x0, F.y0, F.w, F.h); });
   }
   function outside(ctx, cfg, M, v, t, L, fl) {
     // Flats: a few lights go off for a while and come back, the odd telly flickers blue
@@ -315,7 +325,10 @@ const Studio = (() => {
   function drawPlants(ctx, B, M, v, t, L) {
     (M.plants || []).forEach((m, i) => { const x0 = m[0] * v.iw, y0 = m[1] * v.ih, x1 = m[2] * v.iw, y1 = m[3] * v.ih, top = m[4] !== 'bottom', h = y1 - y0, step = 3, amp = (top ? 2.2 : 1.6) * v.iw / 1672;
       const sw = wob(t, L, 500 + i, [2, 3, 5]); if (h < 4 || x1 - x0 < 4) return;
-      for (let y = y0; y < y1; y += step) { const f = top ? (y - y0) / h : (y1 - y) / h, dx = sw * amp * Math.pow(f, 1.4); if (Math.abs(dx) < 0.05) continue; roomPart(ctx, B, x0, y, x1 - x0, step, x0 + dx, y, x1 - x0, step); } });
+      // A plant in front of the window is left still: moving it would wipe the rain or snow off the glass behind it
+      if (M.glass) { const G = M.glass.map(q => P(q, v)), gx0 = Math.min(...G.map(p => p[0])), gx1 = Math.max(...G.map(p => p[0])), gy0 = Math.min(...G.map(p => p[1])), gy1 = Math.max(...G.map(p => p[1])); if (x1 > gx0 && x0 < gx1 && y1 > gy0 && y0 < gy1) return; }
+      // Every strip is drawn every frame (even when it has barely moved) so nothing switches on and off
+      for (let y = y0; y < y1; y += step) { const f = top ? (y - y0) / h : (y1 - y) / h, dx = sw * amp * Math.pow(f, 1.4); roomPart(ctx, B, x0, y, x1 - x0, step, x0 + dx, y, x1 - x0, step); } });
   }
 
   /* The room's light: lamps glow and flicker, lightning floods in through the window (and throws its shape across the
