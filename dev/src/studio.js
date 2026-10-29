@@ -30,7 +30,7 @@ const Studio = (() => {
   const STINGS = [['thunder', 'Thunder and lightning'], ['lightning', 'Lightning flash'], ['flicker', 'Lights flicker'], ['lightsoff', 'Lights off'], ['blackout', 'Blackout']];
   function defaults() {
     return { room: null, marks: { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }, weather: 'rain', rain: 1, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, drift: 'gentle', loop: 20, len: 0,
-      avatar: null, stings: [], shows: [], mark: false, pics: [] };
+      avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
   function duration(cfg) {
@@ -401,6 +401,41 @@ const Studio = (() => {
   // The vertical frame moves gently, the lightning flickers: tell the exporter when it should blend frames for motion blur
   function blurHint() { return 1; }
 
+  /* ---------- Sound: thunder that rolls in just after each flash, cars going past outside, wind when it snows, and a clunk
+     or buzz when the lights go. No rain. Worked out sample by sample so it lines up with the picture exactly. Saved as its
+     own WAV file. ---------- */
+  function soundData(cfg, segs, total, sr = 44100) {
+    const S0 = cfg.sound || {}, vol = cl(S0.vol == null ? 0.8 : +S0.vol, 0, 1.5), L = loopOf(cfg);
+    const loopIt = !segs && !cfg.avatar && !(+cfg.len > 0), tail = loopIt ? 2 : 0.5, N = Math.ceil((total + tail) * sr), Lc = new Float32Array(N), Rc = new Float32Array(N), r = rng(hash('snd' + cfg.weather));
+    if (S0.on === false || vol <= 0) return { L: Lc.subarray(0, Math.ceil(total * sr)), R: Rc.subarray(0, Math.ceil(total * sr)), sr };
+    // Wind, only when it snows
+    if (cfg.weather === 'snow') { let brown = 0, brownR = 0, lp2 = 0; for (let i = 0; i < N; i++) { const t = i / sr, gust = 1 + 0.5 * wob(t, L, 71, [1, 2, 3]), w1 = r() * 2 - 1, w2 = r() * 2 - 1; brown = (brown + 0.02 * w1) * 0.996; brownR = (brownR + 0.02 * w2) * 0.996; lp2 += 0.04 * (brown - lp2); const wa = 0.5 * (0.6 + 0.4 * gust); Lc[i] += lp2 * wa; Rc[i] += (brownR * 0.6 + lp2 * 0.4) * wa; } }
+    const add = (t0, fn, len, pan) => { const i0 = Math.floor(t0 * sr), n = Math.floor(len * sr), gl = Math.sqrt(1 - pan) * 0.9, gr = Math.sqrt(pan) * 0.9; for (let k = 0; k < n; k++) { const j = i0 + k; if (j < 0 || j >= N) continue; const v = fn(k / sr); Lc[j] += v * gl; Rc[j] += v * gr; } };
+    // A car going by outside
+    if (S0.cars !== false && cfg.outside !== false && ((cfg.marks && cfg.marks.road) || []).length >= 2) { const n = Math.max(1, Math.round(L / 9)), rc = rng(77); for (let k = 0; k < n; k++) { const st = (k + rc() * 0.6) * L / n, dur = 4 + rc() * 3, dir = rc() < 0.5 ? 1 : -1; for (let tt = st; tt < total + tail; tt += L) { let lp = 0; const nr = rng(hash('car' + k + tt));
+          add(tt, x => { const u = x / dur, e = Math.sin(Math.PI * cl(u, 0, 1)) ** 2; lp += 0.08 * ((nr() * 2 - 1) - lp); return lp * e * 0.14; }, dur, dir > 0 ? 0.3 : 0.7); } } }
+    // Thunder: a crack for the close ones, then a long rumble rolling round
+    if (S0.thunder !== false) { const hits = []; flashTimes(cfg).forEach(f => { for (let tt = f.t; tt < total + tail; tt += L) hits.push({ t: tt, big: f.big, seed: f.seed }); }); (cfg.stings || []).forEach(s2 => { if (s2.k === 'thunder') hits.push({ t: +s2.start || 0, big: true, seed: hash(s2.id), pow: +s2.pow || 1 }); });
+      hits.forEach(h => { const rr = rng(h.seed + 5), delay = h.big ? 0.15 + rr() * 0.5 : 0.8 + rr() * 1.4, len = 4 + rr() * 3, pw = (h.pow || 1) * (h.big ? 1 : 0.6); let b1 = 0, b2 = 0, l1 = 0, l2 = 0, c1 = 0, env = 0;
+        add(h.t + delay, x => { const n = rr() * 2 - 1; b1 = (b1 + 0.03 * n) * 0.998; l1 += 0.02 * (b1 - l1); b2 = (b2 + 0.03 * (rr() * 2 - 1)) * 0.998; l2 += 0.06 * (b2 - l2); env += 0.0004 * ((0.4 + 0.6 * Math.abs(Math.sin(x * 2.1 + Math.sin(x * 0.7) * 3))) - env);
+          const att = cl(x / 0.25, 0, 1), dec = Math.exp(-Math.max(0, x - 0.3) / (len * 0.45)), crack = h.big ? (c1 += 0.5 * (n - c1), c1 * Math.exp(-x / 0.12) * 0.6) : 0; return (l1 * 1.6 + l2 * 0.9) * att * dec * (0.6 + env) * 0.55 * pw + crack * 0.6 * pw; }, len + 1, 0.4 + rr() * 0.2); }); }
+    // Stings: a clunk when the lights go, an electric buzz while they flicker
+    (cfg.stings || []).forEach(s2 => { const st = +s2.start || 0, d = Math.max(0.2, +s2.dur || 1);
+      if (s2.k === 'lightsoff' || s2.k === 'blackout') { add(st, x => Math.sin(TAU * 70 * x) * 0.35 * Math.exp(-x / 0.06), 0.3, 0.5); add(st + d, x => Math.sin(TAU * 90 * x) * 0.2 * Math.exp(-x / 0.05), 0.25, 0.5); }
+      if (s2.k === 'flicker') { const rb = rng(hash(s2.id)); add(st, x => { const on = Math.sin(x * 47) > 0.15 ? 1 : 0; return (Math.sign(Math.sin(TAU * 100 * x)) * 0.5 + (rb() - 0.5) * 0.4) * 0.06 * on; }, d, 0.5); } });
+    // Join the end round to the start so a loop never clicks, then keep it all in range
+    const M0 = Math.ceil(total * sr);
+    if (loopIt) { const X = Math.min(Math.floor(2 * sr), N - M0); for (let i = 0; i < X; i++) { const f = i / X, a = Math.sin(f * Math.PI / 2), b = Math.cos(f * Math.PI / 2); Lc[i] = Lc[i] * a + Lc[M0 + i] * b; Rc[i] = Rc[i] * a + Rc[M0 + i] * b; } }
+    const env = segs ? new Float32Array(M0) : null; if (env) segs.forEach(([a0, a1]) => { const i0 = Math.max(0, Math.floor(a0 * sr)), i1 = Math.min(M0, Math.ceil(a1 * sr)), f = Math.floor(0.15 * sr); for (let i = i0; i < i1; i++) env[i] = Math.max(env[i], Math.min(1, (i - i0) / f, (i1 - i) / f)); });
+    for (let i = 0; i < M0; i++) { const e = env ? env[i] : 1; Lc[i] = Math.tanh(Lc[i] * vol * 1.6) * 0.9 * e; Rc[i] = Math.tanh(Rc[i] * vol * 1.6) * 0.9 * e; }
+    return { L: Lc.subarray(0, M0), R: Rc.subarray(0, M0), sr };
+  }
+  function wav({ L, R, sr }) { const n = L.length, buf = new ArrayBuffer(44 + n * 4), dv = new DataView(buf), ws = (o, s2) => { for (let i = 0; i < s2.length; i++) dv.setUint8(o + i, s2.charCodeAt(i)); };
+    ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 4, true);
+    for (let i = 0, o = 44; i < n; i++, o += 4) { dv.setInt16(o, Math.round(cl(L[i], -1, 1) * 32767), true); dv.setInt16(o + 2, Math.round(cl(R[i], -1, 1) * 32767), true); } return new Blob([buf], { type: 'audio/wav' }); }
+  let playing = null;
+  function listen(data) { if (playing) { try { playing.stop(); } catch (e) { } playing = null; return false; } const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; const ac = new AC(), b = ac.createBuffer(2, data.L.length, data.sr); b.copyToChannel(data.L, 0); b.copyToChannel(data.R, 1); const s2 = ac.createBufferSource(); s2.buffer = b; s2.connect(ac.destination); s2.onended = () => { playing = null; ac.close(); }; s2.start(); playing = s2; return true; }
+
   /* ---------- The timeline: stings on the room, what each frame shows, and the avatar ---------- */
   const hooks = {};
   const STING_LEN = { thunder: 2.5, lightning: 1, flicker: 2, lightsoff: 3, blackout: 3 };
@@ -468,7 +503,7 @@ const Studio = (() => {
     const now = () => (typeof Layers !== 'undefined' && Layers.hooks && Layers.hooks.time ? Layers.hooks.time() : 0);
     const [k, a] = (id || '').split(':');
     if (k === 'S') { const s2 = (cfg.stings || []).find(q => q.id === a); if (s2) { root.append(card('Sting', field('What happens', sel(s2.k, STINGS, v => { s2.k = v; ch(); }, 'Sting')), grid2(field('Starts at (seconds)', num(s2.start, v => { s2.start = r2(v); changed(); }, 0, 3600, 0.1, 'Start')), field('Lasts (seconds)', num(s2.dur, v => { s2.dur = r2(v); changed(); }, 0.2, 60, 0.1, 'Length'))),
-      s2.k === 'thunder' || s2.k === 'lightning' ? field('How big', range(+s2.pow || 1, 0.3, 2, 0.05, v => { s2.pow = r2(v); }, 'How big')) : '', H('p', { className: 'hint', textContent: s2.k === 'thunder' ? 'Lightning lights the room and the lamps dip.' : s2.k === 'lightsoff' ? 'The lamps go out and flicker back on at the end.' : s2.k === 'blackout' ? 'The whole room goes dark apart from the window.' : '' }), foot())); return; } }
+      s2.k === 'thunder' || s2.k === 'lightning' ? field('How big', range(+s2.pow || 1, 0.3, 2, 0.05, v => { s2.pow = r2(v); }, 'How big')) : '', H('p', { className: 'hint', textContent: s2.k === 'thunder' ? 'Lightning lights the room, the lamps dip, and the thunder is in the sound file.' : s2.k === 'lightsoff' ? 'The lamps go out and flicker back on at the end.' : s2.k === 'blackout' ? 'The whole room goes dark apart from the window.' : '' }), foot())); return; } }
     if (k === 'W') { const sh = (cfg.shows || []).find(q => q.id === a); if (sh) { showCard(sh); return; } }
     if (k === 'F' || k === 'Fm' || k === 'Fc') { const f = M.frames.find(x => x.id === a); if (f) { frameCard(f); return; } }
     if (k === 'AV') { avatarCard(); return; }
@@ -476,7 +511,7 @@ const Studio = (() => {
       root.append(card(names[k], H('p', { className: 'hint', textContent: k === 'PL' ? 'Drag it over the plant; a corner makes it bigger or smaller.' + (M.plants[+a] ? '' : '') : k === 'O' ? 'Whatever is inside this shape stays in front of the rain on the glass.' : k === 'L' ? 'Put it on the bulb; a corner sets how far its glow reaches.' : 'Drag it into place.' }),
         k === 'PL' && M.plants[+a] ? field('Fixed at', seg([['top', 'The top (hanging)'], ['bottom', 'The bottom (in a pot)']], M.plants[+a][4] || 'top', v => { M.plants[+a][4] = v; ch(); })) : '',
         foot(k !== 'G' ? btn('Remove it', () => { removeMark(cfg, id); changed(); hooks.select && hooks.select(null); }) : ''))); return; }
-    roomCard(); if (roomBmp(cfg)) { weatherCard(); avatarCard(); framesCard(); }
+    roomCard(); if (roomBmp(cfg)) { weatherCard(); avatarCard(); framesCard(); soundCard(); }
 
     function roomCard() {
       const note = H('p', { className: 'hint' }), has = !!roomBmp(cfg);
@@ -555,7 +590,16 @@ const Studio = (() => {
       kids.push(grid2(field('Starts at (seconds)', num(+sh.start || 0, v => { sh.start = r2(v); changed(); }, 0, 3600, 0.1, 'Start')), field('Shows for (seconds)', num(+sh.dur || 6, v => { sh.dur = r2(v); changed(); }, 0.3, 3600, 0.1, 'Length'))), field('Glows like a screen', seg([['0', 'No, lit by the room'], ['1', 'Yes']], sh.glow ? '1' : '0', v => { sh.glow = v === '1'; ch(); })), note, foot());
       root.append(card('In ' + frameName(cfg, sh.frame), ...kids));
     }
+    function soundCard() {
+      const S0 = cfg.sound = Object.assign({ on: true, vol: 0.8, thunder: true, cars: true }, cfg.sound || {}), note = H('p', { className: 'hint' });
+      const make = () => { const d = duration(cfg); return soundData(cfg, null, d); };
+      root.append(card('Sound', H('p', { className: 'hint', textContent: 'Thunder that rolls in after each flash, cars going past outside, wind when it snows, and a clunk or buzz when the lights go. No rain. Saved as a WAV to put under your voice in Premiere or After Effects.' }),
+        field('Sound', seg([['1', 'On'], ['0', 'Off']], S0.on !== false ? '1' : '0', v => { S0.on = v === '1'; ch(); })),
+        S0.on !== false ? H('div', {}, field('Volume', range(S0.vol, 0, 1.5, 0.05, v => { S0.vol = r2(v); }, 'Volume')),
+          grid2(field('Thunder', seg([['1', 'On'], ['0', 'Off']], S0.thunder !== false ? '1' : '0', v => { S0.thunder = v === '1'; ch(); })), field('Cars outside', seg([['1', 'On'], ['0', 'Off']], S0.cars !== false ? '1' : '0', v => { S0.cars = v === '1'; ch(); }))),
+          H('div', { className: 'btnrow' }, btn('▶ Listen', () => { note.textContent = 'Making the sound…'; setTimeout(() => { const on = listen(make()); note.textContent = on ? 'Playing. Press Listen again to stop.' : ''; }, 20); }), btn('Save the sound (WAV)', () => { note.textContent = 'Making the sound…'; setTimeout(async () => { try { await E.saveBlob(wav(make()), (cfg.room && cfg.room.name ? cfg.room.name.replace(/\.\w+$/, '') : 'studio') + ' sound.wav', [{ description: 'WAV sound', accept: { 'audio/wav': ['.wav'] } }]); note.textContent = 'Saved.'; } catch (e) { note.textContent = ''; } }, 20); }, 'primary')), note) : ''));
+    }
   }
 
-  return { id: 'studio', name: 'Studio', editor, hooks, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass } };
+  return { id: 'studio', name: 'Studio', editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass } };
 })();
