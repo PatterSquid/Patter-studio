@@ -26,7 +26,9 @@ const Layers = (() => {
     hooks.onAsset && hooks.onAsset(id);
   }
   const setAssets = map => Promise.all(Object.entries(map || {}).map(([id, url]) => setAsset(id, url)));
-  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); ((cfg && cfg.items) || []).forEach(it => { if (it && it.cfg) Object.assign(out, assetsFor(it.cfg)); }); return out; };
+  const assetsFor = cfg => { const out = {}; ((cfg && cfg.layers) || []).forEach(L => { if (L.type === 'image' && L.asset && assets[L.asset]) out[L.asset] = assets[L.asset].url; }); ((cfg && cfg.items) || []).forEach(it => { if (it && it.cfg) Object.assign(out, assetsFor(it.cfg)); });
+    // The studio: its room picture, pictures in its frames, and a studio kept inside a video
+    const pic = id => { if (id && assets[id]) out[id] = assets[id].url; }; if (cfg && cfg.room) pic(cfg.room.asset); ((cfg && cfg.shows) || []).forEach(sh => { pic(sh.asset); if (sh.mcfg) Object.assign(out, assetsFor(sh.mcfg)); }); if (cfg && cfg.studio) Object.assign(out, assetsFor(cfg.studio)); return out; };
   const hooks = {};
 
   // Easing between keyframes
@@ -703,6 +705,19 @@ const Layers = (() => {
     Object.entries(piece.assetUrls || {}).forEach(([id, url]) => { setAsset(id, url); hooks.addAsset && hooks.addAsset(id, url); }); return first; }
   const base = (type, t, extra) => Object.assign({ id: newId(), type, start: r2(Math.max(0, t)), end: r2(Math.max(0, t) + 4), x: 0.5, y: 0.5, s: 1, rot: 0, op: 1, anIn: 'pop', inD: 0.5, anOut: 'fade', outD: 0.4, fx: 'none', fxAt: 1 }, extra);
   const mkText = t => base('text', t, { text: 'YOUR TEXT', font: 'display', size: 110, colour: '#ffffff', style: 'outline', caps: true, y: 0.78, anIn: 'pop' });
+  // Ready made captions: a name title that slides in low on the left, a small source tag, and a subscribe reminder
+  const TEXT_KINDS = [['plain', 'Text'], ['name', 'Name title'], ['source', 'Source tag'], ['subscribe', 'Subscribe reminder']];
+  function mkTextKind(t, k) {
+    if (k === 'name') return base('text', t, { text: 'YOUR NAME', font: 'display', size: 74, colour: '#ffffff', bg: '#e3302c', style: 'banner', caps: true, x: 0.2, y: 0.8, anIn: 'slideL', inD: 0.45, anOut: 'slideL', outD: 0.35, end: r2(Math.max(0, t) + 5) });
+    if (k === 'source') return base('text', t, { text: 'Source: ', font: 'label', size: 34, colour: '#e8e8e8', style: 'shadow', caps: false, x: 0.16, y: 0.93, anIn: 'fade', inD: 0.3, anOut: 'fade', outD: 0.3, end: r2(Math.max(0, t) + 6) });
+    if (k === 'subscribe') return base('text', t, { text: '▶ SUBSCRIBE', font: 'display', size: 64, colour: '#ffffff', bg: '#e3302c', style: 'banner', caps: true, x: 0.82, y: 0.86, anIn: 'pop', inD: 0.45, anOut: 'pop', outD: 0.3, fx: 'pulse', end: r2(Math.max(0, t) + 4) });
+    return mkText(t);
+  }
+  function iconText(c, k) { const g = c.getContext('2d'), w = c.width, h = c.height; g.fillStyle = '#18202e'; g.fillRect(0, 0, w, h);
+    if (k === 'name') { g.fillStyle = '#e3302c'; g.fillRect(w * 0.08, h * 0.58, w * 0.6, h * 0.24); g.fillStyle = '#fff'; g.fillRect(w * 0.14, h * 0.66, w * 0.4, h * 0.08); }
+    else if (k === 'source') { g.fillStyle = '#ddd'; g.fillRect(w * 0.08, h * 0.8, w * 0.42, h * 0.06); }
+    else if (k === 'subscribe') { g.fillStyle = '#e3302c'; g.beginPath(); g.roundRect ? g.roundRect(w * 0.18, h * 0.32, w * 0.64, h * 0.36, h * 0.1) : g.rect(w * 0.18, h * 0.32, w * 0.64, h * 0.36); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(w * 0.28, h * 0.4); g.lineTo(w * 0.38, h * 0.5); g.lineTo(w * 0.28, h * 0.6); g.fill(); }
+    else { g.fillStyle = '#fff'; g.font = `${Math.round(h * 0.5)}px Anton, Impact, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Aa', w / 2, h / 2); } }
   const mkStamp = (t, s) => base('stamp', t, { text: s[0], colour: s[1], shape: s[2], size: 130, rot: s[2] === 'burst' ? 0 : -9, anIn: 'slam', inD: 0.45, x: 0.62, y: 0.4 });
   const mkShape = (t, k) => base('shape', t, { shape: k, colour: k === 'spot' ? '#ffffff' : '#e3302c', thick: 14, w: k === 'underline' ? 460 : k === 'tick' || k === 'cross' ? 200 : 380, h: k === 'underline' ? 120 : k === 'tick' || k === 'cross' ? 200 : 240, anIn: k === 'arrow' || k === 'spot' ? (k === 'spot' ? 'fade' : 'slideL') : 'draw', inD: k === 'spot' ? 0.4 : 0.6 });
   const CAM_PRESETS = [['push', 'Slow push in'], ['punch', 'Punch in'], ['pull', 'Pull out'], ['panL', 'Pan left to right'], ['panR', 'Pan right to left'], ['tilt', 'Dutch tilt'], ['rumble', 'Rumble'], ['hold', 'Still (add your own)']];
@@ -723,8 +738,8 @@ const Layers = (() => {
   function pickImage() {
     return new Promise(res => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = async () => { const f = inp.files && inp.files[0]; if (!f) return res(null); try { res(await importImage(f)); } catch (e) { console.error(e); res(null); } }; inp.click(); });
   }
-  async function importImage(file) {
-    const bmp = await createImageBitmap(file), k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height)), c = mkCanvas(bmp.width * k, bmp.height * k), g = c.getContext('2d'); g.drawImage(bmp, 0, 0, c.width, c.height);
+  async function importImage(file, maxSide = 1800) {
+    const bmp = await createImageBitmap(file), k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height)), c = mkCanvas(bmp.width * k, bmp.height * k), g = c.getContext('2d'); g.drawImage(bmp, 0, 0, c.width, c.height);
     const jpg = /jpe?g/i.test(file.type), url = c.toDataURL(jpg ? 'image/jpeg' : 'image/png', 0.9), id = 'a' + hash(url).toString(36) + c.width.toString(36);
     await setAsset(id, url); hooks.addAsset && hooks.addAsset(id, url); return { id, w: c.width, h: c.height };
   }
@@ -783,7 +798,7 @@ const Layers = (() => {
       removeKey(cfg, id, idx) { const L = find(cfg, id); if (L) removeKeyAt(L, idx); },
       keyTimes(cfg) { const out = []; ((cfg && cfg.layers) || []).forEach(L => { const st = num(L.start, 0); (L.keys || []).forEach(k => out.push(st + k.t)); }); return out; },
       adds: [...(ie.adds || []),
-        { group: 'layer', label: 'Text', title: 'Add a text layer at the playhead (T)', fn: (cfg, t) => add(cfg, mkText(t)) },
+        { group: 'layer', label: 'Text', title: 'Add a text layer at the playhead (T): plain text, a name title, a source tag or a subscribe reminder', choices: () => TEXT_KINDS.map(k => ({ label: k[1], key: k[0], icon: c => iconText(c, k[0]) })), fn: (cfg, t, sel, ch) => add(cfg, mkTextKind(t, ch && ch.key)) },
         { group: 'layer', label: 'Stamp', title: 'Add a stamp that slams in', choices: () => STAMPS.map(s => ({ label: s[0], key: s[0], icon: c => iconStamp(c, s) })), fn: (cfg, t, sel, ch) => add(cfg, mkStamp(t, STAMPS.find(s => s[0] === (ch && ch.key)) || STAMPS[0])) },
         { group: 'layer', label: 'Shape', title: 'Add an arrow, circle, box, tick or spotlight', choices: () => SHAPES.map(s => ({ label: s[1], key: s[0], icon: c => iconShape(c, s[0]) })), fn: (cfg, t, sel, ch) => add(cfg, mkShape(t, (ch && ch.key) || 'circle')) },
         { group: 'layer', label: 'Prop', title: 'Add a house, bank, car, plane and more. They can catch fire, explode and collapse.', choices: () => Object.keys(PROPS).map(k => ({ label: PROPS[k].name, key: k, icon: c => iconProp(c, k) })), fn: (cfg, t, sel, ch) => { const k = (ch && ch.key) || 'house', chalk = mod.id === 'board' || mod.id === 'story' || mod.id === 'broll'; const L = mkProp(t, k, chalk ? 'chalk' : 'comic'); if (ie.view && chalk) L.pin = true; return add(cfg, L); } },

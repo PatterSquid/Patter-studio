@@ -227,3 +227,6 @@ kbd{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#0b142
 /* A small dot on the Project button when something new from Claude is waiting */
 #libBtn { position: relative; }
 #libBtn.has-new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #f5821f; box-shadow: 0 0 0 2px #0b1424; }
+
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0;cursor:pointer}.chk input{accent-color:var(--bru);width:16px;height:16px}
+.st-seg.g3 button{flex:1 1 30%}

@@ -55,6 +55,27 @@ When he sends a script, build it as a Video tab project: one clip per beat (Stor
 newspapers where they fit), an avatar gap for every line marked [ME], new drawings as a pack. Hand it over as a
 .patter.json project file plus an MP4 preview.
 
+## The Studio tab (dev/src/studio.js)
+
+His room picture brought to life for the bits where he talks to camera: rain on the window (beads that bend the view,
+runners with wet trails, rain beyond the glass), lamps that glow and flicker, lights going on and off in the flats outside,
+street lamps, cars on the road, swaying plants, lightning that lights the room, weather presets, and a gentle camera drift.
+Everything is a pure function of time and repeats exactly every `loop` seconds, so it loops seamlessly.
+
+* `cfg.room.asset` is the picture; `cfg.marks` holds what is in it, as fractions of the picture: `glass` (four corners),
+  `front` (polygons kept in front of the glass), `lamps` `[x, y, r]`, `frames` `{ id, name, p: [4 corners] }`, `plants`
+  `[x0, y0, x1, y1, 'top'|'bottom']`, `street`, `road`, `lit` (windows found outside). `Studio.detect` finds the window,
+  lamps and lights when a picture is added; he marks the rest with "Mark things on the preview".
+* `cfg.avatar` is his avatar video (`Media.importAvatar`: green or blue screen keyed as it is read, a see-through WebM, or a
+  PNG sequence; trimmed to the part that has anything in, kept as WebP with transparency). He sits at his own desk in
+  Character Animator, so no furniture is added. It is lit to match the room (grade, warm and cool edges, floor shadow).
+* `cfg.stings` (thunder, lightning, flicker, lights off, blackout) and `cfg.shows` (a picture, headline or clip from another tab
+  in one of the frames) are timeline bars.
+* `Studio.soundData` makes the matching rain, wind, tyres, drips and thunder as a separate WAV (volume, heaviness, on or off).
+* In the Video tab, "Avatar gaps: Your studio" shows the studio in every [ME] gap, with his avatar video carrying on from gap
+  to gap (one take, lines in order). `projects/my-studio.patter.json` is his room, already marked.
+* Tests: `dev/tests/studio_*.py` (frames, video with sound, worker parity, seamless loop, Video gaps, random clicking).
+
 ## Packs (data only, no code)
 
 A pack is a JSON file in `packs/`: `{ format: 1, id, name, version, description, places, props, hats, actions, setpieces }`.

@@ -4,9 +4,9 @@
 const Video = (() => {
   const { H, field, sel, txt, area, btn, card } = UI;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
-  const NAMES = { charts: 'Chart', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll' };
-  const COLS = { charts: '#3b7dd8', timeline: '#2f9a8a', map: '#3c8f4a', flights: '#4f6fd0', flyover: '#2d7a6a', picto: '#b0703a', news: '#8a8a8a', story: '#7d6420', broll: '#6d4f9a', avatar: '#a03a6a' };
-  const raw = k => ({ charts: typeof Charts !== 'undefined' && Charts, timeline: typeof Timeline !== 'undefined' && Timeline, map: typeof MapMod !== 'undefined' && MapMod, flights: typeof Flights !== 'undefined' && Flights, flyover: typeof Flyover !== 'undefined' && Flyover, picto: typeof Picto !== 'undefined' && Picto, news: typeof News !== 'undefined' && News, story: typeof Story !== 'undefined' && Story, broll: typeof Broll !== 'undefined' && Broll })[k] || null;
+  const NAMES = { charts: 'Chart', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', studio: 'Studio' };
+  const COLS = { charts: '#3b7dd8', timeline: '#2f9a8a', map: '#3c8f4a', flights: '#4f6fd0', flyover: '#2d7a6a', picto: '#b0703a', news: '#8a8a8a', story: '#7d6420', broll: '#6d4f9a', studio: '#3a5f8a', avatar: '#a03a6a' };
+  const raw = k => ({ charts: typeof Charts !== 'undefined' && Charts, timeline: typeof Timeline !== 'undefined' && Timeline, map: typeof MapMod !== 'undefined' && MapMod, flights: typeof Flights !== 'undefined' && Flights, flyover: typeof Flyover !== 'undefined' && Flyover, picto: typeof Picto !== 'undefined' && Picto, news: typeof News !== 'undefined' && News, story: typeof Story !== 'undefined' && Story, broll: typeof Broll !== 'undefined' && Broll, studio: typeof Studio !== 'undefined' && Studio })[k] || null;
   const modOf = k => { const m = raw(k); return m ? (typeof Layers !== 'undefined' ? Layers.wrap(m) : m) : null; };
   const hooks = {};
   const nid = p => p + Math.random().toString(36).slice(2, 9);
@@ -38,8 +38,12 @@ const Video = (() => {
     ctx.save(); try { M.draw(ctx, inner(o, t, look), o.it.cfg, lookFor(o.it, look), W, H); } finally { ctx.restore(); }
   }
   // The avatar gap: blank in the export, a labelled card in the preview so you can see where you come in and what you say
+  // With the studio in the gaps, your avatar video carries on from gap to gap: each gap starts where the last one stopped
+  const studioOn = cfg => cfg.gap === 'studio' && cfg.studio && typeof Studio !== 'undefined';
+  function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = cfg.studio && cfg.studio.avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
   function drawGap(ctx, o, t, cfg, look, W, H) {
     const g = cfg.gap || 'black';
+    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), cfg.studio, look, W, H); } finally { ctx.restore(); } return; }
     if (look.transparent || g === 'clear') ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = g === 'green' ? '#00b140' : '#000000'; ctx.fillRect(0, 0, W, H); }
     if (!look.preview) return;
     label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
@@ -53,10 +57,10 @@ const Video = (() => {
   }
 
   // Exports: hand the clip's own video and motion blur hints through
-  function mediaFor(cfg) { const ids = new Set(); (cfg.items || []).forEach(it => { const M = it.kind === 'clip' && modOf(it.mod); if (M && M.mediaFor) (M.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }); return [...ids]; }
-  function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, o = at(cfg, lk, t); if (!o || o.it.kind !== 'clip') return []; const M = modOf(o.it.mod); return M && M.mediaAt ? M.mediaAt(o.it.cfg, inner(o, t, lk)) : []; }
+  function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg)) (Studio.mediaFor(cfg.studio) || []).forEach(x => ids.add(x)); (cfg.items || []).forEach(it => { const M = it.kind === 'clip' && modOf(it.mod); if (M && M.mediaFor) (M.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }); return [...ids]; }
+  function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, o = at(cfg, lk, t); if (o && o.it.kind === 'avatar' && studioOn(cfg)) return Studio.mediaAtAv(cfg.studio, t, avStart(cfg, o, lk) + (t - o.t0)); if (!o || o.it.kind !== 'clip') return []; const M = modOf(o.it.mod); return M && M.mediaAt ? M.mediaAt(o.it.cfg, inner(o, t, lk)) : []; }
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip') return 1; const M = modOf(o.it.mod); return M && M.blurHint ? M.blurHint(o.it.cfg, lookFor(o.it, look), inner(o, t, look), fps, W, H) : null; }
-  const needsMap = cfg => (cfg.items || []).some(it => it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover'));
+  const needsMap = cfg => (cfg.items || []).some(it => it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg)))) || (studioOn(cfg) && Studio.needsMap(cfg.studio));
 
   /* ---------- Timeline: one lane, the video in order. Drag a bar to move it in the running order, drag its end to hold the
      last frame longer (or make an avatar gap longer or shorter) ---------- */
@@ -90,6 +94,7 @@ const Video = (() => {
       f.push(field('What you say here (shows on the preview only)', area(it.text, v => { it.text = v; changed(false); }, 'Your line to camera', 3, 'Avatar line')));
       f.push(field('Length in seconds', txt(String(it.dur), v => { const n = parseFloat(v); if (isFinite(n)) { it.dur = r2(cl(n, 0.3, 600)); changed(); } }, '3', 'Length in seconds'), 'Or drag the end of its bar on the timeline.'));
       f.push(H('div', { className: 'btnrow' }, btn('Fit the length to the words', () => { it.dur = fitWords(it.text); changed(); })));
+      if (cfg.gap === 'studio') f.push(field('Start your avatar video at (seconds, blank to carry on from the last gap)', txt(it.avIn == null ? '' : String(it.avIn), v => { const n = parseFloat(v); if (v.trim() === '') delete it.avIn; else if (isFinite(n)) it.avIn = r2(Math.max(0, n)); changed(); }, 'carry on', 'Avatar start')));
     } else {
       const d = natural(it, look);
       f.push(field('Name on the timeline', txt(it.name || '', v => { it.name = v; changed(false); }, NAMES[it.mod], 'Clip name')));
@@ -109,7 +114,9 @@ const Video = (() => {
     return card('Your video, ' + (m ? m + ' min ' : '') + s + ' s',
       H('p', { className: 'hint', textContent: 'Clips play in this order. Add them with + Clip and + Avatar gap above the timeline, drag bars to change the order, and press Edit to change a clip in its own tab.' }),
       L.length ? list : H('p', { className: 'hint', textContent: 'Nothing in the video yet.' }),
-      field('Avatar gaps in the export', sel(cfg.gap || 'black', [['black', 'Black'], ['green', 'Green screen'], ['clear', 'See through (PNG sequence only)']], v => { cfg.gap = v; changed(); }, 'Avatar gap colour')));
+      field('Avatar gaps in the export', sel(cfg.gap || 'black', [['black', 'Black'], ['green', 'Green screen'], ['clear', 'See through (PNG sequence only)'], ...(typeof Studio !== 'undefined' ? [['studio', 'Your studio, with your avatar']] : [])], v => { cfg.gap = v; if (v === 'studio' && !cfg.studio && hooks.tabCfg) cfg.studio = JSON.parse(JSON.stringify(hooks.tabCfg('studio'))); changed(); }, 'Avatar gap colour')),
+      cfg.gap === 'studio' ? H('p', { className: 'hint', textContent: 'Each gap shows your studio from the Studio tab. Your avatar video plays on from gap to gap, so record your [ME] lines in order as one take. The rain and the room carry on through the whole video.' }) : '',
+      cfg.gap === 'studio' ? H('div', { className: 'btnrow' }, btn('Use the Studio tab as it is now', () => { if (hooks.tabCfg) { cfg.studio = JSON.parse(JSON.stringify(hooks.tabCfg('studio'))); changed(); } }), typeof Studio !== 'undefined' ? btn('Save the studio sound for the whole video (WAV)', () => { const look2 = hooks.look ? hooks.look() : { format: '16:9' }, L2 = layout(cfg, look2), segs = L2.filter(o => o.it.kind === 'avatar').map(o => [o.t0, o.t0 + o.d]); E.saveBlob(Studio.wav(Studio.soundData(cfg.studio, segs, duration(cfg, look2))), 'video studio sound.wav', [{ description: 'WAV sound', accept: { 'audio/wav': ['.wav'] } }]).catch(() => { }); }) : '') : '');
   }
 
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, form: (root, cfg, changed) => root.append(overview(cfg, changed)) };

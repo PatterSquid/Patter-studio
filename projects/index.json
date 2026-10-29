@@ -6,6 +6,13 @@
       "note": "Two neds, a goth and a bottle of Buckie",
       "rev": "10875f6ad0ea",
       "file": "buckie-ambush.patter.json"
+    },
+    {
+      "id": "my-studio",
+      "name": "My studio",
+      "note": "Your room with rain, lamps, life outside and frames ready to fill. Add your avatar on the left.",
+      "rev": "2edcfb2eb59e",
+      "file": "my-studio.patter.json"
     }
   ]
 }
