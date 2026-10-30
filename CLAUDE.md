@@ -32,7 +32,10 @@ python3 publish.py "notes"       # copies the build to app/, writes version.json
 git add -A && git commit && git push origin main
 ```
 
-* `dev/VERSION` is `YYYY.MM.DD.N`. Bump it for every app change you publish, or the launcher will not pick it up.
+* `dev/VERSION` is `YYYY.MM.DD.N`: **the date it is published (his date, UK time) and the revision that day, starting at 1**.
+  So the first publish on 30 October 2026 is `2026.10.30.1`, then `.2`, `.3`; the first on the next day is `2026.10.31.1`.
+  Check today's date before bumping (do not carry on an earlier day's date). Bump it for every app change you publish, or
+  the launcher will not pick it up.
 * Story (the chalk animator, also used by B roll) lives in `dev/story/*.js` chunks, joined in the order in `story/ORDER`.
   Edit the chunks, never `src/story.js` (it is generated).
 * Tests use Playwright with the preinstalled Chromium. `dev/tests/` has the main ones (random clicking on every tab,
