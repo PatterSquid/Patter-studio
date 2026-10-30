@@ -59,7 +59,6 @@ const StudioEvents = (() => {
       if (act.e.k === 'plane' && a >= PL.COL) { P.gone = true; P.draw = true; P.sink = plSink(a); P.rot += Math.sin(a * 2.3) * 0.012 * sm((a - PL.COL) / 1.5); P.pile = sm((a - PL.COL - 0.3) / (PL.COLE - PL.COL - 0.3)); }
       if (act.e.k === 'demolish' && a >= DM.BANG + 0.1) { P.gone = true; P.draw = true; P.sink = 0.045 * sm((a - DM.BANG - 0.1) / 0.35); P.rot = dmRot(a, base); P.dust = 1; }
     }
-    if (P.target === 1) active(cfg, t).forEach(e => { if (e.k !== 'squid') return; const { a } = phase(e, t); if (a > 0.5 && a < 13) P.draw = true; const q = win(a, 5, 8.2, 0.4, 0.4); if (q > 0) { P.gone = true; P.shake = Math.sin(a * 47) * 1.6 * q + Math.sin(a * 23) * 0.8 * q; } });
     return P;
   }
 
@@ -215,23 +214,30 @@ const StudioEvents = (() => {
   function evPlane(X, e, P, front) {
     const { ctx, S, t } = X, { a } = phase(e, t), T = P.target === 1 ? X.T : X.T2; if (!T || !front) return; const H = T.base - T.top, Q = X.Q;
     const pI = [T.x0 + 2 * S, T.top + H * 0.3], p0 = [Math.min(Q[0][0], Q[3][0]) - 150 * S, pI[1] - 70 * S], sink = P.target === 1 ? plSink(a) * H : 0;
-    if (a < PL.IMP + 0.05) { const f = cl(a / PL.IMP, 0, 1.02), x = lerp(p0[0], pI[0], f), y = lerp(p0[1], pI[1], f) - Math.sin(Math.PI * f) * 10 * S, ang = Math.atan2(pI[1] - p0[1] - Math.cos(Math.PI * f) * Math.PI * 10 * S, pI[0] - p0[0]);
-      ctx.save(); ctx.beginPath(); ctx.rect(-1e5, -1e5, 1e5 + T.x0 + 3 * S, 2e5); ctx.clip(); ctx.translate(x, y); ctx.rotate(ang); plane(ctx, 112 * S, t); ctx.restore(); }
+    // A steady straight run in, slightly nose down; it keeps going into the block (hidden behind its edge) rather than vanishing
+    { const L = 112 * S, vx = (pI[0] - p0[0]) / PL.IMP, vy = (pI[1] - p0[1]) / PL.IMP, inside = (L + 20 * S) / vx; if (a < PL.IMP + inside) { const x = p0[0] + vx * a, y = p0[1] + vy * a + Math.sin(a * 1.7) * 1.2 * S, ang = Math.atan2(vy, vx);
+      ctx.save(); ctx.beginPath(); ctx.rect(-1e5, -1e5, 1e5 + T.x0 + 2 * S, 2e5); ctx.clip(); ctx.translate(x, y); ctx.rotate(ang); plane(ctx, L, t); ctx.restore(); } }
     const k = a - PL.IMP; if (k < 0) return;
     // Fires burning across the floors it went into, coming down with the block
-    const r = rng(hash(e.id) + 3), fire = sm(k / 0.4) * (P.target === 1 ? 1 - sm((a - PL.COL - 1.2) / 1.6) : 1 - sm((a - 14.5) / 1.5));
+    const r = rng(hash(e.id) + 3), fire = sm((k - 0.9) / 1.0) * (P.target === 1 ? 1 - sm((a - PL.COL - 1.2) / 1.6) : 1 - sm((a - 14.5) / 1.5));
     if (pI[1] + sink < T.base - 8 * S && fire > 0.01) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.7 * fire * (0.8 + 0.2 * Math.sin(t * 13)); ctx.drawImage(FIRE(), T.x0 - 30 * S, pI[1] + sink - 60 * S, T.x1 - T.x0 + 60 * S, 100 * S); ctx.restore(); ctx.globalAlpha = 1; }
     // Fire in the windows of the floors it went into: some windows glowing, flames licking out of others, spreading over time
     { const rr = rng(hash(e.id) + 41), G = T.grid, cols = G ? G.cols : 9, rows0 = G ? Math.round((pI[1] - G.y0) / ((G.y1 - G.y0) / G.rows)) : 0, cw = G ? (G.x1 - G.x0) / G.cols : (T.x1 - T.x0) / 9, ch = G ? (G.y1 - G.y0) / G.rows : 22 * S;
-      for (let rI = -2; rI <= 2; rI++) for (let c = 0; c < cols; c++) { const born = Math.abs(rI) * 0.9 + Math.abs(c - cols * (0.2 + 0.6 * rr())) * 0.12 + rr() * 0.8, f = fire * sm((k - born) / 0.8), big = rr(); if (f <= 0.01 || (Math.abs(rI) === 2 && big < 0.6)) continue;
+      for (let rI = -2; rI <= 2; rI++) for (let c = 0; c < cols; c++) { const born = 1.0 + Math.abs(rI) * 0.9 + Math.abs(c - cols * (0.2 + 0.6 * rr())) * 0.12 + rr() * 0.8, f = fire * sm((k - born) / 0.8), big = rr(); if (f <= 0.01 || (Math.abs(rI) === 2 && big < 0.6)) continue;
         const x = G ? lerp(G.x0, G.x1, (c + 0.5) / cols) : lerp(T.x0, T.x1, (c + 0.5) / cols), y = (G ? G.y0 + (rows0 + rI + 0.5) * ch : pI[1] + rI * ch) + sink; if (y > T.base - 8 * S) continue;
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = f * (0.6 + 0.4 * Math.sin(t * (6 + big * 5) + c)); ctx.fillStyle = 'rgb(255,120,30)'; ctx.fillRect(x - cw * 0.3, y - ch * 0.25, cw * 0.6, ch * 0.5); blob(ctx, FIRE(), x, y, cw * 0.9, f * 0.5); ctx.restore();
         if (big > 0.45) flame(ctx, x, y - ch * 0.15, cw * (0.5 + big * 0.7) * (0.7 + 0.3 * sm((k - born) / 2)), t + c * 0.37 + rI, c + rI * 31, f); } }
-    plume(ctx, (T.x0 + T.x1) / 2, pI[1] - 10 * S, a, PL.IMP + 0.15, P.target === 1 ? PL.COL + 1.4 : 15, S, hash(e.id), { n: 70, life: 7, w: T.x1 - T.x0, s0: 18, grow: 13, rise: 22, alpha: 0.9, from: ts => [0, P.target === 1 ? plSink(ts) * H : 0] });
-    // The bang: a fireball in, and one out the far side
-    if (k < 2.6) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; [[pI, 0], [[T.x1 - 2 * S, pI[1] + 4 * S], 0.12]].forEach(([p, dl]) => { const kk = k - dl; if (kk < 0) return; const rad = 92 * S * (1 - Math.exp(-kk * 5)), al = 1 - sm(kk / 2.2);
-      blob(ctx, FIRE(), p[0], p[1], rad * 2.4, al); blob(ctx, CORE(), p[0], p[1], rad * 1.2, al * (1 - sm(kk / 0.9))); }); ctx.restore(); ctx.globalAlpha = 1;
-      debris(ctx, pI[0], pI[1], k, S, hash(e.id) + 9, 26, { ang: Math.PI, spread: 2.2, sp: 110, hot: true, life: 2.4, floor: T.base }); debris(ctx, T.x1, pI[1], k - 0.12, S, hash(e.id) + 19, 22, { ang: 0, spread: 2, sp: 120, hot: true, life: 2.4, floor: T.base }); }
+    plume(ctx, (T.x0 + T.x1) / 2, pI[1] - 10 * S, a, PL.IMP + 1.2, P.target === 1 ? PL.COL + 1.4 : 15, S, hash(e.id), { n: 70, life: 7, w: T.x1 - T.x0, s0: 18, grow: 13, rise: 22, alpha: 0.9, from: ts => [0, P.target === 1 ? plSink(ts) * H : 0] });
+    // The explosion: a flash, then a ball of fire bursting out of the side it went into and out the far side, rolling over and
+    // turning to black smoke as it cools. Only after that do the floors catch fire.
+    if (k < 4) { const rr = rng(hash(e.id) + 9), FP = puffs('255,150,60'), fl = 1 - sm(k / 0.25);
+      if (fl > 0) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, CORE(), pI[0], pI[1], 160 * S * (0.4 + k * 3), fl); ctx.restore(); }
+      for (let i = 0; i < 70; i++) { const side = i < 44 ? -1 : 1, dl = side > 0 ? 0.14 : 0, kk = k - dl - rr() * 0.18, an = side < 0 ? Math.PI + (rr() - 0.5) * 3.2 : (rr() - 0.5) * 2.8, sp = (70 + rr() * 210) * S, sz0 = (10 + rr() * 20) * S, ox = side < 0 ? pI[0] : T.x1 - 2 * S, oy = pI[1] + (rr() - 0.5) * 16 * S; if (kk < 0) continue;
+        const d = sp * (1 - Math.exp(-kk * 3)) / 3, x = ox + Math.cos(an) * d + 16 * S * kk, y = oy + Math.sin(an) * d * 0.7 - 20 * S * Math.pow(kk, 1.25), sz = sz0 * (1 + 2.2 * (1 - Math.exp(-kk * 2))), hot = 1 - sm((kk - 0.2) / 1.0);
+        if (hot > 0.01) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, FP[i % 4], x, y, sz, 0.85 * hot); if (kk < 0.5) blob(ctx, CORE(), x, y, sz * 0.7, 0.5 * (1 - kk / 0.5)); ctx.restore(); }
+        blob(ctx, SMOKE(i), x, y - 4 * S, sz * 1.15, 0.55 * sm((kk - 0.3) / 0.7) * (1 - sm((kk - 2.4) / 1.6))); }
+      ctx.globalAlpha = 1;
+      debris(ctx, pI[0], pI[1], k, S, hash(e.id) + 9, 30, { ang: Math.PI, spread: 2.2, sp: 120, hot: true, life: 2.6, floor: T.base }); debris(ctx, T.x1, pI[1], k - 0.14, S, hash(e.id) + 19, 24, { ang: 0, spread: 2, sp: 130, hot: true, life: 2.6, floor: T.base }); }
     // Coming down: dust rolling out from the bottom, bits breaking off the top
     if (P.target === 1 && a >= PL.COL) { const r2 = rng(hash(e.id) + 99), end = 1 - sm((a - 11.5) / 4.5);
       for (let i = 0; i < 90; i++) { const side = i % 2 ? 1 : -1, x0 = lerp(T.x0, T.x1, r2()), y0 = T.base - r2() * 20 * S, ts = PL.COL + 0.1 + r2() * 3.4, kk = a - ts, vx = side * (20 + r2() * 110) * S, up = (6 + r2() * 30) * S, sz = (14 + r2() * 34) * S; if (kk < 0) continue;
@@ -257,42 +263,60 @@ const StudioEvents = (() => {
       if (!land) { ctx.save(); ctx.translate(p[0] - 6 * S * kk, y); ctx.rotate(kk * 3); ctx.fillStyle = 'rgb(64,62,72)'; ctx.fillRect(-7 * S, -3 * S, 14 * S, 6 * S); ctx.restore(); }
       else { const kl = kk - Math.sqrt(2 * (T.base - p[1]) / (300 * S)); for (let i = 0; i < 6; i++) blob(ctx, DUST(i), p[0] - 6 * S * kk + (i - 2.5) * 6 * S, T.base - 6 * S - 10 * S * kl, (8 + 10 * kl) * S, 0.5 * (1 - sm(kl / 2))); ctx.globalAlpha = 1; } } }
   }
-  /* The squid: his own PatterSquid, cut from his icon and lit like it is really out there in the night. It rises up behind the
-     big block, peers over the roof, wraps its outer tentacles round the sides, squeezes till the block shakes, looks at you,
-     blinks, and sinks away. The tentacles move by bending the picture row by row (each half on its own, so they can reach
-     out and pull in). */
-  const SQ = { eyes: [[103, 137], [192, 137]], er: 23, head: 205, mid: 151, outerL: 78, outerR: 224 };
-  function squidLit(bmp) { if (SPR.sq && SPR.sq.src === bmp) return SPR.sq; const W = bmp.width, H = bmp.height, c = mk(W, H), g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
-    g.globalCompositeOperation = 'multiply'; let gr = g.createLinearGradient(0, 0, W * 0.3, H); gr.addColorStop(0, 'rgb(150,160,196)'); gr.addColorStop(0.5, 'rgb(104,112,146)'); gr.addColorStop(1, 'rgb(118,100,96)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'source-atop'; gr = g.createLinearGradient(0, H * 0.4, 0, H); gr.addColorStop(0, 'rgba(255,150,70,0)'); gr.addColorStop(1, 'rgba(255,150,70,0.16)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    gr = g.createLinearGradient(W, 0, W * 0.55, 0); gr.addColorStop(0, 'rgba(10,12,24,0.35)'); gr.addColorStop(1, 'rgba(10,12,24,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'destination-in'; g.drawImage(bmp, 0, 0); return (SPR.sq = { c, src: bmp }); }
-  function squidMove(a, S) {
-    const rise = a < 3.2 ? sm(a / 3.2) : a > 10.6 ? 1 - sm((a - 10.6) / 2.8) : 1;
-    const reach = sm((a - 2.6) / 1.6), grip = win(a, 4.6, 8.6, 0.5, 0.6), loose = sm((a - 8.4) / 1);
-    return { rise, spread: (16 * reach - 26 * grip + 6 * loose * (1 - sm((a - 10.6) / 1))) * S, sway: (12 - 9 * grip) * S, shake: win(a, 5, 8.2, 0.4, 0.4), look: a > 8.4 && a < 10.8 ? 1 : 0,
-      blink: Math.max(win(a, 6.1, 6.32, 0.06, 0.06), win(a, 9.25, 9.47, 0.06, 0.06), win(a, 9.62, 9.84, 0.06, 0.06)), alpha: sm(a / 0.6) * (1 - sm((a - 13.2) / 0.6)) };
+  /* The squid: his own PatterSquid. Its head (cut from his logo, lit for the night) rises up behind the big block and peers
+     over the roof. Its arms come out from behind and wind round the block in a spiral, in front across the face of it and
+     behind it at the sides, then squeeze (the block rocks), let go, and slide back as the head sinks away. The head moves as
+     one piece (a slow bob, a tilt, a breath, blinks), and the arms are smooth tapered tubes shaded like the logo. */
+  const SQ = { eyes: [[103, 137], [192, 137]], er: 23, rows: 240 };
+  const squidGrip = a => win(a, 5, 8.4, 0.7, 0.8);
+  function squidLit(bmp) { if (SPR.sq && SPR.sq.src === bmp) return SPR.sq; const W = bmp.width, H = Math.min(bmp.height, SQ.rows), c = mk(W, H), g = c.getContext('2d'); g.drawImage(bmp, 0, 0, W, H, 0, 0, W, H);
+    g.globalCompositeOperation = 'multiply'; let gr = g.createLinearGradient(0, 0, W * 0.3, H); gr.addColorStop(0, 'rgb(160,168,200)'); gr.addColorStop(1, 'rgb(108,114,146)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-atop'; gr = g.createLinearGradient(W, 0, W * 0.5, 0); gr.addColorStop(0, 'rgba(10,12,24,0.35)'); gr.addColorStop(1, 'rgba(10,12,24,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(bmp, 0, 0, W, H, 0, 0, W, H); return (SPR.sq = { c, src: bmp }); }
+  const ease = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+  function squidState(a) {
+    const rise = ease(a / 2.8) * (1 - ease((a - 11.2) / 2.4)), grip = squidGrip(a);
+    const arm = (t0, t1) => ease((a - t0) / (t1 - t0)) * (1 - ease((a - 10.2 - (t0 - 2) * 0.4) / 1.8));
+    return { rise, grip, arms: [arm(2.0, 4.4), arm(2.5, 4.9), arm(3.1, 5.3)], look: sm((a - 8.5) / 0.4) * (1 - sm((a - 10.6) / 0.4)),
+      blink: Math.max(win(a, 6.4, 6.62, 0.07, 0.07), win(a, 9.0, 9.22, 0.07, 0.07), win(a, 9.45, 9.67, 0.07, 0.07)), alpha: sm(a / 0.5) * (1 - sm((a - 13.4) / 0.5)) };
   }
-  function squidPlace(X, P) { const M = X.T || X.T2, T = P.target === 1 ? X.T : X.T2 || X.T, bw = M.x1 - M.x0, h = bw * 1.32; return { T, h, cx: (T.x0 + T.x1) / 2 + bw * 0.03, top0: T.top + h * 0.15, top1: T.top - h * 0.42 }; }
-  function drawSquidBody(ctx, sq, G, a, m, S, part) {
-    const spr = sq.c, W = spr.width, H = spr.height, k = G.h / H, top = lerp(G.top0, G.top1, m.rise) + Math.sin(a * 1.3) * 2 * S + m.shake * Math.sin(a * 41) * 1.2 * S, x0 = G.cx - W * k / 2, step = 2, clipY = G.T.base - 10 * S;
-    ctx.save(); ctx.globalAlpha = m.alpha * (part === 'front' ? sm((a - 2.8) / 0.8) * (1 - sm((a - 10.2) / 0.6)) : 1);
-    for (let sy = part === 'front' ? 228 : 0; sy < H; sy += step) { const y = top + sy * k; if (y > clipY) break; const u = Math.max(0, (sy - SQ.head) / (H - SQ.head)), sw = Math.sin(a * 2.1 - sy * 0.032) * m.sway * Math.pow(u, 1.3), sp = m.spread * Math.pow(u, 1.15), hh = step * k + 0.7;
-      if (part === 'front') { ctx.drawImage(spr, 0, sy, SQ.outerL, step, x0 + sw - sp, y, SQ.outerL * k, hh); ctx.drawImage(spr, SQ.outerR, sy, W - SQ.outerR, step, x0 + SQ.outerR * k + sw + sp, y, (W - SQ.outerR) * k, hh); }
-      else { ctx.drawImage(spr, 0, sy, SQ.mid, step, x0 + sw - sp, y, SQ.mid * k, hh); ctx.drawImage(spr, SQ.mid, sy, W - SQ.mid, step, x0 + SQ.mid * k + sw + sp, y, (W - SQ.mid) * k, hh); } }
-    if (part !== 'front') SQ.eyes.forEach(([ex, ey]) => { const X0 = x0 + ex * k, Y0 = top + ey * k, r = SQ.er * k; if (Y0 > clipY) return;
-      // Blink: the skin above the eye comes down over it
-      if (m.blink > 0.01) { ctx.save(); ctx.beginPath(); ctx.arc(X0, Y0, r * 1.06, 0, TAU); ctx.clip(); const lid = r * 2.2 * m.blink; ctx.drawImage(spr, ex - SQ.er, ey - SQ.er * 3.2, SQ.er * 2, SQ.er * 2, X0 - r * 1.1, Y0 - r * 1.1 - r * 2.2 + lid, r * 2.2, r * 2.2); ctx.restore(); }
-      // A wet catch light, which moves when it looks round at you
-      if (m.blink < 0.6) { const lx = m.look ? 0 : Math.sin(a * 0.8) * 0.35, ly = m.look ? -0.05 : -0.3; ctx.globalAlpha = m.alpha * 0.85 * (1 - m.blink); ctx.fillStyle = 'rgb(205,215,240)'; ctx.beginPath(); ctx.arc(X0 + (lx - 0.32) * r, Y0 + (ly - 0.1) * r, r * 0.17, 0, TAU); ctx.fill(); ctx.globalAlpha = m.alpha * 0.4 * (1 - m.blink); ctx.beginPath(); ctx.arc(X0 + (lx + 0.3) * r, Y0 + (ly + 0.35) * r, r * 0.08, 0, TAU); ctx.fill(); ctx.globalAlpha = m.alpha; } });
-    ctx.restore(); return { top, x0, k };
+  // A path round the block: from behind the middle, out round one side, across the front, round the other side and on
+  const ARMS = [{ dir: 1, y0: 0.03, turns: 1.05, pitch: 0.4, w0: 30 }, { dir: -1, y0: 0.14, turns: 1.0, pitch: 0.44, w0: 27 }, { dir: 1, y0: 0.4, turns: 0.85, pitch: 0.42, w0: 23 }];
+  function armPath(T, A, a, S, grip, N) {
+    const cx = (T.x0 + T.x1) / 2, hw = (T.x1 - T.x0) / 2 + (7 - 5.5 * grip) * S, H = T.base - T.top, pts = [];
+    for (let i = 0; i <= N; i++) { const s = i / N, th = Math.PI + A.dir * s * A.turns * TAU, u = cl(Math.sin(th) * 1.1, -1, 1), wob = Math.sin(a * 2.4 - s * 8 + A.y0 * 20) * 4 * S * (0.3 + s) * (1 - 0.7 * grip);
+      pts.push({ x: cx + hw * u + wob * Math.cos(th), y: T.top + H * (A.y0 + s * A.turns * A.pitch) + Math.cos(a * 2.1 - s * 7) * 2.5 * S * (0.3 + s) + Math.max(0, Math.cos(th)) * 16 * S, front: Math.cos(th) > 0, s }); }
+    return pts;
+  }
+  const notTower = (ctx, T) => { ctx.beginPath(); ctx.rect(-1e5, -1e5, 2e5, 2e5); T.p.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.clip('evenodd'); };
+  function drawArms(ctx, T, st, a, S, front) {
+    ARMS.forEach((A, j) => { const rev = st.arms[j]; if (rev <= 0.005) return; const N = 140, pts = armPath(T, A, a, S, st.grip, N), m = Math.max(2, Math.floor(N * rev)), thick = 1 + 0.12 * st.grip;
+      const wAt = i => { const s = i / N, tip = cl((m - i) / (N * 0.14), 0, 1); return A.w0 * S * thick * (1 - 0.62 * s) * (0.22 + 0.78 * Math.sqrt(tip)); };
+      const segs = []; for (let i = 0; i < m; i++) if (pts[i].front === front) segs.push(i); if (!segs.length) return;
+      const pass = (col, wk, dy, alpha) => { ctx.strokeStyle = col; ctx.globalAlpha = alpha * st.alpha; segs.forEach(i => { const p = pts[i], q = pts[i + 1], w = wAt(i); ctx.lineWidth = Math.max(0.6, w * (wk === 1.18 ? 1 : wk) + (wk === 1.18 ? 1.6 * S : 0)); ctx.beginPath(); ctx.moveTo(p.x, p.y + dy * w); ctx.lineTo(q.x, q.y + dy * w); ctx.stroke(); }); };
+      ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (front) { pass('rgb(22,24,36)', 1.18, 0, 0.55); pass('rgb(126,130,150)', 1, 0, 1); pass('rgb(92,96,118)', 0.55, 0.22, 0.85); pass('rgb(150,154,174)', 0.5, -0.12, 0.7); pass('rgb(184,188,206)', 0.22, -0.26, 0.7);
+        // Suckers along the underside, like the logo: pale rings with a dark middle
+        for (let k = 6; k < m - 4; k += 7) { if (!pts[k].front) continue; const p = pts[k], w = wAt(k), r = Math.max(0.8, w * 0.17); ctx.globalAlpha = st.alpha; ctx.fillStyle = 'rgb(170,172,188)'; ctx.beginPath(); ctx.arc(p.x, p.y + w * 0.3, r, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgb(40,40,54)'; ctx.beginPath(); ctx.arc(p.x, p.y + w * 0.3, r * 0.5, 0, TAU); ctx.fill(); } }
+      else { pass('rgb(26,28,42)', 1.18, 0, 0.9); pass('rgb(98,104,130)', 1, 0, 1); pass('rgb(140,146,170)', 0.3, -0.24, 0.6); }
+      ctx.restore(); ctx.globalAlpha = 1; });
   }
   function evSquid(X, e, P, part) {
-    const { ctx, S, t } = X, { a } = phase(e, t); if ((!X.T && !X.T2) || !X.squid) return; const sq = squidLit(X.squid), G = squidPlace(X, P), m = squidMove(a, S);
-    if (part === 'back') { const b = drawSquidBody(ctx, sq, G, a, m, S, 'back');
-      // Its shadow and the city light under it
-      ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,150,80,0.5)'), G.cx, G.T.base - 30 * S, G.h * 0.45, 0.12 * m.alpha * m.rise); ctx.restore(); void b; return; }
-    if (part === 'front' && P.target === 1) drawSquidBody(ctx, sq, G, a, m, S, 'front');
+    const { ctx, S, t } = X, { a } = phase(e, t), T = P.target === 1 ? X.T : (X.T2 || X.T); if (!T || !X.squid) return; const st = squidState(a);
+    if (part === 'back') {
+      const sq = squidLit(X.squid), M = X.T || T, k = (M.x1 - M.x0) * 0.74 / sq.c.width, hw = sq.c.width * k, hh = sq.c.height * k, cx = (T.x0 + T.x1) / 2 + 4 * S;
+      const by = lerp(T.top + hh + 12 * S, T.top + hh * 0.2, st.rise) + Math.sin(a * 1.15) * 2.2 * S, tilt = Math.sin(a * 0.62) * 0.035 + st.grip * Math.sin(a * 6.3) * 0.01, br = 1 + 0.012 * Math.sin(a * 1.9) - 0.03 * st.grip;
+      ctx.save(); notTower(ctx, T); ctx.globalAlpha = st.alpha;
+      ctx.save(); ctx.translate(cx, by); ctx.rotate(tilt); ctx.scale(1 + (1 - br) * 0.6, br); ctx.drawImage(sq.c, -hw / 2, -hh, hw, hh);
+      // Eyes: blinking with the skin above them, a wet catch light that turns to you when it looks
+      SQ.eyes.forEach(([ex, ey]) => { const X0 = -hw / 2 + ex * k, Y0 = -hh + ey * k, r = SQ.er * k;
+        if (st.blink > 0.01) { ctx.save(); ctx.beginPath(); ctx.arc(X0, Y0, r * 1.07, 0, TAU); ctx.clip(); ctx.drawImage(sq.c, ex - SQ.er, ey - SQ.er * 3.1, SQ.er * 2, SQ.er * 2, X0 - r * 1.1, Y0 - r * 3.3 + r * 2.2 * st.blink, r * 2.2, r * 2.2); ctx.restore(); }
+        const g = 1 - st.blink, lx = lerp(-0.35 + Math.sin(a * 0.5) * 0.15, 0, st.look), ly = lerp(-0.32, -0.05, st.look); if (g > 0.05) { ctx.globalAlpha = st.alpha * 0.8 * g; ctx.fillStyle = 'rgb(210,220,245)'; ctx.beginPath(); ctx.arc(X0 + lx * r, Y0 + ly * r, r * 0.16, 0, TAU); ctx.fill(); ctx.globalAlpha = st.alpha; } });
+      ctx.restore();
+      drawArms(ctx, T, st, a, S, false); ctx.restore();
+      // City light from below on it
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,150,80,0.5)'), cx, T.top, hw * 0.8, 0.07 * st.alpha * st.rise); ctx.restore(); return; }
+    if (part === 'front') drawArms(ctx, T, st, a, S, true);
   }
   // Where the windows are on a block, for the telly and the lit up word
   const cell = (T, c, r) => { const G = T.grid; return [lerp(G.x0, G.x1, (c + 0.5) / G.cols), lerp(G.y0, G.y1, (r + 0.5) / G.rows), (G.x1 - G.x0) / G.cols, (G.y1 - G.y0) / G.rows]; };
