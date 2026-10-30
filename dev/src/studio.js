@@ -33,7 +33,7 @@ const Studio = (() => {
   const builtinMarks = () => JSON.parse(JSON.stringify(hasBuiltin ? STUDIO_MARKS : { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }));
   let readyP = null;
   const LOGO = 'pattersquid-logo', PLATE = 'studio-plate';
-  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null, typeof STUDIO_PLATE !== 'undefined' ? Layers.setAsset(PLATE, STUDIO_PLATE) : null]).catch(() => null) : Promise.resolve());
+  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null, typeof STUDIO_PLATE !== 'undefined' ? Layers.setAsset(PLATE, STUDIO_PLATE) : null, typeof STUDIO_SQUID !== 'undefined' ? Layers.setAsset('studio-squid', STUDIO_SQUID) : null]).catch(() => null) : Promise.resolve());
   const Ev = typeof StudioEvents !== 'undefined' ? StudioEvents : null;
   // Older settings with no room picture use the built-in studio
   // and his own studio always uses the marks that come with the app (so fixes to them reach him), unless he has marked it himself
@@ -268,7 +268,7 @@ const Studio = (() => {
   }
   function drawWindow(ctx, cfg, M, v, t, tl, L, w, fl) {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v, v.pic); if (!R) return; const amt = cl(+cfg.rain, 0, 2), fall = amt * (v.EL ? v.EL.rainK : 1);
-    let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q); X = { ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
+    let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q); X = { ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, squid: typeof Layers !== 'undefined' && Layers.assets['studio-squid'] ? Layers.assets['studio-squid'].bmp : null, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
     ctx.save(); pathOf(ctx, Q); ctx.clip();
     if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
     if (w.snow) { const sc = snowCover(v.pic, R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
