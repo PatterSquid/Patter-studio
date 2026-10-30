@@ -282,16 +282,27 @@ const StudioEvents = (() => {
   }
   // A path round the block: from behind the middle, out round one side, across the front, round the other side and on
   const ARMS = [{ dir: 1, y0: 0.03, turns: 1.05, pitch: 0.4, w0: 30 }, { dir: -1, y0: 0.14, turns: 1.0, pitch: 0.44, w0: 27 }, { dir: 1, y0: 0.4, turns: 0.85, pitch: 0.42, w0: 23 }];
-  function armPath(T, A, a, S, grip, N) {
-    const cx = (T.x0 + T.x1) / 2, hw = (T.x1 - T.x0) / 2 + (7 - 5.5 * grip) * S, H = T.base - T.top, pts = [];
-    for (let i = 0; i <= N; i++) { const s = i / N, th = Math.PI + A.dir * s * A.turns * TAU, u = cl(Math.sin(th) * 1.1, -1, 1), wob = Math.sin(a * 2.4 - s * 8 + A.y0 * 20) * 4 * S * (0.3 + s) * (1 - 0.7 * grip);
-      pts.push({ x: cx + hw * u + wob * Math.cos(th), y: T.top + H * (A.y0 + s * A.turns * A.pitch) + Math.cos(a * 2.1 - s * 7) * 2.5 * S * (0.3 + s) + Math.max(0, Math.cos(th)) * 16 * S, front: Math.cos(th) > 0, s }); }
+  /* An arm's path: round the block in a loose spiral that is never quite regular (it bulges off the walls and sags across
+     the front), with slow waves running down it from the root, the grip tightening from the root outwards, and the free end
+     curling up and over on itself, feeling about as it reaches round */
+  function armPath(T, A, a, S, grip, N, rev, j) {
+    const cx = (T.x0 + T.x1) / 2, H = T.base - T.top, pts = [], end = Math.max(0.02, rev), curlL = Math.min(0.2, end * 0.5);
+    for (let i = 0; i <= N; i++) { const s = i / N, g = grip * sm((grip * 1.3 - s * 0.6) / 0.4 + 0.5), loose = 1 - 0.75 * g;
+      const th = Math.PI + A.dir * (s * A.turns * TAU + 0.22 * Math.sin(s * 4.2 + a * 0.55 + j * 2.1) * loose);
+      const hw = (T.x1 - T.x0) / 2 + (6 + 5 * Math.sin(s * 6.5 - a * 0.8 + j) * loose - 4.5 * g) * S, u = Math.sin(th), front = Math.cos(th);
+      // Waves travelling down the arm, bigger towards the end, settling as it grips
+      const amp = (2.5 + 9 * s) * S * loose, wv = Math.sin(a * 1.9 - s * 11 + j * 1.7) * amp, wv2 = Math.sin(a * 1.13 - s * 5 + j) * amp * 0.6;
+      let x = cx + hw * (u + 0.08 * u * u * u) + wv2 * front * 0.6, y = T.top + H * (A.y0 + s * A.turns * A.pitch + 0.035 * Math.sin(s * 3.1 + a * 0.4 + j)) + Math.max(0, front) * (12 + 6 * loose) * S + wv;
+      // The free end lifts off and curls round, moving all the time
+      const c = (s - (end - curlL)) / curlL; if (c > 0) { const cc = Math.min(1, c), ph = cc * cc * (3 + 0.7 * Math.sin(a * 1.6 + j * 2)) + 0.3 * Math.sin(a * 2.3 + j), r = (16 - 6 * cc) * S * (A.w0 / 26);
+        x += A.dir * -Math.sin(ph) * r * 0.9 * (front > 0 ? 1 : 0.6); y += -(1 - Math.cos(ph)) * r; }
+      pts.push({ x, y, front: front > 0, s, g }); }
     return pts;
   }
   const notTower = (ctx, T) => { ctx.beginPath(); ctx.rect(-1e5, -1e5, 2e5, 2e5); T.p.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.clip('evenodd'); };
   function drawArms(ctx, T, st, a, S, front) {
-    ARMS.forEach((A, j) => { const rev = st.arms[j]; if (rev <= 0.005) return; const N = 140, pts = armPath(T, A, a, S, st.grip, N), m = Math.max(2, Math.floor(N * rev)), thick = 1 + 0.12 * st.grip;
-      const wAt = i => { const s = i / N, tip = cl((m - i) / (N * 0.14), 0, 1); return A.w0 * S * thick * (1 - 0.62 * s) * (0.22 + 0.78 * Math.sqrt(tip)); };
+    ARMS.forEach((A, j) => { const rev = st.arms[j]; if (rev <= 0.005) return; const N = 160, pts = armPath(T, A, a, S, st.grip, N, rev, j), m = Math.max(2, Math.floor(N * rev)), thick = 1;
+      const wAt = i => { const s = i / N, tip = cl((m - i) / (N * 0.14), 0, 1); return A.w0 * S * (1 + 0.14 * pts[i].g) * (1 + 0.07 * Math.sin(a * 3.1 - s * 13 + j)) * (1 - 0.6 * s) * (0.2 + 0.8 * Math.sqrt(tip)); };
       const segs = []; for (let i = 0; i < m; i++) if (pts[i].front === front) segs.push(i); if (!segs.length) return;
       const pass = (col, wk, dy, alpha) => { ctx.strokeStyle = col; ctx.globalAlpha = alpha * st.alpha; segs.forEach(i => { const p = pts[i], q = pts[i + 1], w = wAt(i); ctx.lineWidth = Math.max(0.6, w * (wk === 1.18 ? 1 : wk) + (wk === 1.18 ? 1.6 * S : 0)); ctx.beginPath(); ctx.moveTo(p.x, p.y + dy * w); ctx.lineTo(q.x, q.y + dy * w); ctx.stroke(); }); };
       ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
