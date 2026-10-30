@@ -64,7 +64,8 @@ const StudioEvents = (() => {
 
   /* ---------- Little pictures ---------- */
   const SPR = {};
-  function glow(col) { const k = 'g' + col; if (SPR[k]) return SPR[k]; const c = mk(96, 96), g = c.getContext('2d'), gr = g.createRadialGradient(48, 48, 0, 48, 48, 48);
+  let glowN = 0;
+  function glow(col) { const k = 'g' + col; if (SPR[k]) return SPR[k]; if (++glowN > 250) { Object.keys(SPR).forEach(x => { if (x[0] === 'g' && x !== 'grain') delete SPR[x]; }); glowN = 0; } const c = mk(96, 96), g = c.getContext('2d'), gr = g.createRadialGradient(48, 48, 0, 48, 48, 48);
     gr.addColorStop(0, col); gr.addColorStop(0.2, col.replace(/[\d.]+\)$/, m => String(+m.slice(0, -1) * 0.55) + ')')); gr.addColorStop(0.55, col.replace(/[\d.]+\)$/, m => String(+m.slice(0, -1) * 0.12) + ')')); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 96, 96); return (SPR[k] = c); }
   // Value noise, for smoke, dust and flames that look like the real thing rather than round blobs
   function vnoise(seed) { const r = rng(seed), N = 64, L2 = new Float32Array(N * N); for (let i = 0; i < N * N; i++) L2[i] = r();
@@ -124,8 +125,8 @@ const StudioEvents = (() => {
   const rotAbout = (p, c, ang) => { const s = Math.sin(ang), co = Math.cos(ang), dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * co - dy * s, c[1] + dx * s + dy * co]; };
 
   /* ---------- What is left: a pile of rubble, worked out once for the size of the block ---------- */
-  function pileSprite(T, S) {
-    const W = (T.x1 - T.x0) * 1.4, Hh = (T.x1 - T.x0) * 0.33, q = 2, key = 'pile' + Math.round(W) + ':' + Math.round(Hh); if (SPR[key]) return SPR[key];
+  function pileSprite(T, S, snowy) {
+    const W = (T.x1 - T.x0) * 1.4, Hh = (T.x1 - T.x0) * 0.33, q = 2, key = 'pile' + Math.round(W) + ':' + Math.round(Hh) + (snowy ? 's' : ''); if (SPR[key]) return SPR[key];
     const c = mk(W * q, Hh * q), g = c.getContext('2d'), r = rng(31337); g.scale(q, q);
     const top = x => { const f = x / W * 2 - 1, m = Math.pow(Math.max(0, 1 - f * f), 0.75); return Hh * (1 - m * (0.8 + 0.12 * Math.sin(x * 0.045 / S) * Math.sin(x * 0.017 / S + 1) + 0.04 * Math.sin(x * 0.13 / S))); };
     g.beginPath(); g.moveTo(0, Hh); for (let x = 0; x <= W; x += 2) g.lineTo(x, top(x)); g.lineTo(W, Hh); g.closePath();
@@ -139,12 +140,14 @@ const StudioEvents = (() => {
     for (let i = 0; i < 7; i++) { const x = W * (0.18 + r() * 0.64), y = top(x) + 5 * S, l = (16 + r() * 22) * S, an = (r() - 0.5) * 1.1; g.save(); g.translate(x, y); g.rotate(an); g.fillStyle = 'rgb(66,66,78)'; g.fillRect(-l / 2, -2.5 * S, l, 4 * S); g.fillStyle = 'rgb(84,84,98)'; g.fillRect(-l / 2, -2.5 * S, l, 1.1 * S); g.restore(); }
     g.strokeStyle = 'rgba(40,30,28,0.9)'; g.lineWidth = 1 * S; for (let i = 0; i < 12; i++) { const x = W * (0.12 + r() * 0.76), y = top(x) + 3 * S; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (r() - 0.5) * 16 * S, y - (6 + r() * 12) * S, x + (r() - 0.5) * 22 * S, y - (10 + r() * 14) * S); g.stroke(); }
     const wx = W * 0.58, wy = top(W * 0.58) + 10 * S; g.save(); g.translate(wx, wy); g.rotate(-0.35); g.fillStyle = 'rgb(255,196,120)'; g.fillRect(-4 * S, -3 * S, 8 * S, 6 * S); g.strokeStyle = 'rgb(40,36,40)'; g.lineWidth = 1.4 * S; g.strokeRect(-4 * S, -3 * S, 8 * S, 6 * S); g.restore();
+    // In snow, a white covering on the tops of the lumps
+    if (snowy) { g.save(); g.globalCompositeOperation = 'source-atop'; for (let i = 0; i < 700; i++) { const x = r() * W, d = Math.pow(r(), 1.8), y = top(x) + 1 * S + d * Hh * 0.55; g.fillStyle = `rgba(196,204,226,${(0.45 + r() * 0.25) * (1 - d)})`; g.beginPath(); g.ellipse(x, y, (1 + r() * 2.6) * S, (0.6 + r() * 1) * S, (r() - 0.5) * 0.6, 0, TAU); g.fill(); } const gs = g.createLinearGradient(0, 0, 0, Hh); gs.addColorStop(0, 'rgba(200,208,230,0.45)'); gs.addColorStop(0.5, 'rgba(200,208,230,0)'); g.fillStyle = gs; g.fillRect(0, 0, W, Hh); g.restore(); }
     // Soft like the photo, and fading out at the bottom where it sits behind the trees and roofs in front
     const o = mk(c.width, c.height), og = o.getContext('2d'); og.filter = 'blur(' + (0.7 * q * S).toFixed(2) + 'px)'; og.drawImage(c, 0, 0); og.filter = 'none'; og.globalCompositeOperation = 'destination-in'; const fd = og.createLinearGradient(0, 0, 0, c.height); fd.addColorStop(0, '#000'); fd.addColorStop(0.72, '#000'); fd.addColorStop(1, 'rgba(0,0,0,0)'); og.fillStyle = fd; og.fillRect(0, 0, c.width, c.height);
     return (SPR[key] = { c: o, w: W, h: Hh, glow: [wx, wy] });
   }
   function drawPile(X, amt, T) {
-    if (amt <= 0) return; const { ctx, S, t, L } = X, P = pileSprite(T, S), x = (T.x0 + T.x1) / 2 - P.w / 2, h = P.h * amt, y = T.base + 2 * S - h;
+    if (amt <= 0) return; const { ctx, S, t, L } = X, P = pileSprite(T, S, X.snowy), x = (T.x0 + T.x1) / 2 - P.w / 2, h = P.h * amt, y = T.base + 2 * S - h;
     ctx.drawImage(P.c, x, y, P.w, h);
     if (amt > 0.9) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,180,90,0.7)'), x + P.glow[0], y + P.glow[1] * amt, 9 * S, 0.45 + 0.1 * Math.sin(TAU * 3 * t / L));
       // Embers still glowing here and there
@@ -163,7 +166,7 @@ const StudioEvents = (() => {
     if (P.draw && kit) {
       ctx.save(); ctx.beginPath(); ctx.rect(T.x0 - H, T.top - H, H * 3, H + T.base - T.top + 1 * S); ctx.clip();
       ctx.translate(piv[0], piv[1]); ctx.rotate(P.rot); ctx.translate(-piv[0] + P.shake * S, -piv[1] + P.sink * H);
-      ctx.drawImage(kit.c, kit.x, kit.y, kit.w, kit.h); dressed(); ctx.restore();
+      ctx.drawImage(kit.c, kit.x, kit.y, kit.w, kit.h); if (X.snowT) { const Z = X.snowT; ctx.save(); ctx.beginPath(); T.p.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.clip(); ctx.globalAlpha = Z.a; ctx.drawImage(Z.c, Z.R.x0, Z.R.y0, Z.R.w, Z.R.h); ctx.restore(); } dressed(); ctx.restore();
     } else if (!P.gone) dressed();
     if (P.state === 'leaning' && !P.act) prop(X, T, P);
     if (P.pile > 0 && kit) stump(X, T, P.pile);
@@ -350,8 +353,8 @@ const StudioEvents = (() => {
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
     if (k < 0.25) blob(ctx, glow(`rgba(${rgb},1)`), x, y, 70 * S, 0.8 * (1 - k / 0.25));
     for (let i = 0; i < n; i++) { const an = r() * TAU, sp = (110 + r() * 50) * S * (0.85 + 0.15 * Math.sin(an * 3)), vx = Math.cos(an) * sp, vy = Math.sin(an) * sp, life = 1.7 + r() * 0.8; if (k > life) continue;
-      const p = pos(vx, vy, k), q = pos(vx, vy, Math.max(0, k - 0.14)), f = k / life, col = f < 0.5 ? rgb : rgb.map((c, j) => Math.round(lerp(c, [255, 150, 60][j], (f - 0.5) * 2))), tw = f > 0.55 ? (Math.sin(k * 60 + i * 7) > 0 ? 1 : 0.2) : 1, al = (1 - sm((f - 0.6) / 0.4)) * tw;
-      const lg = ctx.createLinearGradient(q[0], q[1], p[0], p[1]); lg.addColorStop(0, `rgba(${col},0)`); lg.addColorStop(1, `rgba(${col},${0.8 * al})`); ctx.strokeStyle = lg; ctx.lineWidth = 1.3 * S; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(p[0], p[1]); ctx.stroke();
+      const p = pos(vx, vy, k), q = pos(vx, vy, Math.max(0, k - 0.14)), f = k / life, col = f < 0.5 ? rgb : rgb.map((c, j) => Math.round(lerp(c, [255, 150, 60][j], Math.round((f - 0.5) * 8) / 4))), tw = f > 0.55 ? (Math.sin(k * 60 + i * 7) > 0 ? 1 : 0.2) : 1, al = (1 - sm((f - 0.6) / 0.4)) * tw;
+      const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; ctx.strokeStyle = `rgb(${col})`; ctx.lineWidth = 1.2 * S; ctx.globalAlpha = 0.25 * al; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(m[0], m[1]); ctx.stroke(); ctx.globalAlpha = 0.7 * al; ctx.beginPath(); ctx.moveTo(m[0], m[1]); ctx.lineTo(p[0], p[1]); ctx.stroke();
       blob(ctx, glow(`rgba(${col},1)`), p[0], p[1], 3.2 * S, al); }
     ctx.restore(); ctx.globalAlpha = 1;
     // The smoke it leaves, lit by it for a moment
@@ -509,13 +512,15 @@ const StudioEvents = (() => {
      and softened to the same focus as the picture, so it sits out there with the flats rather than on top of them. */
   const bufs = {};
   function layer(X, key, fn, haze, blurK, sat) {
-    const { ctx, R, v } = X; if (!R) { fn(X); return; } const px = v.px || v.s, W = Math.max(2, Math.ceil(R.w * px)), H = Math.max(2, Math.ceil(R.h * px));
+    // Drawn at a little under full size and enlarged on the way in: that is the softness the photo has, and it is far quicker
+    // than blurring (blurK sets how soft)
+    const { ctx, R, v } = X; if (!R) { fn(X); return; } const px = (v.px || v.s) / (1 + blurK * 0.9), W = Math.max(2, Math.ceil(R.w * px)), H = Math.max(2, Math.ceil(R.h * px));
     let c = bufs[key]; if (!c || c.width !== W || c.height !== H) c = bufs[key] = mk(W, H); const g = c.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, W, H); g.setTransform(px, 0, 0, px, -R.x0 * px, -R.y0 * px); g.imageSmoothingQuality = 'high';
     fn(Object.assign({}, X, { ctx: g }));
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; if (X.grain) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = g.createPattern(grainTex(), 'repeat'); g.save(); g.scale(px * 0.9, px * 0.9); g.fillRect(0, 0, W / (px * 0.9), H / (px * 0.9)); g.restore(); }
     if (haze) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = haze; g.fillRect(0, 0, W, H); } g.globalCompositeOperation = 'source-over';
-    ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'blur(' + (blurK * px).toFixed(2) + 'px)' + (sat ? ' saturate(' + sat + ')' : ''); ctx.drawImage(c, R.x0, R.y0, R.w, R.h); ctx.restore();
+    ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'medium'; ctx.drawImage(c, 0, 0, W, H, R.x0, R.y0, W / px, H / px); ctx.restore(); void sat;
   }
   // A soft mottle, like feathers and grime, laid over things that are close
   function grainTex() { if (SPR.grain) return SPR.grain; const N = 128, c = mk(N, N), g = c.getContext('2d'), id = g.createImageData(N, N), d = id.data, nz = vnoise(4242);

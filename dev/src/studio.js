@@ -34,6 +34,7 @@ const Studio = (() => {
   let readyP = null;
   const LOGO = 'pattersquid-logo', PLATE = 'studio-plate';
   const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null, typeof STUDIO_PLATE !== 'undefined' ? Layers.setAsset(PLATE, STUDIO_PLATE) : null, typeof STUDIO_SQUID !== 'undefined' ? Layers.setAsset('studio-squid', STUDIO_SQUID) : null]).catch(() => null) : Promise.resolve());
+  const DBG = {};
   const Ev = typeof StudioEvents !== 'undefined' ? StudioEvents : null;
   // Older settings with no room picture use the built-in studio
   // and his own studio always uses the marks that come with the app (so fixes to them reach him), unless he has marked it himself
@@ -59,17 +60,22 @@ const Studio = (() => {
     const dr = cfg.mark ? 0 : cfg.drift === 'more' ? 1 : cfg.drift === 'off' ? 0 : 0.5;
     let s = Math.max(W / iw, H / ih) * (1 + 0.035 * dr);
     const s0 = s * (1 + 0.012 * dr), z = dr ? 1 + 0.012 * dr * (0.5 - 0.5 * Math.cos(TAU * t / L)) : 1; s *= z;
-    const A = cfg.avatar, fx = H > W ? (A ? cl(+A.x, 0, 1) : cl(+cfg.focus || 0.5, 0, 1)) : 0.5, fy = 0.5;
+    const A = cfg.avatar, fx = H > W ? vFocus(cfg, A) : 0.5, fy = 0.5;
     let ox = W / 2 - fx * iw * s, oy = H / 2 - fy * ih * s;
     if (dr) { ox += wob(t, L, 11, [1, 2]) * 9 * dr * s; oy += wob(t, L, 12, [1, 3]) * 5 * dr * s; }
     ox = cl(ox, W - iw * s, 0); oy = cl(oy, H - ih * s, 0);
     return { s, s0, ox, oy, iw, ih };
   }
   const P = (m, v) => [m[0] * v.iw, m[1] * v.ih];
+  // Where a vertical (9:16) frame looks: at you, at the window (so whatever happens outside is in shot), or the middle.
+  // Automatic follows you when the avatar is in, the window when something is happening outside, otherwise the middle.
+  function vFocus(cfg, A) { const G = eff(cfg).marks && eff(cfg).marks.glass, gx = G ? G.reduce((s2, p) => s2 + p[0], 0) / G.length : 0.5, f = cfg.vfocus || 'auto';
+    if (f === 'you' && A) return cl(+A.x, 0, 1); if (f === 'window') return cl(gx, 0, 1); if (f === 'middle') return cl(+cfg.focus || 0.5, 0, 1);
+    return A ? cl(+A.x, 0, 1) : (cfg.events || []).length ? cl(gx, 0, 1) : cl(+cfg.focus || 0.5, 0, 1); }
   // The room picture resized once to the size it is shown at, so each frame only nudges it a little (big resizes are slow)
   const bigCache = new Map(), bmpIds = new WeakMap(); let bmpN = 0;
   function bigRoom(bmp, s) { const k = Math.min(1.6, Math.ceil(s * 20) / 20); if (!bmpIds.has(bmp)) bmpIds.set(bmp, ++bmpN); const key = bmpIds.get(bmp) + ':' + k; let B = bigCache.get(key); if (B) return B;
-    const c = mk(bmp.width * k, bmp.height * k), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height); B = { c, k: c.width / bmp.width }; if (bigCache.size > 3) bigCache.delete(bigCache.keys().next().value); bigCache.set(key, B); return B; }
+    const c = mk(bmp.width * k, bmp.height * k), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height); B = { c, k: c.width / bmp.width }; if (bigCache.size > 6) bigCache.delete(bigCache.keys().next().value); bigCache.set(key, B); return B; }
   // Draw part of the room (in picture pixels) from the resized copy
   const roomPart = (ctx, B, sx, sy, sw, sh, dx, dy, dw, dh) => ctx.drawImage(B.c, sx * B.k, sy * B.k, sw * B.k, sh * B.k, dx, dy, dw, dh);
 
@@ -195,10 +201,16 @@ const Studio = (() => {
     g.clearRect(0, 0, W, Hh); g.putImageData(out, 0, 0); return (R.outCv = c);
   }
   // Light from outside thrown into the room through the window, in a colour
-  function windowGlow(ctx, Q, v, rgb, e) { if (e <= 0.005) return; const cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4, [r, g, b] = rgb;
-    ctx.save(); ctx.globalCompositeOperation = 'screen'; const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, v.iw * 0.85); gr.addColorStop(0, `rgba(${r},${g},${b},${cl(0.32 * e, 0, 1)})`); gr.addColorStop(0.4, `rgba(${r},${g},${b},${cl(0.14 * e, 0, 1)})`); gr.addColorStop(1, `rgba(${r},${g},${b},${cl(0.05 * e, 0, 1)})`); ctx.fillStyle = gr; ctx.fillRect(0, 0, v.iw, v.ih);
-    const fl = floorLight(Q, v), tint = buf('tint', fl.width, fl.height), tg = tint.getContext('2d'); tg.globalCompositeOperation = 'copy'; tg.drawImage(fl, 0, 0); tg.globalCompositeOperation = 'source-in'; tg.fillStyle = `rgb(${r},${g},${b})`; tg.fillRect(0, 0, tint.width, tint.height);
-    ctx.globalAlpha = cl(0.5 * e, 0, 1); ctx.drawImage(tint, 0, 0, v.iw, v.ih); ctx.restore(); }
+  /* Light from outside thrown into the room through the window: a wide soft glow from the window (one gradient), and the
+     window's shape across the floor (only the strip of floor it falls on is painted). Lightning keeps its own blue colours;
+     everything else going on outside is mixed into one colour and laid on in one go. */
+  function roomLight(ctx, Q, v, cols, a, e, floorA, tint) {
+    const cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4;
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, v.iw * 0.85); [0, 0.4, 1].forEach((o, i) => g.addColorStop(o, `rgba(${cols[i].map(Math.round).join(',')},${cl(a[i] * e, 0, 1)})`)); ctx.fillStyle = g; ctx.fillRect(0, 0, v.iw, v.ih);
+    let fl = floorLight(Q, v); const k = fl.width / v.iw, y0 = Math.floor(v.ih * 0.74 * k) / k;
+    if (tint) { const tb = buf('tint', fl.width, fl.height), tg = tb.getContext('2d'); tg.globalCompositeOperation = 'copy'; tg.drawImage(fl, 0, 0); tg.globalCompositeOperation = 'source-in'; tg.fillStyle = `rgb(${tint.map(Math.round).join(',')})`; tg.fillRect(0, 0, tb.width, tb.height); fl = tb; }
+    ctx.globalAlpha = floorA; ctx.drawImage(fl, 0, y0 * k, fl.width, fl.height - y0 * k, 0, y0, v.iw, v.ih - y0); ctx.restore(); }
+  function windowGlow(ctx, Q, v, rgb, e) { if (e <= 0.015) return; roomLight(ctx, Q, v, [rgb, rgb, rgb], [0.32, 0.14, 0.05], e, cl(0.5 * e, 0, 1), rgb); }
 
   /* ---------- Storms: when the lightning goes, from the weather and from any thunder bars on the timeline ---------- */
   function flashTimes(cfg) {
@@ -268,7 +280,7 @@ const Studio = (() => {
   }
   function drawWindow(ctx, cfg, M, v, t, tl, L, w, fl) {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v, v.pic); if (!R) return; const amt = cl(+cfg.rain, 0, 2), fall = amt * (v.EL ? v.EL.rainK : 1);
-    let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q); X = { ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, squid: typeof Layers !== 'undefined' && Layers.assets['studio-squid'] ? Layers.assets['studio-squid'].bmp : null, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
+    let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q), R0 = w.snow && v.kit && v.pic !== roomBmp(cfg) ? roomBits(cfg, v, roomBmp(cfg)) : null; X = { snowT: R0 ? { c: snowCover(roomBmp(cfg), R0, Q, []), R: R0, a: cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1) } : null, snowy: !!w.snow, ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, squid: typeof Layers !== 'undefined' && Layers.assets['studio-squid'] ? Layers.assets['studio-squid'].bmp : null, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
     ctx.save(); pathOf(ctx, Q); ctx.clip();
     if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
     if (w.snow) { const sc = snowCover(v.pic, R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
@@ -280,8 +292,10 @@ const Studio = (() => {
     if (w.distant * fall > 0) distantRain(ctx, R, tl, L, w.distant * fall, v);
     if (w.snow && fall > 0.01) snow(ctx, R, tl, L, w.snow * Math.max(0.3, amt) * Math.min(1, fall / Math.max(0.01, amt)), v);
     if (X) Ev.near(X);
-    if ((w.beads || w.snow) && amt > 0) { ctx.save(); ctx.globalAlpha = cl(0.22 * w.fog * (0.5 + amt * 0.5), 0, 0.5); ctx.drawImage(R.mist, R.x0, R.y0, R.w, R.h); ctx.restore(); }
-    if (w.fog) { const g = ctx.createLinearGradient(0, R.y0 + R.h * 0.55, 0, R.y0 + R.h); g.addColorStop(0, 'rgba(150,165,200,0)'); g.addColorStop(1, `rgba(150,165,200,${0.07 * w.fog})`); ctx.fillStyle = g; ctx.fillRect(R.x0, R.y0, R.w, R.h); }
+    // Mist on the glass and fog low down outside, made once for the weather and laid on in one go
+    const mfa = (w.beads || w.snow) && amt > 0 ? cl(0.22 * w.fog * (0.5 + amt * 0.5), 0, 0.5) : 0; if (mfa || w.fog) { const key = mfa.toFixed(3) + ':' + w.fog; R.mf = R.mf || {}; let c = R.mf[key];
+      if (!c) { if (Object.keys(R.mf).length > 6) R.mf = {}; c = R.mf[key] = mk(R.mist.width, R.mist.height); const g = c.getContext('2d'); if (mfa) { g.globalAlpha = mfa; g.drawImage(R.mist, 0, 0); g.globalAlpha = 1; } if (w.fog) { const gr = g.createLinearGradient(0, c.height * 0.55, 0, c.height); gr.addColorStop(0, 'rgba(150,165,200,0)'); gr.addColorStop(1, `rgba(150,165,200,${0.07 * w.fog})`); g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height); } }
+      ctx.drawImage(c, R.x0, R.y0, R.w, R.h); }
     if ((w.beads || w.runners) && amt > 0) glass(ctx, Q, R, tl, L, w, amt, v);
     if (X) Ev.onGlass(X);
     // Snow gathered against the bottom of the glass: soft, heavier in the corners, with a faint frosting above it
@@ -382,7 +396,7 @@ const Studio = (() => {
 
   // Plants sway: thin strips of the picture slide a touch, more the further from where the plant is fixed
   function drawPlants(ctx, B, M, v, t, L) {
-    (M.plants || []).forEach((m, i) => { const x0 = m[0] * v.iw, y0 = m[1] * v.ih, x1 = m[2] * v.iw, y1 = m[3] * v.ih, top = m[4] !== 'bottom', h = y1 - y0, step = 3, amp = (top ? 2.2 : 1.6) * v.iw / 1672;
+    (M.plants || []).forEach((m, i) => { const x0 = m[0] * v.iw, y0 = m[1] * v.ih, x1 = m[2] * v.iw, y1 = m[3] * v.ih, top = m[4] !== 'bottom', h = y1 - y0, step = 5, amp = (top ? 2.2 : 1.6) * v.iw / 1672;
       const sw = wob(t, L, 500 + i, [2, 3, 5]); if (h < 4 || x1 - x0 < 4) return;
       // A plant in front of the window is left still: moving it would wipe the rain or snow off the glass behind it
       if (M.glass) { const G = M.glass.map(q => P(q, v)), gx0 = Math.min(...G.map(p => p[0])), gx1 = Math.max(...G.map(p => p[0])), gy0 = Math.min(...G.map(p => p[1])), gy1 = Math.max(...G.map(p => p[1])); if (x1 > gx0 && x0 < gx1 && y1 > gy0 && y0 < gy1) return; }
@@ -406,12 +420,9 @@ const Studio = (() => {
     const avgLamp = lamps.length ? lamps.reduce((a, x) => a + Math.min(1, x.f), 0) / lamps.length : 1, dark = Math.max(1 - room, (1 - avgLamp) * 0.55);
     if (dark > 0.01) { ctx.save(); ctx.beginPath(); ctx.rect(-10, -10, v.iw + 20, v.ih + 20); if (M.glass) { const Q = M.glass.map(m => P(m, v)); ctx.moveTo(Q[0][0], Q[0][1]); for (let k = 3; k >= 1; k--) ctx.lineTo(Q[k][0], Q[k][1]); ctx.closePath(); } ctx.fillStyle = `rgba(4,6,14,${cl(dark, 0, 0.85)})`; ctx.fill('evenodd'); ctx.restore(); }
     // Lightning lights the room from the window
-    if (fl.e > 0.01 && M.glass) { const Q = M.glass.map(m => P(m, v)), cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4, e = fl.e;
-      ctx.save(); ctx.globalCompositeOperation = 'screen'; const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, v.iw * 0.85); g.addColorStop(0, `rgba(150,165,240,${0.3 * e})`); g.addColorStop(0.4, `rgba(110,125,200,${0.13 * e})`); g.addColorStop(1, `rgba(80,90,160,${0.05 * e})`); ctx.fillStyle = g; ctx.fillRect(0, 0, v.iw, v.ih);
-      // The window's shape thrown softly across the floor, stretched away from the window
-      ctx.globalAlpha = 0.5 * cl(e, 0, 1.2); ctx.drawImage(floorLight(Q, v), 0, 0, v.iw, v.ih); ctx.restore(); }
+    if (fl.e > 0.01 && M.glass) roomLight(ctx, M.glass.map(m => P(m, v)), v, [[150, 165, 240], [110, 125, 200], [80, 90, 160]], [0.3, 0.13, 0.05], fl.e, 0.5 * cl(fl.e, 0, 1.2), null);
     // Whatever is going on outside lights the room too (the avatar carries on regardless)
-    if (v.EL && M.glass) { const Q = M.glass.map(m => P(m, v)); v.EL.glow.forEach(([rgb, e]) => windowGlow(ctx, Q, v, rgb, e)); }
+    if (v.EL && M.glass && v.EL.glow.length) { let e = 0; const c = [0, 0, 0]; v.EL.glow.forEach(([rgb, x]) => { if (x <= 0) return; e += x; rgb.forEach((q, i) => { c[i] += q * x; }); }); if (e > 0.015) windowGlow(ctx, M.glass.map(m => P(m, v)), v, c.map(q => q / e), e); }
     void S;
   }
 
@@ -460,6 +471,8 @@ const Studio = (() => {
   const showBufs = {};
   function showPicture(sh, t, look, w, h) {
     const key = sh.id + ':' + Math.round(w) + 'x' + Math.round(h); let c = showBufs[key]; if (!c) { if (Object.keys(showBufs).length > 24) Object.keys(showBufs).forEach(k => delete showBufs[k]); c = showBufs[key] = mk(w, h); }
+    // A picture or headline only changes when it is edited, so it is drawn again only then
+    const stamp = sh.kind === 'clip' ? null : [sh.kind, sh.text, sh.sub, sh.style, sh.asset, sh.fit, typeof Layers !== 'undefined' && sh.asset && Layers.assets[sh.asset] ? 1 : 0].join('|'); if (stamp && c.stamp === stamp) return c; c.stamp = stamp;
     const g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
     if (sh.kind === 'pic') { const a = sh.asset && typeof Layers !== 'undefined' && Layers.assets[sh.asset]; g.fillStyle = '#111'; g.fillRect(0, 0, w, h); if (a && a.bmp) { const k = sh.fit === 'fit' ? Math.min(w / a.w, h / a.h) : Math.max(w / a.w, h / a.h); g.drawImage(a.bmp, (w - a.w * k) / 2, (h - a.h * k) / 2, a.w * k, a.h * k); } }
     else if (sh.kind === 'text') { const paper = sh.style === 'paper'; g.fillStyle = paper ? '#e9e3d4' : '#101216'; g.fillRect(0, 0, w, h); const pad = w * 0.08, fw = w - pad * 2; let sz = Math.min(h * 0.22, w * 0.2); const words = String(sh.text || 'HEADLINE').split(/\s+/);
@@ -494,7 +507,9 @@ const Studio = (() => {
       const fd = Math.min(0.35, (en - st) / 3), a = sm((t - st) / fd) * sm((en - t) / fd); if (a <= 0.003) return;
       const Q = fr.p.map(m => P(m, v)), wpx = Math.hypot(Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]) * (v.px || v.s), hpx = Math.hypot(Q[3][0] - Q[0][0], Q[3][1] - Q[0][1]) * (v.px || v.s), k = Math.min(1, 720 / Math.max(wpx, hpx, 1));
       const img = showPicture(sh, t, look, Math.max(16, wpx * k * 1.5), Math.max(16, hpx * k * 1.5));
-      ctx.save(); ctx.globalAlpha = a; warp(ctx, img, Q);
+      // Frames seen nearly square on are laid on with one slant; only a frame in real perspective needs the triangle mesh
+      const par = Math.hypot(Q[2][0] - (Q[1][0] + Q[3][0] - Q[0][0]), Q[2][1] - (Q[1][1] + Q[3][1] - Q[0][1]));
+      ctx.save(); ctx.globalAlpha = a; if (par < 1.5) { ctx.save(); pathOf(ctx, Q); ctx.clip(); ctx.transform((Q[1][0] - Q[0][0]) / img.width, (Q[1][1] - Q[0][1]) / img.width, (Q[3][0] - Q[0][0]) / img.height, (Q[3][1] - Q[0][1]) / img.height, Q[0][0], Q[0][1]); ctx.drawImage(img, 0, 0); ctx.restore(); } else warp(ctx, img, Q, par < 14 ? 3 : 6);
       // The room's light falls on it too, unless it glows like a screen; and a faint sheen of glass
       const lit = !!sh.glow; pathOf(ctx, Q); ctx.fillStyle = lit ? 'rgba(10,12,30,0.08)' : 'rgba(14,10,18,0.45)'; ctx.fill();
       const g = ctx.createLinearGradient(Q[0][0], Q[0][1], Q[2][0], Q[2][1]); g.addColorStop(0, 'rgba(255,255,255,0.07)'); g.addColorStop(0.45, 'rgba(255,255,255,0)'); g.addColorStop(0.55, 'rgba(255,255,255,0.03)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.fill(); ctx.restore();
@@ -561,7 +576,7 @@ const Studio = (() => {
   const signBuf = {};
   function drawLogoSign(ctx, N, B, eyes, t, L, room, px, cfg, v) {
     const a = typeof Layers !== 'undefined' && Layers.assets[LOGO]; if (!a || !a.bmp) { ready(); return; }
-    const Q = B.Q, [cx, cy] = qCentre(Q), side = Math.max(Math.hypot(Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]), Math.hypot(Q[3][0] - Q[0][0], Q[3][1] - Q[0][1])), hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]), lit = cl(room, 0, 1) * hum;
+    const Q = B.Q, [cx, cy] = qCentre(Q), side = Math.max(Math.hypot(Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]), Math.hypot(Q[3][0] - Q[0][0], Q[3][1] - Q[0][1])), hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]); let lit = cl(room, 0, 1) * hum;
     // Light thrown out onto everything round it, and down onto whatever is below
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.42 * lit; ctx.drawImage(glowSprite('rgba(110,160,255,0.6)'), cx - side * 1.35, cy - side * 1.3, side * 2.7, side * 2.6);
@@ -575,12 +590,14 @@ const Studio = (() => {
       // and a thin bright line where the light catches the frame's edge
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.25 * lit; ctx.strokeStyle = '#9fc0ff'; ctx.lineWidth = Math.max(0.6, side * 0.008); pathOf(ctx, FQ); ctx.stroke(); ctx.restore(); }
     // The disc itself, drawn flat at the size it shows, then laid onto the corners
-    const n = Math.max(32, Math.min(640, Math.round(side * px * 1.25))); let c = signBuf.c; if (!c || c.width !== n) c = signBuf.c = mk(n, n); const g = c.getContext('2d'), D = n;
+    // (kept for the few brightness and blink steps it goes through, so it is not redrawn every frame)
+    const n = Math.max(32, Math.min(640, Math.round(side * px * 1.25))); lit = Math.round(lit * 50) / 50; eyes = eyes > 0.995 ? 1 : Math.round(eyes * 20) / 20; const skey = n + ':' + lit + ':' + eyes; let c = signBuf.m && signBuf.m.get(skey);
+    if (!c) { if (!signBuf.m || signBuf.m.size > 16) signBuf.m = new Map(); c = mk(n, n); signBuf.m.set(skey, c); const g = c.getContext('2d'), D = n;
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n); g.save(); g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 1, 0, TAU); g.clip(); g.imageSmoothingQuality = 'high'; g.drawImage(a.bmp, 0, 0, n, n);
     if (eyes < 0.999) { const k = 1 - eyes, er = D * 0.048; [[0.412, 0.373], [0.585, 0.373]].forEach(([ex, ey]) => { const X = ex * D, Y = ey * D; g.save(); g.beginPath(); g.arc(X, Y, er * 1.08, 0, TAU); g.clip(); g.fillStyle = '#e4dfd9'; g.fillRect(X - er * 1.2, Y - er * 1.2, er * 2.4, er * 2.4 * k); g.strokeStyle = 'rgba(90,80,70,0.7)'; g.lineWidth = Math.max(0.6, er * 0.14); g.beginPath(); g.moveTo(X - er * 1.1, Y - er * 1.2 + er * 2.4 * k); g.lineTo(X + er * 1.1, Y - er * 1.2 + er * 2.4 * k); g.stroke(); g.restore(); }); }
     g.globalCompositeOperation = 'screen'; const gr = g.createRadialGradient(n / 2, n * 0.42, 0, n / 2, n / 2, n / 2); gr.addColorStop(0, `rgba(170,190,255,${0.16 * lit})`); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(150,180,255,${0.35 * lit})`); g.fillStyle = gr; g.fillRect(0, 0, n, n);
     if (lit < 0.98) { g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgba(3,4,10,${cl((1 - lit) * 0.9, 0, 0.9)})`; g.fillRect(0, 0, n, n); }
-    g.restore(); g.save(); g.globalAlpha = 0.6 * lit; g.strokeStyle = '#d4e3ff'; g.lineWidth = Math.max(1, n * 0.012); g.beginPath(); g.arc(n / 2, n / 2, n / 2 - g.lineWidth, 0, TAU); g.stroke(); g.restore();
+    g.restore(); g.save(); g.globalAlpha = 0.6 * lit; g.strokeStyle = '#d4e3ff'; g.lineWidth = Math.max(1, n * 0.012); g.beginPath(); g.arc(n / 2, n / 2, n / 2 - g.lineWidth, 0, TAU); g.stroke(); g.restore(); }
     // A soft shadow where it stands off the wall, nudged down and to the right
     const sh = Q.map(p => [p[0] + side * 0.025, p[1] + side * 0.035]); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#05070d'; ctx.beginPath(); for (let i = 0; i <= 32; i++) { const an = i / 32 * TAU, p = onGlass(sh, 0.5 + 0.5 * Math.cos(an), 0.5 + 0.5 * Math.sin(an)); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); } ctx.fill(); ctx.restore();
     // Laid on with one smooth slant (no seams): across follows the top and bottom edges, down follows the two sides
@@ -793,6 +810,7 @@ const Studio = (() => {
         field('Clouds drifting', seg([['1', 'On'], ['0', 'Off']], cfg.clouds !== false ? '1' : '0', v => { cfg.clouds = v === '1'; ch(); })),
         grid2(field('Life outside', seg([['1', 'On'], ['0', 'Off']], cfg.outside !== false ? '1' : '0', v => { cfg.outside = v === '1'; ch(); })), field('Plants sway', seg([['1', 'On'], ['0', 'Off']], cfg.sway !== false ? '1' : '0', v => { cfg.sway = v === '1'; ch(); }))),
         field('Camera drift', seg([['off', 'Still'], ['gentle', 'Gentle'], ['more', 'More']], cfg.drift || 'gentle', v => { cfg.drift = v; ch(); })),
+        field('In a vertical (9:16) video, keep in shot', seg([['auto', 'Automatic'], ['you', 'You'], ['window', 'The window'], ['middle', 'The middle']], cfg.vfocus || 'auto', v => { cfg.vfocus = v; ch(); }), 'Automatic follows you, or the window when something is happening outside.'),
         grid2(field('Repeats every (seconds)', num(L, v => { cfg.loop = r2(v); changed(); }, 4, 120, 1, 'Loop length'), 'Everything repeats exactly, so it loops without a join.'), field('Clip length (seconds, 0 = automatic)', num(+cfg.len || 0, v => { cfg.len = r2(v); changed(); }, 0, 1800, 1, 'Clip length'), cfg.avatar ? 'Automatic follows your avatar video.' : 'Automatic is one loop.')),
         H('p', { className: 'hint', textContent: 'Add thunder, lightning, flickers and lights off at a moment with + Sting on the timeline. Camera moves, captions, name titles and a subscribe reminder are under Layers.' })));
     }
@@ -879,5 +897,5 @@ const Studio = (() => {
     }
   }
 
-  return { id: 'studio', name: 'Studio', ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
+  return { id: 'studio', name: 'Studio', ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _dbg: DBG, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
 })();
