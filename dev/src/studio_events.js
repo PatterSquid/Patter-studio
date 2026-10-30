@@ -1,0 +1,478 @@
+/* Things that happen outside the studio window, for the running gag: a plane into the flats, a failed demolition, a giant
+   PatterSquid, a telly out the window, bonfire night gone wrong, a polis chase, a burnt out car, a UFO, a seagull, Scotland's
+   summer, the lights in the flats spelling a word, and a lightning strike that knocks the power out.
+   Each one is a bar on the Studio timeline and is a pure function of time. The flats can be left in a state (rubble,
+   leaning, scaffolding, patched up) that carries on to the next video. Studio draws the room; this draws the events. */
+const StudioEvents = (() => {
+  const { cl, lerp, rng } = E;
+  const TAU = Math.PI * 2;
+  const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
+  const hash = s => { let h = 2166136261; s = String(s || ''); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const pmod = (x, m) => ((x % m) + m) % m;
+  const win = (a, a0, a1, f0 = 0.3, f1 = 0.3) => sm((a - a0) / f0) * (1 - sm((a - a1 + f1) / f1));
+
+  const KINDS = [['plane', 'Plane into the flats'], ['demolish', 'Failed demolition'], ['squid', 'Giant PatterSquid'], ['telly', 'Telly out the window'], ['bonfire', 'Bonfire night gone wrong'], ['polis', 'Polis chase'], ['carfire', 'Burnt out car'], ['ufo', 'UFO'], ['gull', 'Seagull'], ['summer', "Scotland's summer"], ['spell', 'Lights spell a word'], ['strike', 'Lightning strike']];
+  const LEN = { plane: 16, demolish: 11, squid: 14, telly: 5, bonfire: 12, polis: 11, carfire: 14, ufo: 12, gull: 7, summer: 9, spell: 8, strike: 7 };
+  const TOWER = [['standing', 'Standing'], ['rubble', 'A pile of rubble'], ['leaning', 'Leaning'], ['scaffold', 'Covered in scaffolding'], ['patched', 'Patched up']];
+  const HINT = {
+    plane: 'A plane flies into the big tower block. It burns, then comes down into a pile of rubble. You do not notice. Afterwards the flats are rubble.',
+    demolish: 'The council try to blow the flats up. The charges go off, the block drops a bit, wobbles, and is left leaning. Afterwards the flats are leaning.',
+    squid: 'A giant PatterSquid rises behind the flats, wraps its tentacles round the block, gives it a squeeze, has a look at you, and slips away.',
+    telly: 'Somebody chucks a telly out a window. It sparks when it lands.',
+    bonfire: 'A bonfire on the grass with fireworks going up, until one comes straight at your window and goes off on the glass.',
+    polis: 'A car speeds past with the polis after it, blue lights going, then the helicopter with its searchlight, which sweeps across your room.',
+    carfire: 'A car on the road starts smoking, catches fire and goes up.',
+    ufo: 'A flying saucer comes down out of the clouds and beams up a wheelie bin, then shoots off.',
+    gull: 'A seagull lands on the ledge outside, stares at you, pecks the glass, screams, and leaves you a present on the window.',
+    summer: "The sun comes out for a few seconds. Then it chucks it down with a crack of thunder.",
+    spell: 'Every light in the flats goes off and the windows spell out your word, scrolling across the block like a sign.',
+    strike: 'Lightning hits the flats. The power goes out across the whole scheme and in your room, then flickers back on.',
+  };
+  const TINT = { plane: '#c0503a', demolish: '#b07a3a', squid: '#6d4f9a', telly: '#3a7ab0', bonfire: '#d07a2a', polis: '#2f5fd0', carfire: '#c0603a', ufo: '#3a9a6a', gull: '#8a8a8a', summer: '#d0b02a', spell: '#d0902a', strike: '#5b6fd8' };
+  const nameOf = k => (KINDS.find(x => x[0] === k) || [, 'Outside'])[1];
+
+  const evs = cfg => (cfg.events || []).filter(e => e && LEN[e.k]).slice().sort((a, b) => (+a.start || 0) - (+b.start || 0));
+  const durOf = e => Math.max(0.5, +e.dur || LEN[e.k]);
+  // Where we are in an event, in its own seconds (a longer bar plays it slower)
+  const phase = (e, t) => { const st = +e.start || 0, d = durOf(e), k = e.k === 'spell' ? 1 : LEN[e.k] / d; return { a: (t - st) * k, k, d, st }; };
+  const active = (cfg, t) => evs(cfg).filter(e => t >= (+e.start || 0) && t < (+e.start || 0) + durOf(e));
+
+  /* ---------- The flats over time ---------- */
+  const afterOf = (k, s) => k === 'plane' ? 'rubble' : k === 'demolish' ? (s === 'rubble' ? 'rubble' : 'leaning') : s;
+  function towerAt(cfg, t) {
+    let s = TOWER.some(x => x[0] === cfg.tower) ? cfg.tower : 'standing', act = null;
+    for (const e of evs(cfg)) { const st = +e.start || 0; if (t < st) break; if (e.k !== 'plane' && e.k !== 'demolish') continue; const from = s; s = afterOf(e.k, s); if (t < st + durOf(e)) act = { e, from }; }
+    return { s, act };
+  }
+  const LEAN = 4 * Math.PI / 180;
+  const PL = { IMP: 3.2, COL: 7.2, COLE: 10.6 }, DM = { BANG: 2.4 };
+  const plSink = a => a < PL.COL ? 0 : Math.pow(sm((a - PL.COL) / (PL.COLE - PL.COL)), 1.25) * 1.08;
+  function dmRot(a, from) { const k = a - DM.BANG - 0.1; if (k <= 0) return from === 'leaning' ? LEAN : 0; return from === 'leaning' ? LEAN - 6 * Math.PI / 180 * Math.exp(-k * 1.3) * Math.sin(k * 4.5) : LEAN * (1 - Math.exp(-k * 1.6) * Math.cos(k * 5)); }
+  // How the big block is drawn right now: still part of the room picture, or cut out and moved (the picture then has it removed)
+  function pose(cfg, t) {
+    const { s, act } = towerAt(cfg, t), base = act ? act.from : s;
+    const P = { state: base, gone: false, draw: false, rot: 0, sink: 0, shake: 0, pile: 0, act, target: base === 'rubble' ? 2 : 1 };
+    if (base === 'rubble') { P.gone = true; P.pile = 1; }
+    else if (base === 'leaning') { P.gone = true; P.draw = true; P.rot = LEAN; }
+    if (act && base !== 'rubble') { const { a } = phase(act.e, t);
+      if (act.e.k === 'plane' && a >= PL.COL) { P.gone = true; P.draw = true; P.sink = plSink(a); P.rot += Math.sin(a * 2.3) * 0.012 * sm((a - PL.COL) / 1.5); P.pile = sm((a - PL.COL - 0.3) / (PL.COLE - PL.COL - 0.3)); }
+      if (act.e.k === 'demolish' && a >= DM.BANG + 0.1) { P.gone = true; P.draw = true; P.sink = 0.045 * sm((a - DM.BANG - 0.1) / 0.35); P.rot = dmRot(a, base); P.dust = 1; }
+    }
+    if (P.target === 1) active(cfg, t).forEach(e => { if (e.k !== 'squid') return; const { a } = phase(e, t); if (a > 0.5 && a < 13) P.draw = true; const q = win(a, 5, 8.2, 0.4, 0.4); if (q > 0) { P.gone = true; P.shake = Math.sin(a * 47) * 1.6 * q + Math.sin(a * 23) * 0.8 * q; } });
+    return P;
+  }
+
+  /* ---------- Little pictures ---------- */
+  const SPR = {};
+  function glow(col) { const k = 'g' + col; if (SPR[k]) return SPR[k]; const c = mk(96, 96), g = c.getContext('2d'), gr = g.createRadialGradient(48, 48, 0, 48, 48, 48);
+    gr.addColorStop(0, col); gr.addColorStop(0.2, col.replace(/[\d.]+\)$/, m => String(+m.slice(0, -1) * 0.55) + ')')); gr.addColorStop(0.55, col.replace(/[\d.]+\)$/, m => String(+m.slice(0, -1) * 0.12) + ')')); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 96, 96); return (SPR[k] = c); }
+  // A soft lumpy puff of smoke or dust
+  function puff(rgb) { const k = 'p' + rgb; if (SPR[k]) return SPR[k]; const c = mk(96, 96), g = c.getContext('2d'), r = rng(hash(k));
+    for (let i = 0; i < 8; i++) { const x = 48 + (r() - 0.5) * 34, y = 48 + (r() - 0.5) * 26, rad = 14 + r() * 18, gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(${rgb},0.42)`); gr.addColorStop(0.6, `rgba(${rgb},0.2)`); gr.addColorStop(1, `rgba(${rgb},0)`); g.fillStyle = gr; g.fillRect(0, 0, 96, 96); }
+    return (SPR[k] = c); }
+  const blob = (ctx, spr, x, y, s, a) => { if (a <= 0.003 || s <= 0) return; ctx.globalAlpha = Math.min(1, a); ctx.drawImage(spr, x - s, y - s, s * 2, s * 2); };
+  const FIRE = () => glow('rgba(255,130,40,0.95)'), CORE = () => glow('rgba(255,236,170,1)'), SMOKE = () => puff('26,26,32'), DUST = () => puff('100,100,110');
+  // A flickering fire: a few tongues of flame with a bright core
+  function flame(ctx, x, y, s, t, seed, a = 1) {
+    if (a <= 0.01) return; const r = rng(seed); ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) { const ph = r() * TAU, f = 0.75 + 0.25 * Math.sin(t * (9 + r() * 7) + ph) + 0.12 * Math.sin(t * 23 + ph * 2), dx = (r() - 0.5) * s * 0.9, dy = -s * (0.2 + i * 0.32) * f;
+      blob(ctx, FIRE(), x + dx, y + dy, s * (1.15 - i * 0.2) * f, 0.6 * a); }
+    blob(ctx, CORE(), x, y - s * 0.15, s * 0.45 * (0.85 + 0.15 * Math.sin(t * 17 + seed)), 0.8 * a);
+    ctx.restore();
+  }
+  // Smoke rising from a point: puffs let go one after another, rising and blowing off to the right
+  function plume(ctx, x, y, a, a0, a1, S, seed, opt = {}) {
+    const n = opt.n || 40, life = opt.life || 6, every = (a1 - a0) / n, r = rng(seed), spr = opt.spr || SMOKE(), fade = opt.fade == null ? 1 : opt.fade;
+    for (let i = 0; i < n; i++) { const ts = a0 + i * every, k = a - ts, jx = (r() - 0.5) * (opt.w || 10) * S, rise = (opt.rise || 22) * (0.8 + r() * 0.4), sz0 = (opt.s0 || 10) * (0.8 + r() * 0.4), grow = (opt.grow || 9) * (0.8 + r() * 0.4); if (k < 0 || k > life) continue;
+      const o = typeof opt.from === 'function' ? opt.from(ts) : [0, 0];
+      blob(ctx, spr, x + o[0] + jx + (opt.wind || 16) * S * k + 2 * S * k * k, y + o[1] - rise * S * k, (sz0 + grow * k) * S, (opt.alpha || 0.6) * sm(k / 0.4) * (1 - k / life) * fade); }
+    ctx.globalAlpha = 1;
+  }
+  // Bits flung out by a bang: they fly, tumble and fall
+  function debris(ctx, x, y, k, S, seed, n, opt = {}) {
+    if (k < 0) return; const r = rng(seed), g = (opt.g || 260) * S, floor = opt.floor;
+    for (let i = 0; i < n; i++) { const ang = (opt.ang == null ? -Math.PI / 2 : opt.ang) + (r() - 0.5) * (opt.spread || 2.6), sp = (opt.sp || 120) * (0.4 + r()) * S, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp, life = (opt.life || 2) * (0.6 + r() * 0.6), sz = (opt.sz || 2.2) * (0.5 + r()) * S;
+      if (k > life) continue; let px = x + vx * k, py = y + vy * k + 0.5 * g * k * k; if (floor != null && py > floor) { py = floor; } const a = 1 - sm((k - life * 0.7) / (life * 0.3));
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(px, py); ctx.rotate(k * (r() - 0.5) * 14); ctx.fillStyle = opt.col || '#2a2a30'; ctx.fillRect(-sz, -sz * 0.6, sz * 2, sz * 1.2);
+      if (opt.hot && k < life * 0.5) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a * (1 - k / (life * 0.5)) * 0.8; ctx.drawImage(FIRE(), -sz * 3, -sz * 3, sz * 6, sz * 6); }
+      ctx.restore(); }
+  }
+  // Sparks: little bright points that fly and fade
+  function sparks(ctx, x, y, k, S, seed, n, col, opt = {}) {
+    if (k < 0) return; const r = rng(seed), g = (opt.g == null ? 120 : opt.g) * S, spr = glow(col); ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < n; i++) { const ang = (opt.ang == null ? 0 : opt.ang) + (opt.spread == null ? TAU : opt.spread) * (r() - (opt.spread == null ? 0 : 0.5)), sp = (opt.sp || 80) * (0.3 + r() * 0.9) * S, life = (opt.life || 1.2) * (0.5 + r() * 0.7); if (k > life) continue;
+      const drag = opt.drag || 1.6, f = (1 - Math.exp(-k * drag)) / drag, px = x + Math.cos(ang) * sp * f, py = y + Math.sin(ang) * sp * f + 0.5 * g * k * k, a = (1 - k / life) * (0.6 + 0.4 * Math.sin(k * 40 + i)), s = (opt.sz || 2.2) * S;
+      blob(ctx, spr, px, py, s * 2.2, a); }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  const rotAbout = (p, c, ang) => { const s = Math.sin(ang), co = Math.cos(ang), dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * co - dy * s, c[1] + dx * s + dy * co]; };
+
+  /* ---------- What is left: a pile of rubble, worked out once for the size of the block ---------- */
+  function pileSprite(T, S) {
+    const W = (T.x1 - T.x0) * 1.4, Hh = (T.x1 - T.x0) * 0.33, q = 2, key = 'pile' + Math.round(W) + ':' + Math.round(Hh); if (SPR[key]) return SPR[key];
+    const c = mk(W * q, Hh * q), g = c.getContext('2d'), r = rng(31337); g.scale(q, q);
+    const top = x => { const f = x / W * 2 - 1, m = Math.pow(Math.max(0, 1 - f * f), 0.75); return Hh * (1 - m * (0.8 + 0.12 * Math.sin(x * 0.045 / S) * Math.sin(x * 0.017 / S + 1) + 0.04 * Math.sin(x * 0.13 / S))); };
+    g.beginPath(); g.moveTo(0, Hh); for (let x = 0; x <= W; x += 2) g.lineTo(x, top(x)); g.lineTo(W, Hh); g.closePath();
+    let gr = g.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, 'rgb(70,74,92)'); gr.addColorStop(0.5, 'rgb(48,50,64)'); gr.addColorStop(1, 'rgb(30,32,42)'); g.fillStyle = gr; g.fill(); g.save(); g.clip();
+    // Lumps of concrete and brick
+    for (let i = 0; i < 220; i++) { const x = r() * W, y = top(x) + r() * Hh * 0.9, s = (2 + r() * 6) * S, sh = 46 + r() * 40, warm = r() < 0.2 ? 10 : 0, n = 4 + Math.floor(r() * 3), lit = 1 - (y - top(x)) / Hh * 0.6;
+      g.beginPath(); for (let k = 0; k < n; k++) { const an = k / n * TAU + r() * 0.6, rr = s * (0.6 + r() * 0.5); g[k ? 'lineTo' : 'moveTo'](x + Math.cos(an) * rr, y + Math.sin(an) * rr * 0.7); } g.closePath();
+      g.fillStyle = `rgb(${Math.round((sh + warm) * lit)},${Math.round((sh + 2 + warm * 0.5) * lit)},${Math.round((sh + 18) * lit)})`; g.fill(); g.strokeStyle = 'rgba(15,15,20,0.35)'; g.lineWidth = 0.6 * S; g.stroke(); }
+    g.restore();
+    // Slabs of floor sticking out, bent bars, a window frame with the light still on
+    for (let i = 0; i < 7; i++) { const x = W * (0.18 + r() * 0.64), y = top(x) + 5 * S, l = (16 + r() * 22) * S, an = (r() - 0.5) * 1.1; g.save(); g.translate(x, y); g.rotate(an); g.fillStyle = 'rgb(66,66,78)'; g.fillRect(-l / 2, -2.5 * S, l, 4 * S); g.fillStyle = 'rgb(84,84,98)'; g.fillRect(-l / 2, -2.5 * S, l, 1.1 * S); g.restore(); }
+    g.strokeStyle = 'rgba(40,30,28,0.9)'; g.lineWidth = 1 * S; for (let i = 0; i < 12; i++) { const x = W * (0.12 + r() * 0.76), y = top(x) + 3 * S; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (r() - 0.5) * 16 * S, y - (6 + r() * 12) * S, x + (r() - 0.5) * 22 * S, y - (10 + r() * 14) * S); g.stroke(); }
+    const wx = W * 0.58, wy = top(W * 0.58) + 10 * S; g.save(); g.translate(wx, wy); g.rotate(-0.35); g.fillStyle = 'rgb(255,196,120)'; g.fillRect(-4 * S, -3 * S, 8 * S, 6 * S); g.strokeStyle = 'rgb(40,36,40)'; g.lineWidth = 1.4 * S; g.strokeRect(-4 * S, -3 * S, 8 * S, 6 * S); g.restore();
+    // Soft like the photo, and fading out at the bottom where it sits behind the trees and roofs in front
+    const o = mk(c.width, c.height), og = o.getContext('2d'); og.filter = 'blur(' + (0.7 * q * S).toFixed(2) + 'px)'; og.drawImage(c, 0, 0); og.filter = 'none'; og.globalCompositeOperation = 'destination-in'; const fd = og.createLinearGradient(0, 0, 0, c.height); fd.addColorStop(0, '#000'); fd.addColorStop(0.72, '#000'); fd.addColorStop(1, 'rgba(0,0,0,0)'); og.fillStyle = fd; og.fillRect(0, 0, c.width, c.height);
+    return (SPR[key] = { c: o, w: W, h: Hh, glow: [wx, wy] });
+  }
+  function drawPile(X, amt, T) {
+    if (amt <= 0) return; const { ctx, S, t, L } = X, P = pileSprite(T, S), x = (T.x0 + T.x1) / 2 - P.w / 2, h = P.h * amt, y = T.base + 2 * S - h;
+    ctx.drawImage(P.c, x, y, P.w, h);
+    if (amt > 0.9) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,180,90,0.7)'), x + P.glow[0], y + P.glow[1] * amt, 9 * S, 0.45 + 0.1 * Math.sin(TAU * 3 * t / L));
+      // Embers still glowing here and there
+      const r = rng(77); for (let i = 0; i < 7; i++) { const ex = x + P.w * (0.2 + r() * 0.6), ey = y + h * (0.25 + r() * 0.5), q = 0.5 + 0.5 * Math.sin(TAU * (1 + Math.floor(r() * 3)) * t / L + r() * TAU); blob(ctx, glow('rgba(255,110,40,0.8)'), ex, ey, (3 + r() * 3) * S, 0.25 * q); }
+      ctx.restore(); }
+  }
+  // Wisps still rising off the rubble, repeating with the studio loop
+  function pileSmoke(X, T) { const { ctx, S, t, L } = X, n = 14, life = L / 2;
+    for (let i = 0; i < n; i++) { const r = rng(900 + i), x = lerp(T.x0, T.x1, 0.15 + r() * 0.7), k = pmod(t / life + i / n, 1) * life * 0.6; blob(ctx, SMOKE(), x + 14 * S * k + (r() - 0.5) * 8 * S, T.base - 30 * S - 18 * S * k, (8 + 7 * k) * S, 0.3 * sm(k / 1.2) * (1 - k / (life * 0.6))); }
+    ctx.globalAlpha = 1; }
+
+  /* ---------- The block itself: cut out of the room and moved, with whatever has been done to it ---------- */
+  function drawTower(X, P) {
+    const { ctx, T, kit, S } = X; if (!T) return; const H = T.base - T.top, piv = [T.x1, T.base];
+    const dressed = () => { if (P.state === 'scaffold') scaffold(X, T); if (P.state === 'patched') patched(X, T); };
+    if (P.draw && kit) {
+      ctx.save(); ctx.beginPath(); ctx.rect(T.x0 - H, T.top - H, H * 3, H + T.base - T.top + 1 * S); ctx.clip();
+      ctx.translate(piv[0], piv[1]); ctx.rotate(P.rot); ctx.translate(-piv[0] + P.shake * S, -piv[1] + P.sink * H);
+      ctx.drawImage(kit.c, kit.x, kit.y, kit.w, kit.h); dressed(); ctx.restore();
+    } else if (!P.gone) dressed();
+    if (P.state === 'leaning' && !P.act) prop(X, T, P);
+    if (P.pile > 0 && kit) stump(X, T, P.pile);
+    if (P.pile > 0) drawPile(X, P.pile, T);
+    if (P.state === 'rubble' && !P.act) pileSmoke(X, T);
+  }
+  // The bottom few floors still standing, broken off jagged
+  function stump(X, T, amt) { const { ctx, S, kit } = X, H = T.base - T.top, r = rng(5150), y0 = T.base - H * 0.42; ctx.save(); ctx.globalAlpha = sm(amt / 0.4); ctx.beginPath(); ctx.moveTo(T.x0 - 2, T.base + 2); let x = T.x0 - 2; ctx.lineTo(x, y0 + H * 0.06);
+    while (x < T.x1) { x += (5 + r() * 12) * S; const f = Math.abs(x - (T.x0 + T.x1) / 2) / (T.x1 - T.x0); ctx.lineTo(Math.min(x, T.x1 + 2), y0 + (r() - 0.3) * H * 0.09 + f * f * H * 0.5); } ctx.lineTo(T.x1 + 2, T.base + 2); ctx.closePath(); ctx.clip();
+    ctx.drawImage(kit.c, kit.x, kit.y, kit.w, kit.h); ctx.fillStyle = 'rgba(10,12,20,0.45)'; ctx.fillRect(T.x0 - 4, y0 - H * 0.1, T.x1 - T.x0 + 8, H * 0.6); ctx.restore(); }
+  // A plank of wood holding the leaning block up
+  function prop(X, T, P) { const { ctx, S } = X, H = T.base - T.top, top = rotAbout([T.x1, T.top + H * 0.5], [T.x1, T.base], P.rot), foot = [T.x1 + H * 0.3, T.base + 2 * S];
+    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(58,42,30)'; ctx.lineWidth = 6 * S; ctx.beginPath(); ctx.moveTo(foot[0], foot[1]); ctx.lineTo(top[0], top[1]); ctx.stroke(); ctx.strokeStyle = 'rgba(120,90,60,0.35)'; ctx.lineWidth = 1.6 * S; ctx.beginPath(); ctx.moveTo(foot[0] - 1.5 * S, foot[1] - 1 * S); ctx.lineTo(top[0] - 1.5 * S, top[1] - 1 * S); ctx.stroke();
+    // A traffic cone at its foot, for safety
+    ctx.fillStyle = 'rgb(150,70,30)'; ctx.beginPath(); ctx.moveTo(foot[0] + 10 * S, foot[1] - 12 * S); ctx.lineTo(foot[0] + 15 * S, foot[1]); ctx.lineTo(foot[0] + 5 * S, foot[1]); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(230,230,230,0.8)'; ctx.fillRect(foot[0] + 7.4 * S, foot[1] - 6 * S, 5.2 * S, 1.6 * S); ctx.restore(); }
+  function scaffold(X, T) { const { ctx, S, t, L } = X, H = T.base - T.top; ctx.save();
+    ctx.fillStyle = 'rgba(30,60,45,0.25)'; ctx.fillRect(T.x0 - 4 * S, T.top + H * 0.02, (T.x1 - T.x0) * 0.55, H * 0.4);
+    ctx.strokeStyle = 'rgba(150,140,120,0.55)'; ctx.lineWidth = 1.1 * S; ctx.beginPath();
+    for (let x = T.x0 - 4 * S; x <= T.x1 + 5 * S; x += 21 * S) { ctx.moveTo(x, T.top - 6 * S); ctx.lineTo(x, T.base); }
+    for (let y = T.top + 8 * S; y <= T.base; y += 23 * S) { ctx.moveTo(T.x0 - 6 * S, y); ctx.lineTo(T.x1 + 6 * S, y); }
+    for (let y = T.top + 8 * S, i = 0; y + 23 * S <= T.base; y += 23 * S, i++) { const x = T.x0 - 4 * S + (i % 6) * 42 * S; ctx.moveTo(x, y); ctx.lineTo(x + 42 * S, y + 23 * S); }
+    ctx.stroke(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,160,40,0.9)'), T.x1 + 4 * S, T.top - 6 * S, 7 * S, Math.sin(TAU * Math.round(L) * t / L) > 0.3 ? 0.9 : 0.1); ctx.restore(); ctx.globalAlpha = 1; }
+  function patched(X, T) { const { ctx, S } = X, H = T.base - T.top, y1 = T.top + H * 0.33; ctx.save();
+    ctx.fillStyle = 'rgba(92,76,70,0.95)'; ctx.fillRect(T.x0 + 1 * S, T.top + 2 * S, T.x1 - T.x0 - 2 * S, y1 - T.top);
+    ctx.fillStyle = 'rgba(36,32,36,0.9)'; for (let y = T.top + 10 * S; y < y1 - 8 * S; y += 18 * S) for (let x = T.x0 + 9 * S; x < T.x1 - 10 * S; x += 23 * S) ctx.fillRect(x, y, 11 * S, 8 * S);
+    ctx.fillStyle = 'rgba(255,200,130,0.8)'; [[2, 1], [7, 0], [4, 3], [9, 2]].forEach(([c, rr]) => ctx.fillRect(T.x0 + 9 * S + c * 23 * S, T.top + 10 * S + rr * 18 * S, 11 * S, 8 * S));
+    // The join, and a big strip of tape across a crack lower down
+    ctx.fillStyle = 'rgba(30,26,28,0.8)'; ctx.fillRect(T.x0, y1 - 1 * S, T.x1 - T.x0, 2.5 * S);
+    ctx.translate((T.x0 + T.x1) / 2, T.top + H * 0.55); ctx.rotate(-0.5); ctx.fillStyle = 'rgba(130,132,140,0.7)'; ctx.fillRect(-60 * S, -4 * S, 120 * S, 8 * S); ctx.rotate(1); ctx.fillRect(-60 * S, -4 * S, 120 * S, 8 * S); ctx.restore(); }
+
+  /* ---------- The events ---------- */
+  // A plane, side on, nose at (0,0) pointing along +x, length L. No markings.
+  function plane(ctx, L, t) { const h = L * 0.13;
+    ctx.fillStyle = 'rgb(84,90,110)'; ctx.beginPath(); ctx.moveTo(-L * 0.56, h * 0.2); ctx.lineTo(-L * 0.38, h * 0.2); ctx.lineTo(-L * 0.62, h * 1.9); ctx.lineTo(-L * 0.72, h * 1.9); ctx.closePath(); ctx.fill();
+    let gr = ctx.createLinearGradient(0, -h / 2, 0, h / 2); gr.addColorStop(0, 'rgb(150,156,176)'); gr.addColorStop(1, 'rgb(78,84,104)'); ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.moveTo(0, h * 0.1); ctx.quadraticCurveTo(-L * 0.02, -h * 0.5, -L * 0.12, -h * 0.5); ctx.lineTo(-L * 0.9, -h * 0.5); ctx.lineTo(-L, -h * 0.25); ctx.lineTo(-L, h * 0.15); ctx.lineTo(-L * 0.12, h * 0.5); ctx.quadraticCurveTo(-L * 0.02, h * 0.5, 0, h * 0.1); ctx.fill();
+    ctx.fillStyle = 'rgb(132,138,158)'; ctx.beginPath(); ctx.moveTo(-L * 0.8, -h * 0.5); ctx.lineTo(-L * 0.9, -h * 2.2); ctx.lineTo(-L * 1.0, -h * 2.2); ctx.lineTo(-L * 0.97, -h * 0.4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgb(160,52,52)'; ctx.fillRect(-L * 0.97, -h * 2.1, L * 0.1, h * 0.5);
+    ctx.fillStyle = 'rgb(66,70,90)'; ctx.beginPath(); ctx.ellipse(-L * 0.47, h * 0.75, L * 0.07, h * 0.32, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgb(30,34,48)'; ctx.beginPath(); ctx.moveTo(-L * 0.02, -h * 0.05); ctx.lineTo(-L * 0.07, -h * 0.4); ctx.lineTo(-L * 0.1, -h * 0.4); ctx.lineTo(-L * 0.08, -h * 0.05); ctx.fill();
+    ctx.fillStyle = 'rgba(255,214,150,0.95)'; for (let x = -L * 0.16; x > -L * 0.86; x -= L * 0.045) { ctx.beginPath(); ctx.arc(x, -h * 0.12, L * 0.011, 0, TAU); ctx.fill(); }
+    ctx.globalCompositeOperation = 'lighter'; if (Math.sin(t * 9) > 0.6) blob(ctx, glow('rgba(255,255,255,1)'), -L, -h * 0.2, L * 0.07, 1); blob(ctx, glow('rgba(255,40,40,0.95)'), -L * 0.7, h * 1.9, L * 0.05, 0.6 + 0.4 * Math.sin(t * 6)); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+  function evPlane(X, e, P, front) {
+    const { ctx, S, t } = X, { a } = phase(e, t), T = P.target === 1 ? X.T : X.T2; if (!T || !front) return; const H = T.base - T.top, Q = X.Q;
+    const pI = [T.x0 + 2 * S, T.top + H * 0.3], p0 = [Math.min(Q[0][0], Q[3][0]) - 150 * S, pI[1] - 70 * S], sink = P.target === 1 ? plSink(a) * H : 0;
+    if (a < PL.IMP + 0.05) { const f = cl(a / PL.IMP, 0, 1.02), x = lerp(p0[0], pI[0], f), y = lerp(p0[1], pI[1], f) - Math.sin(Math.PI * f) * 10 * S, ang = Math.atan2(pI[1] - p0[1] - Math.cos(Math.PI * f) * Math.PI * 10 * S, pI[0] - p0[0]);
+      ctx.save(); ctx.beginPath(); ctx.rect(-1e5, -1e5, 1e5 + T.x0 + 3 * S, 2e5); ctx.clip(); ctx.translate(x, y); ctx.rotate(ang); plane(ctx, 112 * S, t); ctx.restore(); }
+    const k = a - PL.IMP; if (k < 0) return;
+    // Fires burning across the floors it went into, coming down with the block
+    const r = rng(hash(e.id) + 3), fire = sm(k / 0.4) * (P.target === 1 ? 1 - sm((a - PL.COL - 1.2) / 1.6) : 1 - sm((a - 14.5) / 1.5));
+    if (pI[1] + sink < T.base - 8 * S && fire > 0.01) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.7 * fire * (0.8 + 0.2 * Math.sin(t * 13)); ctx.drawImage(FIRE(), T.x0 - 30 * S, pI[1] + sink - 60 * S, T.x1 - T.x0 + 60 * S, 100 * S); ctx.restore(); ctx.globalAlpha = 1; }
+    for (let i = 0; i < 9; i++) { const fx = lerp(T.x0 + 6 * S, T.x1 - 8 * S, i / 8) + (r() - 0.5) * 10 * S, fy = pI[1] + (r() - 0.5) * 18 * S + sink; if (fy > T.base - 6 * S) continue; flame(ctx, fx, fy, (20 + r() * 14) * S * (0.6 + 0.4 * sm(k / 2.5)), t, i + 11, fire); }
+    plume(ctx, (T.x0 + T.x1) / 2, pI[1] - 10 * S, a, PL.IMP + 0.15, P.target === 1 ? PL.COL + 1.4 : 15, S, hash(e.id), { n: 70, life: 7, w: T.x1 - T.x0, s0: 16, grow: 12, rise: 22, alpha: 0.75, from: ts => [0, P.target === 1 ? plSink(ts) * H : 0] });
+    // The bang: a fireball in, and one out the far side
+    if (k < 2.6) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; [[pI, 0], [[T.x1 - 2 * S, pI[1] + 4 * S], 0.12]].forEach(([p, dl]) => { const kk = k - dl; if (kk < 0) return; const rad = 92 * S * (1 - Math.exp(-kk * 5)), al = 1 - sm(kk / 2.2);
+      blob(ctx, FIRE(), p[0], p[1], rad * 2.4, al); blob(ctx, CORE(), p[0], p[1], rad * 1.2, al * (1 - sm(kk / 0.9))); }); ctx.restore(); ctx.globalAlpha = 1;
+      debris(ctx, pI[0], pI[1], k, S, hash(e.id) + 9, 26, { ang: Math.PI, spread: 2.2, sp: 110, hot: true, life: 2.4, floor: T.base }); debris(ctx, T.x1, pI[1], k - 0.12, S, hash(e.id) + 19, 22, { ang: 0, spread: 2, sp: 120, hot: true, life: 2.4, floor: T.base }); }
+    // Coming down: dust rolling out from the bottom, bits breaking off the top
+    if (P.target === 1 && a >= PL.COL) { const r2 = rng(hash(e.id) + 99), end = 1 - sm((a - 11.5) / 4.5);
+      for (let i = 0; i < 90; i++) { const side = i % 2 ? 1 : -1, x0 = lerp(T.x0, T.x1, r2()), y0 = T.base - r2() * 20 * S, ts = PL.COL + 0.1 + r2() * 3.4, kk = a - ts, vx = side * (20 + r2() * 110) * S, up = (6 + r2() * 30) * S, sz = (14 + r2() * 34) * S; if (kk < 0) continue;
+        blob(ctx, DUST(), x0 + vx * (1 - Math.exp(-kk * 0.9)) / 0.9 + 6 * S * kk, y0 - up * Math.pow(kk, 0.8), sz * (0.6 + 1.5 * (1 - Math.exp(-kk * 0.6))), 0.5 * sm(kk / 0.3) * end * (0.6 + 0.4 * r2())); }
+      // Dust where the top is, all the way down
+      const r3 = rng(hash(e.id) + 7); for (let i = 0; i < 30; i++) { const ts = PL.COL + i * (PL.COLE - PL.COL) / 30, kk = a - ts; if (kk < 0) continue; const y = T.top + plSink(ts) * H, x = lerp(T.x0, T.x1, r3()); blob(ctx, DUST(), x + 10 * S * kk, y - 8 * S * kk, (14 + 16 * kk) * S, 0.4 * sm(kk / 0.3) * (1 - sm(kk / 4))); }
+      const topY = T.top + plSink(a) * H; if (a < PL.COLE) { debris(ctx, T.x0 + 10 * S, topY, a - PL.COL, S, 5, 14, { ang: -2.4, spread: 1.4, sp: 60, life: 1.6, floor: T.base }); debris(ctx, T.x1 - 10 * S, topY, a - PL.COL - 0.7, S, 6, 14, { ang: -0.7, spread: 1.4, sp: 60, life: 1.6, floor: T.base }); }
+      ctx.globalAlpha = 1; }
+  }
+  function evDemolish(X, e, P, front) {
+    const { ctx, S, t } = X, { a } = phase(e, t), T = P.state === 'rubble' ? X.T : X.T; if (!T || !front) return; const H = T.base - T.top, piv = [T.x1, T.base];
+    // Warning lights, then the charges going off along the bottom
+    if (a < DM.BANG + 0.3) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const on = Math.sin(a * TAU * 2) > 0; blob(ctx, glow('rgba(255,40,30,0.95)'), T.x0 - 14 * S, T.base - 6 * S, 7 * S, on ? 1 : 0.15); blob(ctx, glow('rgba(255,40,30,0.95)'), T.x1 + 14 * S, T.base - 6 * S, 7 * S, on ? 0.15 : 1); blob(ctx, glow('rgba(255,170,40,0.95)'), (T.x0 + T.x1) / 2, T.base + 2 * S, 6 * S, 0.5 + 0.5 * Math.sin(a * 20)); ctx.restore(); }
+    const r = rng(hash(e.id));
+    for (let i = 0; i < 8; i++) { const x = lerp(T.x0 + 8 * S, T.x1 - 8 * S, i / 7), y = T.base - 8 * S - (i % 2) * 30 * S, kk = a - DM.BANG - i * 0.07; if (kk < 0 || kk > 0.6) continue; ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, CORE(), x, y, 16 * S * (1 - kk / 0.6), 1 - kk / 0.6); blob(ctx, FIRE(), x, y, 30 * S, 0.6 * (1 - kk / 0.6)); ctx.restore(); }
+    sparks(ctx, (T.x0 + T.x1) / 2, T.base - 10 * S, a - DM.BANG, S, 41, 26, 'rgba(255,200,120,0.9)', { sp: 120, life: 1, g: 200 });
+    // Dust rolling out from the bottom
+    const end = 1 - sm((a - 8) / 3);
+    for (let i = 0; i < 30; i++) { const side = i % 2 ? 1 : -1, x0 = lerp(T.x0, T.x1, r()), ts = DM.BANG + r() * 0.8, kk = a - ts, vx = side * (20 + r() * 60) * S, sz = (16 + r() * 22) * S; if (kk < 0) continue; blob(ctx, DUST(), x0 + vx * (1 - Math.exp(-kk)) + 5 * S * kk, T.base - 6 * S - (6 + r() * 14) * S * Math.pow(kk, 0.7), sz * (0.6 + (1 - Math.exp(-kk * 0.8))), 0.7 * sm(kk / 0.25) * end); }
+    ctx.globalAlpha = 1;
+    // A balcony comes off a bit later
+    if (P.state !== 'rubble') { const ts = 6.4, kk = a - ts; if (kk > 0) { const p = rotAbout([T.x0 + 18 * S, T.top + H * 0.22], piv, dmRot(ts, P.state)), y = Math.min(T.base, p[1] + 0.5 * 300 * S * kk * kk), land = p[1] + 0.5 * 300 * S * kk * kk >= T.base;
+      if (!land) { ctx.save(); ctx.translate(p[0] - 6 * S * kk, y); ctx.rotate(kk * 3); ctx.fillStyle = 'rgb(64,62,72)'; ctx.fillRect(-7 * S, -3 * S, 14 * S, 6 * S); ctx.restore(); }
+      else { const kl = kk - Math.sqrt(2 * (T.base - p[1]) / (300 * S)); for (let i = 0; i < 6; i++) blob(ctx, DUST(), p[0] - 6 * S * kk + (i - 2.5) * 6 * S, T.base - 6 * S - 10 * S * kl, (8 + 10 * kl) * S, 0.5 * (1 - sm(kl / 2))); ctx.globalAlpha = 1; } } }
+  }
+  // The squid: rises up behind the block, wraps it, squeezes it, looks at you, slides away
+  function squidPlace(X, P) { const T = X.T || X.T2, S = X.S, H = T.base - T.top; return { cx: T.x1 + 44 * S, top: T.top - 70 * S, w: 92 * S, h: 330 * S, T, H }; }
+  function squidRise(a) { return a < 3 ? 1 - sm(a / 3) : a > 10.6 ? sm((a - 10.6) / 2.6) : 0; }
+  function evSquid(X, e, P, front) {
+    const { ctx, S, t } = X, { a } = phase(e, t); if (!X.T && !X.T2) return; const G = squidPlace(X, P), down = squidRise(a) * (G.h + 60 * S), cx = G.cx + Math.sin(a * 0.9) * 4 * S, top = G.top + down + Math.sin(a * 1.3) * 3 * S;
+    const eyeY = top + G.h * 0.66, sway = Math.sin(a * 1.7);
+    const col = (k) => `rgb(${Math.round(lerp(196, 92, k))},${Math.round(lerp(210, 108, k))},${Math.round(lerp(236, 156, k))})`;
+    if (!front) {
+      ctx.save(); ctx.beginPath(); ctx.rect(G.T.x0 - 400 * S, -1e4, 2000 * S, 1e4 + G.T.base - 12 * S); ctx.clip();
+      // Dangling tentacles behind it
+      for (let i = 0; i < 6; i++) { const bx = cx + (i - 2.5) * 13 * S, ph = i * 1.1; tentacle(ctx, [[bx, eyeY + 20 * S], [bx + Math.sin(a * 1.4 + ph) * 18 * S, eyeY + 70 * S], [bx + Math.sin(a * 1.1 + ph + 1) * 28 * S, eyeY + 130 * S]], 10 * S, 3 * S, col(0.8), S, 1); }
+      // Mantle and fins
+      const w = G.w; ctx.beginPath(); ctx.moveTo(cx, top); ctx.bezierCurveTo(cx + w * 0.5, top + G.h * 0.08, cx + w * 1.3, top + G.h * 0.22, cx + w * 0.62, top + G.h * 0.3); ctx.bezierCurveTo(cx + w * 0.62, top + G.h * 0.5, cx + w * 0.6, top + G.h * 0.7, cx + w * 0.45, top + G.h * 0.8);
+      ctx.quadraticCurveTo(cx, top + G.h * 0.88, cx - w * 0.45, top + G.h * 0.8); ctx.bezierCurveTo(cx - w * 0.6, top + G.h * 0.7, cx - w * 0.62, top + G.h * 0.5, cx - w * 0.62, top + G.h * 0.3); ctx.bezierCurveTo(cx - w * 1.3, top + G.h * 0.22, cx - w * 0.5, top + G.h * 0.08, cx, top); ctx.closePath();
+      const gr = ctx.createLinearGradient(0, top, 0, top + G.h * 0.85); gr.addColorStop(0, col(0.15)); gr.addColorStop(1, col(0.75)); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = 'rgba(30,40,80,0.6)'; ctx.lineWidth = 2 * S; ctx.stroke();
+      ctx.fillStyle = 'rgba(120,140,190,0.35)'; for (let i = 0; i < 9; i++) { const r = rng(i + 7), x = cx + (r() - 0.5) * w * 0.9, y = top + G.h * (0.25 + r() * 0.45); ctx.beginPath(); ctx.arc(x, y, (3 + r() * 5) * S, 0, TAU); ctx.fill(); }
+      // Eyes: look about, at the block while squeezing, then at you, and blink
+      const look = a < 4.5 ? [Math.sin(a * 1.3), 0.2] : a < 8.2 ? [-1, 0.3] : a < 10.5 ? [0, 0.15] : [0.6, 0.6], blink = Math.max(win(a, 6.1, 6.35, 0.06, 0.06), win(a, 9.2, 9.45, 0.06, 0.06), win(a, 9.6, 9.85, 0.06, 0.06));
+      [-1, 1].forEach(sd => { const ex = cx + sd * 30 * S, ey = eyeY - 12 * S; ctx.save(); ctx.translate(ex, ey); ctx.scale(1, 1 - 0.9 * blink); ctx.fillStyle = 'rgb(236,240,250)'; ctx.beginPath(); ctx.arc(0, 0, 17 * S, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(20,30,60,0.8)'; ctx.lineWidth = 2 * S; ctx.stroke();
+        ctx.fillStyle = 'rgb(16,18,30)'; ctx.beginPath(); ctx.arc(look[0] * 6 * S, look[1] * 6 * S, 9 * S, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(look[0] * 6 * S - 3 * S, look[1] * 6 * S - 3 * S, 2.6 * S, 0, TAU); ctx.fill(); ctx.restore();
+        // A cross brow while it squeezes
+        if (a > 4.6 && a < 8.4) { ctx.strokeStyle = 'rgba(30,40,80,0.9)'; ctx.lineWidth = 3 * S; ctx.beginPath(); ctx.moveTo(ex - 15 * S, ey - 22 * S + sd * 5 * S); ctx.lineTo(ex + 15 * S, ey - 22 * S - sd * 5 * S); ctx.stroke(); } });
+      ctx.restore(); return;
+    }
+    // Two long arms come round the front of the block
+    const T = P.target === 1 ? X.T : X.T2; if (!T) return; const H = T.base - T.top, reach = sm((a - 2.4) / 1.6) * (1 - sm((a - 10.2) / 1.2)); if (reach <= 0.01) return;
+    const sq = win(a, 5, 8.2, 0.4, 0.4), sk = P.target === 1 ? (P.shake || 0) * S : 0;
+    [[0.42, 0], [0.68, 1.3]].forEach(([fy, ph], i) => { const y = T.top + H * fy, path = [[cx - 30 * S, eyeY + 10 * S + i * 12 * S], [T.x1 + 6 * S, y + 10 * S + sway * 4 * S], [lerp(T.x1, T.x0, 0.35) + sk, y + 16 * S - sq * 4 * S], [lerp(T.x1, T.x0, 0.75) + sk, y + 6 * S + sq * 6 * S], [T.x0 - 8 * S, y - 6 * S + Math.sin(a * 2 + ph) * 5 * S], [T.x0 - 4 * S, y - 22 * S]];
+      tentacle(ctx, path, 13 * S * (1 + 0.15 * sq), 3.5 * S, col(0.45), S, reach); });
+  }
+  // A tapered arm along a smooth path, with suckers, drawn out to a fraction of its length
+  function tentacle(ctx, pts, w0, w1, colr, S, frac) {
+    const pt = s => { const n = pts.length - 1, f = cl(s, 0, 1) * n, i = Math.min(n - 1, Math.floor(f)), u = f - i, p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n, i + 2)], cr = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u * u * u); return [cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1])]; };
+    const N = 160, m = Math.max(2, Math.round(N * frac)); ctx.save(); ctx.fillStyle = colr; ctx.strokeStyle = 'rgba(30,40,80,0.45)'; ctx.lineWidth = 1.2 * S;
+    for (let i = 0; i <= m; i++) { const s = i / N, p = pt(s), w = lerp(w0, w1, s) * (i === m ? 0.8 : 1); ctx.beginPath(); ctx.arc(p[0], p[1], w / 2, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = 'rgba(235,225,240,0.75)'; for (let i = 6; i < m; i += 9) { const s = i / N, p = pt(s), q = pt(s + 0.01), an = Math.atan2(q[1] - p[1], q[0] - p[0]) + Math.PI / 2, w = lerp(w0, w1, s) * 0.32; ctx.beginPath(); ctx.arc(p[0] + Math.cos(an) * w, p[1] + Math.sin(an) * w, w * 0.32, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
+  // Where the windows are on a block, for the telly and the lit up word
+  const cell = (T, c, r) => { const G = T.grid; return [lerp(G.x0, G.x1, (c + 0.5) / G.cols), lerp(G.y0, G.y1, (r + 0.5) / G.rows), (G.x1 - G.x0) / G.cols, (G.y1 - G.y0) / G.rows]; };
+  const lightBlock = P => P.target === 1 && P.state !== 'leaning' && !P.gone ? 1 : 2;
+  function evTelly(X, e, P, front) {
+    const { ctx, S, t } = X, { a } = phase(e, t), T = lightBlock(P) === 1 ? X.T : X.T2; if (!T || !T.grid || !front) return; const [wx, wy, cw, ch] = cell(T, Math.floor(T.grid.cols * 0.62), Math.floor(T.grid.rows * 0.3));
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const tv = a < 0.85 ? 0.6 + 0.4 * Math.sin(a * 37) * Math.sin(a * 13) : 0; ctx.fillStyle = `rgba(110,150,255,${0.5 * tv})`; ctx.fillRect(wx - cw * 0.4, wy - ch * 0.3, cw * 0.8, ch * 0.6); blob(ctx, glow('rgba(110,150,255,0.9)'), wx, wy, 22 * S, 0.6 * tv); blob(ctx, glow('rgba(255,220,170,0.9)'), wx, wy, 24 * S, win(a, 0.8, 1.3, 0.05, 0.3)); ctx.restore();
+    const k = a - 0.85, g = 300 * S, vx = 34 * S, vy = -46 * S, floor = T.base - 2 * S, tl = (-vy + Math.sqrt(vy * vy + 2 * g * (floor - wy))) / g; if (k < 0) return;
+    if (k < tl) { const x = wx + vx * k, y = wy + vy * k + 0.5 * g * k * k; ctx.save(); ctx.translate(x, y); ctx.rotate(k * 5.5); const w = 24 * S, h = 18 * S; ctx.fillStyle = 'rgb(38,38,44)'; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.fillStyle = 'rgb(120,170,255)'; ctx.fillRect(-w / 2 + 2 * S, -h / 2 + 2 * S, w - 6 * S, h - 4 * S);
+      ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(120,170,255,0.8)'), 0, 0, 22 * S, 0.7); ctx.restore(); ctx.globalAlpha = 1; }
+    else { const kl = k - tl, lx = wx + vx * tl; sparks(ctx, lx, floor, kl, S * 1.6, 7, 34, 'rgba(170,210,255,0.95)', { ang: -Math.PI / 2, spread: 2.6, sp: 90, life: 0.9, g: 260 }); ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(140,190,255,0.9)'), lx, floor - 4 * S, 26 * S, (1 - sm(kl / 0.5)) * 0.9); ctx.restore();
+      ctx.fillStyle = 'rgb(30,30,36)'; ctx.save(); ctx.translate(lx, floor - 3 * S); ctx.rotate(0.4); ctx.fillRect(-12 * S, -8 * S, 24 * S, 16 * S); ctx.restore(); ctx.globalAlpha = 1; }
+  }
+  const spot = (X, k) => { const s = X.spots && X.spots[k]; if (s) return [s[0] * X.v.iw, s[1] * X.v.ih]; const Q = X.Q; return [lerp(Q[3][0], Q[2][0], k === 'car' ? 0.45 : 0.25), lerp(Q[0][1], Q[3][1], 0.9)]; };
+  const ROCKETS = [[2.0, 0.1, 'rgba(255,80,80,0.95)'], [3.1, -0.15, 'rgba(120,255,140,0.95)'], [3.9, 0.22, 'rgba(255,210,90,0.95)'], [4.9, -0.05, 'rgba(200,120,255,0.95)'], [5.5, 0.3, 'rgba(120,200,255,0.95)']];
+  function evBonfire(X, e, P, front, layer) {
+    const { ctx, S, t, Q } = X, { a } = phase(e, t), [bx, by] = spot(X, 'green'), r = rng(hash(e.id));
+    if (layer === 'world') {
+      const f = sm(a / 1.5) * (1 - sm((a - 11) / 1)); flame(ctx, bx, by, 22 * S, t, 3, f); flame(ctx, bx + 10 * S, by + 1 * S, 16 * S, t + 1, 5, f); flame(ctx, bx - 9 * S, by + 2 * S, 14 * S, t + 2, 6, f); sparks(ctx, bx, by - 20 * S, pmod(a, 1.3), S, Math.floor(a / 1.3), 6, 'rgba(255,190,90,0.9)', { ang: -Math.PI / 2, spread: 1, sp: 40, g: -20, life: 1.3 });
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,140,60,0.7)'), bx, by, 80 * S, 0.6 * f); ctx.restore();
+      plume(ctx, bx, by - 14 * S, a, 0.3, 11.5, S, 77, { n: 34, life: 5, s0: 6, grow: 7, rise: 18, alpha: 0.4, wind: 12 });
+      ROCKETS.forEach(([t0, dx, col], i) => { const k = a - t0, top = lerp(Q[0][1], Q[3][1], 0.22 + 0.12 * ((i * 7) % 3) / 2), rise = 0.9, x = bx + dx * 200 * S * cl(k / rise, 0, 1); if (k < 0) return;
+        if (k < rise) { const y = lerp(by - 10 * S, top, sm(k / rise) * 0.4 + k / rise * 0.6); ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,220,160,1)'), x, y, 4 * S, 1); for (let j = 1; j < 6; j++) blob(ctx, glow('rgba(255,170,90,0.8)'), x - dx * 200 * S * j * 0.02, y + j * 7 * S, 3 * S, 0.5 - j * 0.08); ctx.restore(); }
+        else sparks(ctx, x, top, k - rise, S, 100 + i, 80, col, { sp: 200, life: 1.8, g: 40, drag: 2.2, sz: 2.6 }); });
+      // The one that goes wrong: up a bit, then turns and comes straight for the window
+      const k = a - 6.2; if (k > 0 && k < 0.6) { const y = by - 10 * S - 90 * S * sm(k / 0.6); ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,220,160,1)'), bx - 20 * S * k, y, 4 * S, 1); ctx.restore(); }
+      ctx.globalAlpha = 1; return; }
+    if (layer === 'near') { const k = a - 6.8, d = 0.7; if (k < 0 || k >= d) return; const f = k / d, z = Math.pow(f, 2.2), sx = bx - 12 * S, sy = by - 100 * S, tx = lerp(Q[0][0], Q[1][0], 0.45), ty = lerp(Q[0][1], Q[3][1], 0.42), x = lerp(sx, tx, z) + Math.sin(f * 22) * 6 * S * f, y = lerp(sy, ty, z) + Math.cos(f * 17) * 5 * S * f, s = (4 + 60 * z) * S;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,170,90,0.9)'), x, y, s * 2.5, 0.9); blob(ctx, glow('rgba(255,240,200,1)'), x, y, s, 1); sparks(ctx, x, y, 0.15, S * (1 + z * 6), 300 + Math.floor(f * 20), 8, 'rgba(255,200,120,0.9)', { sp: 40, life: 0.3 }); ctx.restore(); ctx.globalAlpha = 1; return; }
+    if (layer === 'glass') { const k = a - 7.5; if (k < 0) return; const x = lerp(Q[0][0], Q[1][0], 0.45), y = lerp(Q[0][1], Q[3][1], 0.42), endA = 1 - sm((a - 11) / 1);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,240,210,1)'), x, y, 260 * S * (1 - Math.exp(-k * 8)), 1 - sm(k / 0.6)); ctx.restore();
+      sparks(ctx, x, y, k, S * 2.6, 501, 70, 'rgba(255,90,170,0.95)', { sp: 130, life: 2.2, g: 70, drag: 2.4, sz: 1.6 }); sparks(ctx, x, y, k - 0.05, S * 2.6, 502, 60, 'rgba(120,255,160,0.95)', { sp: 100, life: 2, g: 70, drag: 2.4, sz: 1.6 });
+      // A scorch on the glass, fading
+      ctx.save(); ctx.globalAlpha = 0.5 * sm(k / 0.2) * endA; const gr = ctx.createRadialGradient(x, y, 0, x, y, 60 * S); gr.addColorStop(0, 'rgba(20,16,14,0.7)'); gr.addColorStop(1, 'rgba(20,16,14,0)'); ctx.fillStyle = gr; ctx.fillRect(x - 60 * S, y - 60 * S, 120 * S, 120 * S); ctx.restore(); }
+  }
+  // A point along the marked road, from 0 to 1
+  function roadAt(X, f) { const R = X.road; if (!R || R.length < 2) { const Q = X.Q, y = lerp(Q[0][1], Q[3][1], 0.93); return [[lerp(Q[3][0], Q[2][0], f), y], 0]; }
+    const lens = [0]; for (let i = 1; i < R.length; i++) lens.push(lens[i - 1] + Math.hypot(R[i][0] - R[i - 1][0], R[i][1] - R[i - 1][1])); const d = cl(f, 0, 1) * lens[lens.length - 1]; let i = 1; while (i < lens.length - 1 && lens[i] < d) i++; const u = (d - lens[i - 1]) / Math.max(1e-6, lens[i] - lens[i - 1]);
+    return [[lerp(R[i - 1][0], R[i][0], u), lerp(R[i - 1][1], R[i][1], u)], Math.atan2(R[i][1] - R[i - 1][1], R[i][0] - R[i - 1][0])]; }
+  function car(ctx, p, ang, S, body, lights, t, polis) { ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(ang); const L = 22 * S, h = 7 * S;
+    ctx.fillStyle = body; ctx.fillRect(-L / 2, -h, L, h * 0.7); ctx.fillRect(-L * 0.25, -h * 1.5, L * 0.5, h * 0.6); ctx.fillStyle = 'rgba(12,12,18,0.9)'; ctx.beginPath(); ctx.arc(-L * 0.3, -h * 0.25, 2.4 * S, 0, TAU); ctx.arc(L * 0.3, -h * 0.25, 2.4 * S, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter'; if (lights) { blob(ctx, glow('rgba(255,245,215,0.95)'), L / 2, -h * 0.6, 5 * S, 1); blob(ctx, glow('rgba(255,245,215,0.6)'), L / 2 + 14 * S, -h * 0.3, 14 * S, 0.35); blob(ctx, glow('rgba(255,50,40,0.9)'), -L / 2, -h * 0.6, 3.5 * S, 0.8); }
+    if (polis) { const on = Math.sin(t * TAU * 3.2 + polis) > 0; blob(ctx, glow('rgba(60,110,255,1)'), on ? -3 * S : 3 * S, -h * 1.6, 16 * S, 1); blob(ctx, glow('rgba(60,110,255,0.8)'), 0, -h, 60 * S, on ? 0.5 : 0.15); }
+    ctx.restore(); ctx.globalAlpha = 1; }
+  function evPolis(X, e, P, front) {
+    const { ctx, S, t, Q } = X, { a } = phase(e, t); if (!front) return;
+    const drive = (t0, dur, body, pol) => { const f = (a - t0) / dur; if (f < 0 || f > 1) return; const [p, ang] = roadAt(X, 1 - f); car(ctx, p, ang + Math.PI, S, body, true, t, pol); };
+    drive(0.4, 2.2, 'rgb(50,50,58)', 0); drive(1.3, 2.4, 'rgb(150,152,170)', 1); drive(1.8, 2.5, 'rgb(150,152,170)', 2.4); drive(2.5, 2.6, 'rgb(150,152,170)', 4);
+    // The helicopter: in from the left, hovers with its searchlight sweeping, then off to the right
+    const x0 = Math.min(Q[0][0], Q[3][0]) - 80 * S, x1 = Math.max(Q[1][0], Q[2][0]) + 80 * S, hx0 = lerp(Q[0][0], Q[1][0], 0.42), hy = lerp(Q[0][1], Q[3][1], 0.2);
+    let hxp, hyp; if (a < 3.4) return; if (a < 5.4) { const f = sm((a - 3.4) / 2); hxp = lerp(x0, hx0, f); hyp = hy - 30 * S * (1 - f); } else if (a < 9.4) { hxp = hx0 + Math.sin((a - 5.4) * 0.8) * 30 * S; hyp = hy + Math.sin(a * 1.7) * 3 * S; } else { const f = sm((a - 9.4) / 1.6); hxp = lerp(hx0 + Math.sin(4 * 0.8) * 30 * S, x1, f); hyp = hy - 40 * S * f; }
+    const beam = win(a, 5.0, 9.6, 0.3, 0.3); if (beam > 0) { const [g] = roadAt(X, 0.5 + 0.4 * Math.sin((a - 5) * 0.9)), w0 = 3 * S, w1 = 34 * S; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.beginPath(); ctx.moveTo(hxp - w0, hyp + 6 * S); ctx.lineTo(hxp + w0, hyp + 6 * S); ctx.lineTo(g[0] + w1, g[1]); ctx.lineTo(g[0] - w1, g[1]); ctx.closePath();
+      const gr = ctx.createLinearGradient(hxp, hyp, g[0], g[1]); gr.addColorStop(0, `rgba(235,240,255,${0.38 * beam})`); gr.addColorStop(1, `rgba(235,240,255,${0.1 * beam})`); ctx.fillStyle = gr; ctx.fill(); ctx.save(); ctx.translate(g[0], g[1]); ctx.scale(1, 0.35); blob(ctx, glow('rgba(240,245,255,0.9)'), 0, 0, w1 * 1.4, 0.6 * beam); ctx.restore(); ctx.restore(); }
+    ctx.save(); ctx.translate(hxp, hyp); ctx.fillStyle = 'rgb(22,24,34)'; ctx.beginPath(); ctx.ellipse(0, 0, 13 * S, 6 * S, 0, 0, TAU); ctx.fill(); ctx.fillRect(-30 * S, -2 * S, 20 * S, 2.6 * S); ctx.fillRect(-32 * S, -6 * S, 3 * S, 7 * S); ctx.fillRect(-8 * S, 6 * S, 18 * S, 1.2 * S);
+    ctx.strokeStyle = `rgba(60,64,80,${0.5 + 0.3 * Math.sin(t * 60)})`; ctx.lineWidth = 1.4 * S; ctx.beginPath(); ctx.moveTo(-28 * S * Math.abs(Math.cos(t * 31)), -7 * S); ctx.lineTo(28 * S * Math.abs(Math.cos(t * 31)), -7 * S); ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,50,40,0.95)'), -31 * S, -6 * S, 5 * S, Math.sin(t * 7) > 0 ? 1 : 0.2); if (Math.sin(t * 11) > 0.7) blob(ctx, glow('rgba(255,255,255,1)'), 2 * S, 7 * S, 6 * S, 1); ctx.restore(); ctx.globalAlpha = 1;
+  }
+  function evCarfire(X, e, P, front) {
+    const { ctx, S, t } = X, { a } = phase(e, t); if (!front) return; const [p, ang] = roadAt(X, 0.28), chr = sm((a - 2) / 6), body = `rgb(${Math.round(lerp(120, 26, chr))},${Math.round(lerp(40, 24, chr))},${Math.round(lerp(40, 26, chr))})`;
+    const k = a - 5.6, off = k > 0 ? Math.min(1, k * 3) : 0; car(ctx, [p[0], p[1] - off * 0], ang, S, body, false, t, 0);
+    const fire = sm((a - 1) / 3) * (1 - 0.6 * sm((a - 10) / 4)); flame(ctx, p[0] + 6 * S, p[1] - 8 * S, 18 * S * (0.5 + fire), t, 21, fire); flame(ctx, p[0] - 4 * S, p[1] - 10 * S, 22 * S * (0.4 + fire), t + 2, 22, fire * sm((a - 2.5) / 2));
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; blob(ctx, glow('rgba(255,140,60,0.7)'), p[0], p[1] - 6 * S, 90 * S, 0.55 * fire); ctx.restore();
+    plume(ctx, p[0], p[1] - 18 * S, a, 0.2, 13.5, S, 55, { n: 70, life: 7, s0: 10, grow: 12, rise: 24, alpha: 0.7, wind: 14 });
+    if (k > 0 && k < 2.4) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const rad = 70 * S * (1 - Math.exp(-k * 6)), al = 1 - sm(k / 1.8); blob(ctx, FIRE(), p[0], p[1] - 10 * S, rad * 2.2, al); blob(ctx, CORE(), p[0], p[1] - 10 * S, rad, al * (1 - sm(k / 0.6))); ctx.restore(); ctx.globalAlpha = 1;
+      debris(ctx, p[0], p[1] - 8 * S, k, S, 66, 20, { sp: 140, hot: true, life: 2, floor: p[1] + 4 * S }); }
+    // A wheel that rolls off on its own
+    if (k > 0) { const f = Math.min(k, 5), x = p[0] + 40 * S * f - 3 * S * f * f, y = p[1] - Math.abs(Math.sin(f * 4)) * 14 * S * Math.exp(-f); if (f < 5) { ctx.fillStyle = 'rgb(14,14,18)'; ctx.beginPath(); ctx.arc(x, y - 2.5 * S, 2.6 * S, 0, TAU); ctx.fill(); } }
+  }
+  function evUfo(X, e, P, front) {
+    const { ctx, S, t, Q } = X, { a } = phase(e, t); if (!front) return; const [gx, gy] = spot(X, 'green'), hx = gx + 10 * S, hy = lerp(Q[0][1], Q[3][1], 0.3);
+    let x, y; if (a < 2.6) { const f = sm(a / 2.6); x = hx + Math.sin(a * 2) * 10 * S * (1 - f); y = lerp(Q[0][1] - 60 * S, hy, f); } else if (a < 9.6) { x = hx + Math.sin(a * 1.6) * 3 * S; y = hy + Math.sin(a * 2.3) * 3 * S; } else { const f = Math.pow(cl((a - 9.6) / 0.6, 0, 1), 2); x = lerp(hx, Math.max(Q[1][0], Q[2][0]) + 300 * S, f); y = lerp(hy, Q[0][1] - 200 * S, f); }
+    const beam = win(a, 3, 8.6, 0.25, 0.3); if (beam > 0) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.beginPath(); ctx.moveTo(x - 10 * S, y + 6 * S); ctx.lineTo(x + 10 * S, y + 6 * S); ctx.lineTo(gx + 32 * S, gy + 2 * S); ctx.lineTo(gx - 32 * S, gy + 2 * S); ctx.closePath(); const gr = ctx.createLinearGradient(0, y, 0, gy); gr.addColorStop(0, `rgba(150,255,180,${0.42 * beam})`); gr.addColorStop(1, `rgba(150,255,180,${0.14 * beam})`); ctx.fillStyle = gr; ctx.fill();
+      ctx.strokeStyle = `rgba(200,255,210,${0.25 * beam})`; ctx.lineWidth = 1 * S; for (let i = 0; i < 4; i++) { const yy = lerp(y, gy, pmod(a * 0.6 + i / 4, 1)), w = lerp(10, 32, (yy - y) / (gy - y)) * S; ctx.beginPath(); ctx.moveTo(lerp(x, gx, (yy - y) / (gy - y)) - w, yy); ctx.lineTo(lerp(x, gx, (yy - y) / (gy - y)) + w, yy); ctx.stroke(); } ctx.restore(); }
+    // The wheelie bin goes up
+    const bk = cl((a - 3.6) / 4, 0, 1); if (a > 3 && bk < 1) { const by = lerp(gy, y + 8 * S, sm(bk)), bx = lerp(gx, x, sm(bk)), sc = 1 - 0.3 * bk; ctx.save(); ctx.translate(bx, by); ctx.rotate(Math.sin(a * 2) * 0.6 * bk); ctx.scale(sc, sc); ctx.fillStyle = 'rgb(40,92,58)'; ctx.fillRect(-4.5 * S, -12 * S, 9 * S, 12 * S); ctx.fillStyle = 'rgb(30,70,44)'; ctx.fillRect(-5.5 * S, -13.5 * S, 11 * S, 2.4 * S); ctx.fillStyle = 'rgb(14,14,18)'; ctx.fillRect(-4 * S, -1 * S, 2.4 * S, 2.4 * S); ctx.restore(); }
+    // The saucer
+    ctx.save(); ctx.translate(x, y); if (a > 9.6) { ctx.globalAlpha = 0.5; ctx.fillStyle = 'rgba(180,255,200,0.3)'; ctx.fillRect(-60 * S, -2 * S, 60 * S, 4 * S); ctx.globalAlpha = 1; }
+    let gr = ctx.createLinearGradient(0, -12 * S, 0, 8 * S); gr.addColorStop(0, 'rgb(170,180,200)'); gr.addColorStop(1, 'rgb(60,66,84)'); ctx.fillStyle = 'rgba(140,200,255,0.7)'; ctx.beginPath(); ctx.ellipse(0, -6 * S, 11 * S, 9 * S, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, 0, 32 * S, 7.5 * S, 0, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(20,24,34,0.6)'; ctx.lineWidth = 1 * S; ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter'; const cols = ['rgba(255,80,80,1)', 'rgba(255,220,80,1)', 'rgba(80,255,140,1)', 'rgba(80,180,255,1)']; for (let i = 0; i < 7; i++) { const lx = (i - 3) * 8.5 * S, on = pmod(Math.floor(a * (a > 8.6 ? 16 : 5)) - i, 4); blob(ctx, glow(cols[on]), lx, 2 * S, 3.6 * S, 0.95); }
+    blob(ctx, glow('rgba(150,255,180,0.8)'), 0, 6 * S, 20 * S, 0.35 + 0.4 * beam); ctx.restore(); ctx.globalAlpha = 1;
+  }
+  /* The seagull, close up on the ledge outside, side on (facing left) or looking straight at you */
+  function gull(ctx, S, o) { const s = S * 1.15; ctx.save(); ctx.translate(o.x, o.y); if (o.flip) ctx.scale(-1, 1);
+    const body = 'rgb(214,218,228)', grey = 'rgb(128,136,154)', shade = 'rgb(168,174,190)', beak = 'rgb(236,196,60)';
+    if (!o.fly) { ctx.strokeStyle = 'rgb(214,150,120)'; ctx.lineWidth = 3 * s; ctx.lineCap = 'round'; const st = o.step || 0; ctx.beginPath(); ctx.moveTo(-6 * s, -34 * s); ctx.lineTo(-6 * s + st * 4 * s, 0); ctx.moveTo(8 * s, -34 * s); ctx.lineTo(8 * s - st * 4 * s, 0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-12 * s + st * 4 * s, 0); ctx.lineTo(0 + st * 4 * s, 0); ctx.moveTo(2 * s - st * 4 * s, 0); ctx.lineTo(14 * s - st * 4 * s, 0); ctx.stroke(); }
+    const by = o.fly ? -20 * s : -62 * s; ctx.translate(0, by + (o.bob || 0) * s);
+    // Tail and body
+    ctx.fillStyle = 'rgb(30,30,36)'; ctx.beginPath(); ctx.moveTo(40 * s, -6 * s); ctx.lineTo(70 * s, 2 * s); ctx.lineTo(62 * s, 12 * s); ctx.closePath(); ctx.fill();
+    let gr = ctx.createLinearGradient(0, -30 * s, 0, 30 * s); gr.addColorStop(0, body); gr.addColorStop(1, shade); ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(8 * s, 0, 44 * s, 28 * s, 0.08, 0, TAU); ctx.fill();
+    // Wing: folded along the back, or flapping
+    ctx.fillStyle = grey; if (!o.fly) { ctx.beginPath(); ctx.moveTo(-14 * s, -14 * s); ctx.quadraticCurveTo(30 * s, -30 * s, 66 * s, -2 * s); ctx.quadraticCurveTo(30 * s, 8 * s, -6 * s, 6 * s); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgb(28,28,34)'; ctx.beginPath(); ctx.moveTo(46 * s, -10 * s); ctx.lineTo(70 * s, -4 * s); ctx.lineTo(50 * s, 4 * s); ctx.closePath(); ctx.fill(); }
+    else { const w = o.wing || 0; [1, -1].forEach(sd => { ctx.save(); ctx.scale(1, sd === 1 ? 1 : 0.7); ctx.fillStyle = sd === 1 ? grey : 'rgb(104,110,128)'; ctx.beginPath(); ctx.moveTo(-6 * s, -6 * s); ctx.quadraticCurveTo(20 * s, -60 * s * w - 10 * s, 50 * s, -96 * s * w - 4 * s); ctx.lineTo(62 * s, -90 * s * w); ctx.quadraticCurveTo(36 * s, -20 * s * w, 28 * s, 0); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgb(28,28,34)'; ctx.beginPath(); ctx.moveTo(50 * s, -96 * s * w - 4 * s); ctx.lineTo(62 * s, -90 * s * w); ctx.lineTo(54 * s, -76 * s * w); ctx.closePath(); ctx.fill(); ctx.restore(); }); }
+    // Head: side on with a beady eye, or turned to stare at you
+    ctx.translate(-34 * s, -26 * s); ctx.fillStyle = body; ctx.beginPath(); ctx.arc(0, 0, 20 * s * (o.near || 1), 0, TAU); ctx.fill();
+    const n = o.near || 1; if (o.face) { ctx.fillStyle = beak; ctx.beginPath(); ctx.moveTo(-8 * s * n, 4 * s * n); ctx.lineTo(8 * s * n, 4 * s * n); ctx.lineTo(0, (24 + (o.open || 0) * 6) * s * n); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgb(200,50,40)'; ctx.beginPath(); ctx.arc(0, 15 * s * n, 2.6 * s * n, 0, TAU); ctx.fill();
+        [-1, 1].forEach(sd => { ctx.fillStyle = 'rgb(240,230,170)'; ctx.beginPath(); ctx.arc(sd * 9 * s * n, -3 * s * n, 4.6 * s * n, 0, TAU); ctx.fill(); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sd * 9 * s * n, -3 * s * n, 2.2 * s * n, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgb(70,74,90)'; ctx.lineWidth = 2.4 * s * n; ctx.beginPath(); ctx.moveTo(sd * 3 * s * n, -8 * s * n); ctx.lineTo(sd * 15 * s * n, -12 * s * n); ctx.stroke(); }); }
+    else { ctx.fillStyle = beak; ctx.beginPath(); ctx.moveTo(-14 * s, -3 * s); ctx.lineTo(-40 * s, (o.open || 0) * -6 * s); ctx.lineTo(-38 * s, 3 * s); ctx.lineTo(-14 * s, 6 * s); ctx.closePath(); ctx.fill(); if (o.open) { ctx.beginPath(); ctx.moveTo(-14 * s, 6 * s); ctx.lineTo(-36 * s, 10 * s + o.open * 8 * s); ctx.lineTo(-14 * s, 9 * s); ctx.fill(); } ctx.fillStyle = 'rgb(200,50,40)'; ctx.beginPath(); ctx.arc(-32 * s, 4 * s, 2 * s, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgb(240,230,170)'; ctx.beginPath(); ctx.arc(-6 * s, -6 * s, 3.6 * s, 0, TAU); ctx.fill(); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-6.6 * s, -6 * s, 1.8 * s, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgb(70,74,90)'; ctx.lineWidth = 2 * s; ctx.beginPath(); ctx.moveTo(-12 * s, -12 * s); ctx.lineTo(0, -10 * s); ctx.stroke(); }
+    ctx.restore(); }
+  function evGull(X, e, P, front, layer) {
+    const { ctx, S, t, Q } = X, { a } = phase(e, t), [lx, ly] = [lerp(Q[3][0], Q[2][0], 0.63), lerp(Q[3][1], Q[2][1], 0.63) - 2 * S];
+    if (layer === 'near') {
+      if (a < 1.1) { const f = sm(a / 1.1); gull(ctx, S, { x: lerp(lx + 380 * S, lx, f), y: lerp(ly - 300 * S, ly, f) - (1 - f) * 40 * S, fly: f < 0.92, wing: 0.5 + 0.5 * Math.sin(a * 16), flip: false }); return; }
+      if (a < 5.0) { const st = a < 2.4 ? Math.sin((a - 1.1) * 7) : 0, x = lx - (a < 2.4 ? (a - 1.1) * 26 * S : 34 * S), face = a > 2.6 && a < 4.9, peck = Math.max(win(a, 3.25, 3.45, 0.06, 0.08), win(a, 3.6, 3.8, 0.06, 0.08)), open = win(a, 4.25, 4.85, 0.06, 0.12);
+        gull(ctx, S, { x, y: ly, step: st, bob: Math.sin(a * 6) * 1.5 + peck * 6, face, near: 1 + peck * 0.35, open, flip: false }); return; }
+      if (a < 6.8) { const f = (a - 5) / 1.8; gull(ctx, S, { x: lx - 34 * S - f * 260 * S, y: ly - f * f * 420 * S - f * 60 * S, fly: true, wing: 0.5 + 0.5 * Math.sin(a * 18), flip: false }); } return; }
+    if (layer === 'glass') {
+      // Taps on the glass where it pecked
+      [3.4, 3.75].forEach(tp => { const k = a - tp; if (k < 0 || k > 0.5) return; ctx.save(); ctx.strokeStyle = `rgba(220,230,255,${0.5 * (1 - k / 0.5)})`; ctx.lineWidth = 1.2 * S; ctx.beginPath(); ctx.arc(lx - 34 * S - 40 * S, ly - 98 * S, 6 * S + k * 50 * S, 0, TAU); ctx.stroke(); ctx.restore(); });
+      // Its present, left on the window as it goes
+      const k = a - 5.35; if (k < 0) return; const x = lx - 90 * S, y = ly - 230 * S, al = 1 - sm((a - 6.5) / 0.5) * 0, run = Math.min(1, k / 1.5); ctx.save(); ctx.globalAlpha = al; const r = rng(hash(e.id));
+      ctx.fillStyle = 'rgba(236,236,226,0.92)'; ctx.beginPath(); ctx.ellipse(x, y, 11 * S * sm(k / 0.08), 8 * S * sm(k / 0.08), 0.3, 0, TAU); ctx.fill(); for (let i = 0; i < 7; i++) { const an = r() * TAU, d = (8 + r() * 12) * S * sm(k / 0.08); ctx.beginPath(); ctx.arc(x + Math.cos(an) * d, y + Math.sin(an) * d * 0.8, (1.5 + r() * 2.5) * S, 0, TAU); ctx.fill(); }
+      ctx.fillRect(x - 2 * S, y, 4 * S, 22 * S * run); ctx.beginPath(); ctx.arc(x, y + 22 * S * run, 2.6 * S, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(60,60,50,0.6)'; ctx.beginPath(); ctx.arc(x + 2 * S, y - 1 * S, 2.4 * S, 0, TAU); ctx.fill(); ctx.restore(); }
+  }
+  function summerOf(cfg, t) { let s = 0, after = 0; active(cfg, t).forEach(e => { if (e.k !== 'summer') return; const { a } = phase(e, t); s = Math.max(s, sm(a / 0.6) * (1 - sm((a - 4.2) / 0.35))); if (a > 4.4) after = Math.max(after, 1 - sm((a - 6.5) / 2.5)); }); return { s, after }; }
+  function evSummer(X, e, P, front) {
+    const { ctx, S, t, Q, R } = X, { a } = phase(e, t), s = sm(a / 0.6) * (1 - sm((a - 4.2) / 0.35)); if (!front || s <= 0.01 || !R) return;
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; let g = ctx.createLinearGradient(R.x0, R.y0, R.x0 + R.w * 0.6, R.y0 + R.h); g.addColorStop(0, `rgba(255,214,150,${0.7 * s})`); g.addColorStop(0.5, `rgba(150,190,255,${0.35 * s})`); g.addColorStop(1, `rgba(120,150,120,${0.15 * s})`); ctx.fillStyle = g; ctx.fillRect(R.x0, R.y0, R.w, R.h);
+    ctx.globalCompositeOperation = 'lighter'; const sx = R.x0 + R.w * 0.18, sy = R.y0 + R.h * 0.16; blob(ctx, glow('rgba(255,240,200,1)'), sx, sy, 150 * S * s, 0.9 * s); blob(ctx, glow('rgba(255,255,240,1)'), sx, sy, 40 * S, s);
+    // Rays and a rainbow
+    ctx.globalAlpha = 0.05 * s; ctx.fillStyle = 'rgb(255,240,200)'; for (let i = 0; i < 9; i++) { const an = 0.25 + i * 0.16 + Math.sin(t * 0.7 + i) * 0.02; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(an - 0.03) * R.w * 1.4, sy + Math.sin(an - 0.03) * R.w * 1.4); ctx.lineTo(sx + Math.cos(an + 0.03) * R.w * 1.4, sy + Math.sin(an + 0.03) * R.w * 1.4); ctx.closePath(); ctx.fill(); }
+    ctx.globalAlpha = 0.28 * s; ctx.lineWidth = 6 * S; ['#ff5050', '#ffa040', '#ffe060', '#60e070', '#5090ff', '#8060e0'].forEach((c, i) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(R.x0 + R.w * 0.66, R.y0 + R.h * 0.95, R.w * 0.42 - i * 6 * S, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); });
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  // A 3 by 5 font for the lit windows
+  const FONT = { A: '010101111101101', B: '110101110101110', C: '011100100100011', D: '110101101101110', E: '111100110100111', F: '111100110100100', G: '011100101101011', H: '101101111101101', I: '111010010010111', J: '001001001101010', K: '101101110101101', L: '100100100100111', M: '101111111101101', N: '110101101101101', O: '010101101101010', P: '110101110100100', Q: '010101101110011', R: '110101110101101', S: '011100010001110', T: '111010010010010', U: '101101101101111', V: '101101101101010', W: '101101111111101', X: '101101010101101', Y: '101101010010010', Z: '111001010100111',
+    0: '111101101101111', 1: '010110010010111', 2: '110001010100111', 3: '110001010001110', 4: '101101111001001', 5: '111100110001110', 6: '011100111101111', 7: '111001010010010', 8: '111101111101111', 9: '111101111001110', '!': '010010010000010', '?': '110001010000010', '.': '000000000000010', ' ': '000000000000000', "'": '010010000000000' };
+  const cleanWord = s => String(s == null ? 'BAWS' : s).toUpperCase().split('').filter(ch => FONT[ch] != null).join('').slice(0, 24);
+  function evSpell(X, e, P, front) {
+    const { ctx, S, t } = X, { a, d } = phase(e, t), T = lightBlock(P) === 1 ? X.T : X.T2; if (!T || !T.grid || !front) return; const G = T.grid, word = cleanWord(e.text), dark = win(a, 0, d, 0.5, 0.5), show = win(a, 0.7, d - 0.5, 0.15, 0.2);
+    ctx.save(); ctx.fillStyle = `rgba(30,28,36,${0.93 * dark})`; for (let c = 0; c < G.cols; c++) for (let r = 0; r < G.rows; r++) { const [x, y, cw, ch] = cell(T, c, r); ctx.fillRect(x - cw * 0.34, y - ch * 0.3, cw * 0.68, ch * 0.6); }
+    const W = word.length * 4 - 1, rows0 = Math.floor((G.rows - 5) / 2), fits = W <= G.cols, off = fits ? Math.floor((G.cols - W) / 2) : Math.round(lerp(G.cols, -W, cl((a - 0.8) / Math.max(0.5, d - 1.5), 0, 1)));
+    if (show > 0) { const lit = []; for (let i = 0; i < word.length; i++) { const f = FONT[word[i]]; for (let rr = 0; rr < 5; rr++) for (let cc = 0; cc < 3; cc++) if (f[rr * 3 + cc] === '1') { const c = off + i * 4 + cc; if (c >= 0 && c < G.cols) lit.push(cell(T, c, rows0 + rr)); } }
+      ctx.fillStyle = `rgba(255,206,128,${0.95 * show})`; lit.forEach(([x, y, cw, ch]) => ctx.fillRect(x - cw * 0.3, y - ch * 0.26, cw * 0.6, ch * 0.52)); ctx.globalCompositeOperation = 'lighter'; lit.forEach(([x, y, cw]) => blob(ctx, glow('rgba(255,190,110,0.8)'), x, y, cw * 0.9, 0.5 * show)); }
+    ctx.restore(); ctx.globalAlpha = 1; void S;
+  }
+  function strikeOf(cfg, t) { let fl = 0, out = 0, room = 0; active(cfg, t).forEach(e => { if (e.k !== 'strike') return; const { a, d } = phase(e, t), D = LEN.strike; fl = Math.max(fl, Math.exp(-a * 14) * 1.4 + 0.9 * Math.exp(-Math.abs(a - 0.16) * 30) + 0.5 * Math.exp(-Math.abs(a - 0.4) * 22));
+      const flick = q => (Math.sin(a * 53) > 0.2 ? 1 : 0.35) * q; out = Math.max(out, a < 0.5 ? 0 : a < 0.8 ? flick(sm((a - 0.5) / 0.3)) : a < D - 1.8 ? 1 : a < D - 1 ? 1 - flick(sm((a - D + 1.8) / 0.8)) : 0);
+      room = Math.max(room, a < 0.7 ? 0 : a < 0.85 ? (a - 0.7) / 0.15 : a < D - 1.0 ? 1 : a < D - 0.3 ? 1 - (Math.sin(a * 60) > 0 ? sm((a - D + 1) / 0.7) : 0) : 0); void d; }); return { fl, out, room }; }
+  function evStrike(X, e, P, front) {
+    const { ctx, S, t, Q } = X, { a } = phase(e, t); if (!front) return; const T = P.state === 'rubble' || P.gone ? X.T2 : X.T; if (!T) return; const roof = T.roof || [(T.x0 + T.x1) / 2, T.top];
+    if (a < 0.6 && (a < 0.08 || Math.abs(a - 0.16) < 0.06 || Math.abs(a - 0.4) < 0.07)) { const r = rng(hash(e.id)), y0 = Math.min(Q[0][1], Q[1][1]) - 10 * S, pts = [[roof[0] + (r() - 0.5) * 120 * S, y0]]; for (let i = 1; i <= 12; i++) { const f = i / 12; pts.push([lerp(pts[0][0], roof[0], f) + (i < 12 ? (r() - 0.5) * 34 * S : 0), lerp(y0, roof[1], f)]); }
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; [[14, 'rgba(160,170,255,0.3)'], [6, 'rgba(210,220,255,0.6)'], [2.4, 'rgba(255,255,255,1)']].forEach(([w, c]) => { ctx.strokeStyle = c; ctx.lineWidth = w * S; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }); blob(ctx, glow('rgba(220,230,255,1)'), roof[0], roof[1], 40 * S, 1); ctx.restore(); ctx.globalAlpha = 1; }
+    sparks(ctx, roof[0], roof[1], a - 0.05, S, 12, 40, 'rgba(255,230,160,0.95)', { sp: 90, life: 1.4, g: 220 });
+    flame(ctx, roof[0], roof[1] + 2 * S, 6 * S, t, 31, win(a, 0.6, 5.6, 0.4, 1));
+    plume(ctx, roof[0], roof[1] - 4 * S, a, 0.7, 6.5, S, 33, { n: 20, life: 4, s0: 5, grow: 6, rise: 18, alpha: 0.45 });
+  }
+  const DRAW = { plane: evPlane, demolish: evDemolish, squid: evSquid, telly: evTelly, bonfire: evBonfire, polis: evPolis, carfire: evCarfire, ufo: evUfo, gull: evGull, summer: evSummer, spell: evSpell, strike: evStrike };
+
+  /* ---------- What Studio calls ---------- */
+  // Out in the world, behind the rain: things behind the block, the block, then everything in front of it
+  function world(X) {
+    const { cfg, t } = X, P = X.pose, list = active(cfg, t);
+    list.forEach(e => { if (e.k === 'squid') evSquid(X, e, P, false); });
+    drawTower(X, P);
+    list.forEach(e => { const f = DRAW[e.k]; if (!f || e.k === 'gull') return; if (e.k === 'bonfire') f(X, e, P, true, 'world'); else f(X, e, P, true); });
+    X.ctx.globalAlpha = 1;
+  }
+  // Right up against the glass (behind the drops): the seagull, a firework coming at you
+  function near(X) { active(X.cfg, X.t).forEach(e => { if (e.k === 'gull') evGull(X, e, X.pose, true, 'near'); if (e.k === 'bonfire') evBonfire(X, e, X.pose, true, 'near'); }); X.ctx.globalAlpha = 1; }
+  // On the glass itself (over the drops)
+  function onGlass(X) { active(X.cfg, X.t).forEach(e => { if (e.k === 'gull') evGull(X, e, X.pose, true, 'glass'); if (e.k === 'bonfire') evBonfire(X, e, X.pose, true, 'glass'); }); X.ctx.globalAlpha = 1; }
+  // Light thrown into the room by what is going on outside
+  function light(cfg, t) {
+    const out = { glow: [], flash: 0, lampsOff: 0, roomOff: 0, out: 0, rainK: 1, sun: 0 };
+    active(cfg, t).forEach(e => { const { a } = phase(e, t);
+      if (e.k === 'plane') { const k = a - PL.IMP; if (k > 0) out.glow.push([[255, 150, 70], 1.1 * Math.exp(-k * 2.2) + 0.1 * (0.7 + 0.3 * Math.sin(a * 13)) * (1 - sm((a - PL.COL) / 3))]); }
+      if (e.k === 'demolish') { const k = a - DM.BANG; if (k > 0) out.glow.push([[255, 200, 140], 0.55 * Math.exp(-k * 4)]); }
+      if (e.k === 'bonfire') { ROCKETS.forEach(([t0], i) => { const k = a - t0 - 0.9; if (k > 0) out.glow.push([[[255, 120, 120], [140, 255, 160], [255, 210, 120], [210, 150, 255], [140, 200, 255]][i], 0.18 * Math.exp(-k * 3)]); }); const k = a - 7.5; if (k > -0.6 && k < 0) out.glow.push([[255, 200, 150], 0.2 * (1 + k / 0.6)]); if (k > 0) out.glow.push([[255, 220, 200], 1.3 * Math.exp(-k * 3.5)]); }
+      if (e.k === 'polis') { const on = Math.sin(t * TAU * 3.2) > 0; if (a > 1.3 && a < 5.3) out.glow.push([[70, 110, 255], (on ? 0.22 : 0.06) * win(a, 1.3, 5.3, 0.4, 0.6)]); const sw = a - 8.2; if (sw > 0 && sw < 0.9) out.glow.push([[235, 240, 255], 0.75 * Math.sin(Math.PI * sw / 0.9)]); }
+      if (e.k === 'carfire') { const k = a - 5.6; out.glow.push([[255, 140, 60], 0.06 * sm((a - 1) / 3) * (0.7 + 0.3 * Math.sin(a * 11))]); if (k > 0) out.glow.push([[255, 160, 80], 0.6 * Math.exp(-k * 3)]); }
+      if (e.k === 'ufo') out.glow.push([[120, 255, 160], 0.2 * win(a, 3, 8.6, 0.25, 0.3)]);
+      if (e.k === 'telly') { const k = a - 0.85; if (k > 0) out.glow.push([[160, 200, 255], 0.0]); }
+    });
+    const su = summerOf(cfg, t); out.sun = su.s; if (su.s > 0) out.glow.push([[255, 214, 150], 0.8 * su.s]); out.rainK = (1 - su.s) * (1 + 0.9 * su.after);
+    active(cfg, t).forEach(e => { if (e.k !== 'summer') return; const { a } = phase(e, t), k = a - 4.55; if (k > 0) out.flash = Math.max(out.flash, Math.exp(-k * 14) * 1.2 + 0.6 * Math.exp(-Math.abs(k - 0.18) * 30)); });
+    const st = strikeOf(cfg, t); out.flash = Math.max(out.flash, st.fl); out.out = st.out; out.roomOff = st.room; out.lampsOff = st.room;
+    return out;
+  }
+  // Thunder in the sound for the summer downpour and the lightning strike
+  function thunders(cfg) { const out = []; evs(cfg).forEach(e => { const k = LEN[e.k] / durOf(e), st = +e.start || 0; if (e.k === 'summer') out.push({ t: st + 4.55 / k, big: true, seed: hash(e.id), pow: 1.2 }); if (e.k === 'strike') out.push({ t: st, big: true, seed: hash(e.id), pow: 1.6 }); }); return out; }
+  // The sound of each event, added into the studio's sound
+  function sound(cfg, add, sr) {
+    evs(cfg).forEach(e => { const st = +e.start || 0, k = LEN[e.k] / durOf(e), at = a => st + a / k, nz = rng(hash(e.id) + 1), n = () => nz() * 2 - 1;
+      let b = 0, lp = 0; const brown = (c = 0.02, d = 0.997) => (b = (b + c * n()) * d), low = (x, f) => (lp += f * (x - lp));
+      const boom = (t0, len, pow, pan = 0.5) => { let b1 = 0, l1 = 0; add(t0, x => { b1 = (b1 + 0.03 * n()) * 0.998; l1 += 0.03 * (b1 - l1); return (l1 * 2.4 * Math.exp(-x / (len * 0.4)) + Math.sin(TAU * 48 * x) * Math.exp(-x / 0.35) * 0.5 + n() * Math.exp(-x / 0.05) * 0.4) * pow; }, len, pan); };
+      const bang = (t0, pow, pan = 0.5) => add(t0, x => (n() * Math.exp(-x / 0.04) * 0.6 + Math.sin(TAU * 70 * x) * Math.exp(-x / 0.12) * 0.5) * pow, 0.5, pan);
+      const crackle = (t0, len, dens, pow, pan = 0.5) => { const r = rng(hash(e.id) + Math.round(t0 * 100)); let c = 0; add(t0, x => { if (r() < dens / sr) c = 0.5 + r() * 0.5; c *= 0.992; return n() * c * pow * win(x, 0, len, 0.5, 0.8); }, len, pan); };
+      if (e.k === 'plane') { add(at(0), x => low(n(), 0.06) * 1.2 * sm(x / 3) * (1 + x * 0.3) * (x < PL.IMP / k ? 1 : 0), PL.IMP / k + 0.1, 0.35); boom(at(PL.IMP), 5, 1.4, 0.45); crackle(at(PL.IMP + 0.4), (PL.COL - PL.IMP + 1) / k, 30, 0.12, 0.45); add(at(PL.COL), x => brown(0.03, 0.998) * 2 * win(x, 0, (PL.COLE - PL.COL + 3) / k, 0.6, 2), (PL.COLE - PL.COL + 3) / k, 0.5); }
+      if (e.k === 'demolish') { [0, 0.7, 1.4].forEach(h => add(at(h), x => Math.sign(Math.sin(TAU * 330 * x)) * 0.12 * win(x, 0, 0.5, 0.02, 0.05), 0.5, 0.5)); for (let i = 0; i < 8; i++) bang(at(DM.BANG + i * 0.07), 0.7, 0.4 + i * 0.03); add(at(DM.BANG + 0.3), x => Math.sin(TAU * (60 + 15 * Math.sin(x * 3)) * x) * 0.25 * win(x, 0, 3, 0.3, 1.2) + brown() * 0.8 * win(x, 0, 3, 0.1, 1.5), 3, 0.5); }
+      if (e.k === 'squid') { [0.5, 5].forEach(h => add(at(h), x => (Math.sin(TAU * (48 + 6 * Math.sin(x * 2.1)) * x) * 0.35 + Math.sin(TAU * 97 * x) * 0.1) * win(x, 0, 3, 0.6, 1), 3, 0.55)); add(at(5), x => brown(0.03) * 0.9 * win(x, 0, 3.2, 0.3, 0.5) * (0.6 + 0.4 * Math.sin(x * 47)), 3.2, 0.45); }
+      if (e.k === 'telly') { const g = 300, vy = -46, tl = 1.1; add(at(0.85 + tl), x => (n() * Math.exp(-x / 0.06) * 0.5 + [3100, 4200, 5300].reduce((s, f, i) => s + Math.sin(TAU * f * x) * Math.exp(-(x - i * 0.03) / 0.08) * (x > i * 0.03 ? 0.08 : 0), 0)), 0.6, 0.5); void g; void vy; }
+      if (e.k === 'bonfire') { crackle(at(0), 12 / k, 60, 0.14, 0.4); ROCKETS.forEach(([t0], i) => { add(at(t0), x => Math.sin(TAU * (900 + 1400 * x) * x) * 0.05 * win(x, 0, 0.9, 0.05, 0.1), 0.9, 0.4 + i * 0.05); bang(at(t0 + 0.9), 0.45, 0.35 + i * 0.07); }); add(at(6.8), x => Math.sin(TAU * (1200 + 900 * x) * x) * 0.09 * sm(x / 0.7), 0.7, 0.5); bang(at(7.5), 1.3, 0.5); add(at(7.5), x => Math.sin(TAU * 140 * x) * Math.exp(-x / 0.2) * 0.4, 0.6, 0.5); }
+      if (e.k === 'polis') { add(at(1.2), x => { const f = Math.floor(x / 0.55) % 2 ? 650 : 870; return (2 * Math.abs(2 * ((f * x) % 1) - 1) - 1) * 0.08 * win(x, 0, 6 / k, 0.6, 2); }, 6 / k, 0.5); add(at(3.4), x => n() * 0.25 * (0.5 + 0.5 * Math.sign(Math.sin(TAU * 17 * x))) * win(x, 0, 7.6 / k, 1.2, 1.6), 7.6 / k, 0.4); add(at(0.4), x => low(n(), 0.1) * 0.6 * Math.sin(Math.PI * cl(x / 2.2, 0, 1)), 2.2, 0.6); }
+      if (e.k === 'carfire') { crackle(at(1), 12.5 / k, 50, 0.16, 0.45); boom(at(5.6), 3, 0.9, 0.45); }
+      if (e.k === 'ufo') add(at(0.5), x => { const L2 = 9.6 / k, f = x < L2 ? 520 + 120 * Math.sin(x * 5) + 40 * Math.sin(x * 31) : 520 + 2400 * (x - L2); return Math.sin(TAU * f * x) * 0.07 * win(x, 0, L2 + 0.6, 1, 0.3); }, 9.6 / k + 0.6, 0.5);
+      if (e.k === 'gull') { [0.2, 0.5, 0.8, 5.1, 5.35, 5.6].forEach(h => add(at(h), x => low(n(), 0.2) * 0.5 * Math.sin(Math.PI * cl(x / 0.15, 0, 1)), 0.15, 0.6)); [3.4, 3.75].forEach(h => add(at(h), x => Math.sin(TAU * 1900 * x) * Math.exp(-x / 0.008) * 0.5 + n() * Math.exp(-x / 0.004) * 0.3, 0.1, 0.6));
+        add(at(4.25), x => { const f = 1500 - 500 * x + 80 * Math.sin(x * 70); return (2 * ((f * x) % 1) - 1) * 0.13 * win(x, 0, 0.6, 0.03, 0.15) * (0.6 + 0.4 * Math.sin(x * 40)); }, 0.6, 0.6); add(at(5.35), x => low(n(), 0.3) * 0.5 * Math.exp(-x / 0.06), 0.25, 0.55); }
+      if (e.k === 'summer') { for (let i = 0; i < 9; i++) { const r = rng(i + 3), h = 0.7 + r() * 3.2; add(at(h), x => Math.sin(TAU * (3200 + 1500 * Math.sin(x * 60) + r() * 600) * x) * 0.05 * win(x, 0, 0.18, 0.02, 0.06), 0.2, 0.3 + r() * 0.4); } }
+      if (e.k === 'strike') { add(at(0.55), x => (Math.sign(Math.sin(TAU * 100 * x)) * 0.12 + n() * 0.05) * Math.exp(-x / 0.25), 0.6, 0.5); add(at(LEN.strike - 1.8), x => Math.sin(TAU * (60 + 40 * x) * x) * 0.12 * win(x, 0, 1.2, 0.2, 0.5), 1.2, 0.5); }
+    });
+  }
+  // A small picture for each kind, for the add menu
+  function icon(k) { return c => { const g = c.getContext('2d'), W = c.width, H = c.height; g.fillStyle = '#1b2236'; g.fillRect(0, 0, W, H); g.fillStyle = '#3a4560'; g.fillRect(W * 0.55, H * 0.25, W * 0.25, H * 0.75); g.fillStyle = TINT[k] || '#888'; g.beginPath(); g.arc(W * 0.35, H * 0.4, Math.min(W, H) * 0.2, 0, TAU); g.fill(); }; }
+
+  return { KINDS, LEN, TOWER, HINT, TINT, nameOf, evs, durOf, towerAt, pose, world, near, onGlass, light, thunders, sound, icon, cleanWord, summerOf, _font: FONT };
+})();

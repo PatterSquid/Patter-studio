@@ -32,15 +32,16 @@ const Studio = (() => {
   const BUILTIN = 'studio-builtin', hasBuiltin = typeof STUDIO_ROOM !== 'undefined';
   const builtinMarks = () => JSON.parse(JSON.stringify(hasBuiltin ? STUDIO_MARKS : { glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }));
   let readyP = null;
-  const LOGO = 'pattersquid-logo';
-  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null]).catch(() => null) : Promise.resolve());
+  const LOGO = 'pattersquid-logo', PLATE = 'studio-plate';
+  const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null, typeof STUDIO_PLATE !== 'undefined' ? Layers.setAsset(PLATE, STUDIO_PLATE) : null]).catch(() => null) : Promise.resolve());
+  const Ev = typeof StudioEvents !== 'undefined' ? StudioEvents : null;
   // Older settings with no room picture use the built-in studio
   // and his own studio always uses the marks that come with the app (so fixes to them reach him), unless he has marked it himself
   const eff = cfg => { if (!cfg || !hasBuiltin) return cfg; if (!cfg.room) return Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marksOwn && cfg.marks && cfg.marks.glass ? cfg.marks : STUDIO_MARKS });
     return cfg.room.asset === BUILTIN && !cfg.marksOwn ? Object.assign({}, cfg, { marks: STUDIO_MARKS }) : cfg; };
   function defaults() {
     return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
-      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q }, avatar: null, stings: [], shows: [], sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
+      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q }, avatar: null, stings: [], shows: [], events: [], tower: 'standing', sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
   function duration(cfg) {
@@ -88,9 +89,9 @@ const Studio = (() => {
 
   /* ---------- Per room: a soft copy of the view out of the window (what a drop of water bends) ---------- */
   const roomCache = new Map();
-  function roomBits(cfg, v) {
-    const bmp = roomBmp(cfg), G = cfg.marks && cfg.marks.glass; if (!bmp || !G) return null;
-    const key = cfg.room.asset + JSON.stringify(G); let R = roomCache.get(key); if (R) return R;
+  function roomBits(cfg, v, bmp) {
+    bmp = bmp || roomBmp(cfg); const G = cfg.marks && cfg.marks.glass; if (!bmp || !G) return null;
+    if (!bmpIds.has(bmp)) bmpIds.set(bmp, ++bmpN); const key = cfg.room.asset + ':' + bmpIds.get(bmp) + JSON.stringify(G); let R = roomCache.get(key); if (R) return R;
     const pts = G.map(m => P(m, v)), x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
     const w = Math.max(8, x1 - x0), h = Math.max(8, y1 - y0), half = mk(w / 2, h / 2), hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high'; hg.drawImage(bmp, x0, y0, w, h, 0, 0, half.width, half.height);
     // Misted: a blurred copy laid lightly over the view makes wet glass, and makes the drops (which stay sharp) stand out
@@ -153,6 +154,52 @@ const Studio = (() => {
   const onGlass = (Q, a, b) => { const top = [lerp(Q[0][0], Q[1][0], a), lerp(Q[0][1], Q[1][1], a)], bot = [lerp(Q[3][0], Q[2][0], a), lerp(Q[3][1], Q[2][1], a)]; return [lerp(top[0], bot[0], b), lerp(top[1], bot[1], b)]; };
   const pathOf = (ctx, pts) => { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); };
 
+  /* ---------- The flats across the road, for the things that happen to them (studio_events.js). His studio comes with the
+     big block marked, a picture of the view without it (so it can come down), and the block next to it. ---------- */
+  const towerMarks = cfg => { const M = cfg.marks || {}, b = hasBuiltin && cfg.room && cfg.room.asset === BUILTIN; return { t1: M.tower || (b ? STUDIO_MARKS.tower : null), t2: M.tower2 || (b ? STUDIO_MARKS.tower2 : null), spots: M.spots || (b ? STUDIO_MARKS.spots : null) }; };
+  function towerGeo(m, v) { if (!m || !m.p) return null; const p = m.p.map(q => P(q, v)), xs = p.map(q => q[0]), ys = p.map(q => q[1]);
+    return { p, x0: Math.min(...xs), x1: Math.max(...xs), top: (m.top || Math.min(...ys) / v.ih) * v.ih, base: (m.base || Math.max(...ys) / v.ih) * v.ih, roof: m.roof ? P(m.roof, v) : null, grid: m.grid ? { x0: m.grid.x0 * v.iw, x1: m.grid.x1 * v.iw, y0: m.grid.y0 * v.ih, y1: m.grid.y1 * v.ih, cols: m.grid.cols, rows: m.grid.rows } : null }; }
+  // In a room of his own with nothing marked, a block in the middle of the window stands in
+  function guessTower(Q) { const x0 = lerp(Q[3][0], Q[2][0], 0.55), x1 = lerp(Q[3][0], Q[2][0], 0.72), top = lerp(Q[0][1], Q[3][1], 0.3), base = lerp(Q[0][1], Q[3][1], 0.92); return { p: [[x0, top], [x1, top], [x1, base], [x0, base]], x0, x1, top, base, roof: [(x0 + x1) / 2, top], grid: { x0: x0 + 6, x1: x1 - 6, y0: top + 8, y1: base - 12, cols: 9, rows: 12 } }; }
+  // The block cut out of the room, and the room with it taken away, made once
+  const kitCache = new Map();
+  function towerKit(cfg, bmp) {
+    const tm = towerMarks(cfg).t1, pa = typeof Layers !== 'undefined' && Layers.assets[PLATE]; if (!tm || !tm.plate || !pa || !pa.bmp || !bmp || cfg.room.asset !== BUILTIN) return null;
+    if (!bmpIds.has(bmp)) bmpIds.set(bmp, ++bmpN); const key = bmpIds.get(bmp) + JSON.stringify(tm.p); let K = kitCache.get(key); if (K) return K;
+    const W = bmp.width, Hh = bmp.height, pts = tm.p.map(q => [q[0] * W, q[1] * Hh]), xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), k = Hh / 1080;
+    const bx0 = Math.floor(Math.min(...xs) - 10 * k), by0 = Math.floor(Math.min(...ys) - 22 * k), bx1 = Math.ceil(Math.max(...xs) + 10 * k), by1 = Math.ceil(Math.max(...ys) + 4 * k), bw = bx1 - bx0, bh = by1 - by0, roofY = (tm.top || 0) * Hh + 4 * k;
+    const plate = mk(bw, bh), pg = plate.getContext('2d', { willReadFrequently: true }); pg.drawImage(pa.bmp, tm.plate.x * W - bx0, tm.plate.y * Hh - by0, tm.plate.w * W, tm.plate.h * Hh);
+    const room = mk(bw, bh), rg = room.getContext('2d', { willReadFrequently: true }); rg.drawImage(bmp, bx0, by0, bw, bh, 0, 0, bw, bh);
+    // Where the block is: its outline, plus anything sticking up off the roof (aerials, rails) found where the room differs from the view behind
+    const m = mk(bw, bh), mg = m.getContext('2d', { willReadFrequently: true }); mg.fillStyle = '#fff'; pathOf(mg, pts.map(q => [q[0] - bx0, q[1] - by0])); mg.fill();
+    const md = mg.getImageData(0, 0, bw, bh), rd = rg.getImageData(0, 0, bw, bh).data, pd = pg.getImageData(0, 0, bw, bh).data;
+    for (let y = 0; y < bh; y++) { if (y + by0 > roofY) break; for (let x = 0; x < bw; x++) { const i = (y * bw + x) * 4, d = Math.abs(rd[i] - pd[i]) + Math.abs(rd[i + 1] - pd[i + 1]) + Math.abs(rd[i + 2] - pd[i + 2]); if (d > 30) md.data[i + 3] = 255; } }
+    mg.putImageData(md, 0, 0);
+    const c = mk(bw, bh), cg = c.getContext('2d'); cg.drawImage(room, 0, 0); cg.globalCompositeOperation = 'destination-in'; cg.drawImage(m, 0, 0);
+    // The room without it: the view behind laid in over the block and a little round it
+    const soft = mk(bw, bh), sg = soft.getContext('2d'); sg.filter = 'blur(' + (2.5 * k).toFixed(1) + 'px)'; for (let i = 0; i < 4; i++) sg.drawImage(m, 0, 0);
+    plate.getContext('2d').globalCompositeOperation = 'destination-in'; plate.getContext('2d').drawImage(soft, 0, 0);
+    const gone = mk(W, Hh), gg = gone.getContext('2d'); gg.drawImage(bmp, 0, 0); gg.drawImage(plate, bx0, by0);
+    K = { gone, c, x: bx0, y: by0, w: bw, h: bh }; if (kitCache.size > 2) kitCache.clear(); kitCache.set(key, K); return K;
+  }
+  // The view with every light out there switched off (a power cut), made once from whatever the room picture is
+  function lightsOut(bmp, R) {
+    if (R.outCv) return R.outCv; const W = Math.round(R.w), Hh = Math.round(R.h), c = mk(W, Hh), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, R.x0, R.y0, R.w, R.h, 0, 0, W, Hh);
+    const id = g.getImageData(0, 0, W, Hh), d = id.data, lit = new Uint8Array(W * Hh);
+    for (let i = 0; i < W * Hh; i++) { const r = d[i * 4], gg = d[i * 4 + 1], b = d[i * 4 + 2], l = r * 0.3 + gg * 0.59 + b * 0.11; if ((r > b + 10 && l > 44) || l > 120) lit[i] = 1; }
+    // Grow each light a little so its halo goes too
+    const big = new Uint8Array(W * Hh); for (let y = 1; y < Hh - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x; if (lit[i] || lit[i - 1] || lit[i + 1] || lit[i - W] || lit[i + W]) big[i] = 1; }
+    const holes = mk(W, Hh), hg = holes.getContext('2d', { willReadFrequently: true }), hd = hg.createImageData(W, Hh); for (let i = 0; i < W * Hh; i++) { if (big[i]) continue; hd.data[i * 4] = d[i * 4]; hd.data[i * 4 + 1] = d[i * 4 + 1]; hd.data[i * 4 + 2] = d[i * 4 + 2]; hd.data[i * 4 + 3] = 255; } hg.putImageData(hd, 0, 0);
+    const fill = mk(W, Hh), fg = fill.getContext('2d', { willReadFrequently: true }); fg.filter = 'blur(5px)'; fg.drawImage(holes, 0, 0); const fd = fg.getImageData(0, 0, W, Hh).data;
+    const out = g.createImageData(W, Hh); for (let i = 0; i < W * Hh; i++) { if (!big[i]) continue; const a = fd[i * 4 + 3] / 255 || 1; out.data[i * 4] = Math.min(255, fd[i * 4] / a * 0.85); out.data[i * 4 + 1] = Math.min(255, fd[i * 4 + 1] / a * 0.85); out.data[i * 4 + 2] = Math.min(255, fd[i * 4 + 2] / a * 0.9); out.data[i * 4 + 3] = 255; }
+    g.clearRect(0, 0, W, Hh); g.putImageData(out, 0, 0); return (R.outCv = c);
+  }
+  // Light from outside thrown into the room through the window, in a colour
+  function windowGlow(ctx, Q, v, rgb, e) { if (e <= 0.005) return; const cx = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, cy = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4, [r, g, b] = rgb;
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, v.iw * 0.85); gr.addColorStop(0, `rgba(${r},${g},${b},${cl(0.32 * e, 0, 1)})`); gr.addColorStop(0.4, `rgba(${r},${g},${b},${cl(0.14 * e, 0, 1)})`); gr.addColorStop(1, `rgba(${r},${g},${b},${cl(0.05 * e, 0, 1)})`); ctx.fillStyle = gr; ctx.fillRect(0, 0, v.iw, v.ih);
+    const fl = floorLight(Q, v), tint = buf('tint', fl.width, fl.height), tg = tint.getContext('2d'); tg.globalCompositeOperation = 'copy'; tg.drawImage(fl, 0, 0); tg.globalCompositeOperation = 'source-in'; tg.fillStyle = `rgb(${r},${g},${b})`; tg.fillRect(0, 0, tint.width, tint.height);
+    ctx.globalAlpha = cl(0.5 * e, 0, 1); ctx.drawImage(tint, 0, 0, v.iw, v.ih); ctx.restore(); }
+
   /* ---------- Storms: when the lightning goes, from the weather and from any thunder bars on the timeline ---------- */
   function flashTimes(cfg) {
     const L = loopOf(cfg), w = WX[cfg.weather] || WX.rain, n = Math.round(w.light * cl(+cfg.lightning, 0, 3) * L / 9), r = rng(hash('fl' + L + n)), out = [];
@@ -188,8 +235,13 @@ const Studio = (() => {
     if (!bmp) { ctx.fillStyle = '#0d1424'; ctx.fillRect(0, 0, W, H); if (look && look.preview) emptyCard(ctx, W, H); drawAvatarAlone(ctx, cfg, tAv, W, H); ctx.restore(); return; }
     const v = view(cfg, W, H, t), M = cfg.marks || {}, L = loopOf(cfg), w = WX[cfg.weather] || WX.rain, tl = pmod(t, L);
     const base = ctx.getTransform ? Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1 : 1; ctx.transform(v.s, 0, 0, v.s, v.ox, v.oy); ctx.imageSmoothingQuality = 'low'; v.px = v.s * base;
-    const B = bigRoom(bmp, v.s0 * base * 1.01); v.B = B; ctx.drawImage(B.c, 0, 0, v.iw, v.ih);
-    const fl = flashAt(cfg, t), lamps = (M.lamps || []).map((m, i) => lampLevel(cfg, t, i)), room = lamps.reduce((a, x) => Math.min(a, x.room), lampLevel(cfg, t, 99).room);
+    // What is going on outside: the state of the flats (the room picture loses the block once it is cut out and moved) and
+    // the light it throws in
+    const evOn = Ev && ((cfg.events || []).length || (cfg.tower && cfg.tower !== 'standing')), Pz = evOn ? Ev.pose(cfg, t) : null, kit = Pz && (Pz.gone || Pz.draw) ? towerKit(cfg, bmp) : null;
+    v.Pz = Pz; v.kit = kit; v.pic = Pz && Pz.gone && kit ? kit.gone : bmp; v.EL = Ev && (cfg.events || []).length ? Ev.light(cfg, t) : null;
+    const B = bigRoom(v.pic, v.s0 * base * 1.01); v.B = B; ctx.drawImage(B.c, 0, 0, v.iw, v.ih);
+    let fl = flashAt(cfg, t); if (v.EL && v.EL.flash > fl.e) fl = { e: v.EL.flash, best: null };
+    const off = v.EL ? v.EL.lampsOff : 0, lamps = (M.lamps || []).map((m, i) => { const x = lampLevel(cfg, t, i); return off ? { f: x.f * lerp(1, 0.05, off), room: x.room } : x; }), room = Math.min(lamps.reduce((a, x) => Math.min(a, x.room), lampLevel(cfg, t, 99).room), v.EL ? lerp(1, 0.3, v.EL.roomOff) : 1);
     if (M.glass) drawWindow(ctx, cfg, M, v, t, tl, L, w, fl);
     if (cfg.sway !== false) drawPlants(ctx, v.B, M, v, t, L);
     drawShows(ctx, cfg, M, v, t, look);
@@ -215,17 +267,23 @@ const Studio = (() => {
     g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0); F = { c, x0, y0, w: x1 - x0, h: y1 - y0 }; if (frontCache.size > 20) frontCache.clear(); frontCache.set(key, F); return F;
   }
   function drawWindow(ctx, cfg, M, v, t, tl, L, w, fl) {
-    const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v); if (!R) return; const amt = cl(+cfg.rain, 0, 2);
+    const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v, v.pic); if (!R) return; const amt = cl(+cfg.rain, 0, 2), fall = amt * (v.EL ? v.EL.rainK : 1);
+    let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q); X = { ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
     ctx.save(); pathOf(ctx, Q); ctx.clip();
     if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
-    if (w.snow) { const sc = snowCover(roomBmp(cfg), R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
+    if (w.snow) { const sc = snowCover(v.pic, R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (cfg.outside !== false) outside(ctx, cfg, M, v, t, L, fl);
+    // A power cut: every light out there goes off
+    if (v.EL && v.EL.out > 0.01) { ctx.save(); ctx.globalAlpha = cl(v.EL.out, 0, 1); ctx.drawImage(lightsOut(v.pic, R), R.x0, R.y0, R.w, R.h); ctx.fillStyle = 'rgba(4,6,16,0.22)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
+    if (X) Ev.world(X);
     if (fl.e > 0.01) sky(ctx, Q, R, fl, v);
-    if (w.distant * amt > 0) distantRain(ctx, R, tl, L, w.distant * amt, v);
-    if (w.snow) snow(ctx, R, tl, L, w.snow * Math.max(0.3, amt), v);
+    if (w.distant * fall > 0) distantRain(ctx, R, tl, L, w.distant * fall, v);
+    if (w.snow && fall > 0.01) snow(ctx, R, tl, L, w.snow * Math.max(0.3, amt) * Math.min(1, fall / Math.max(0.01, amt)), v);
+    if (X) Ev.near(X);
     if ((w.beads || w.snow) && amt > 0) { ctx.save(); ctx.globalAlpha = cl(0.22 * w.fog * (0.5 + amt * 0.5), 0, 0.5); ctx.drawImage(R.mist, R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (w.fog) { const g = ctx.createLinearGradient(0, R.y0 + R.h * 0.55, 0, R.y0 + R.h); g.addColorStop(0, 'rgba(150,165,200,0)'); g.addColorStop(1, `rgba(150,165,200,${0.07 * w.fog})`); ctx.fillStyle = g; ctx.fillRect(R.x0, R.y0, R.w, R.h); }
     if ((w.beads || w.runners) && amt > 0) glass(ctx, Q, R, tl, L, w, amt, v);
+    if (X) Ev.onGlass(X);
     // Snow gathered against the bottom of the glass: soft, heavier in the corners, with a faint frosting above it
     if (w.snow) { const S = v.iw / 1672, b1 = onGlass(Q, 0, 1), b0 = onGlass(Q, 1, 1), hh = R.h * 0.07 * Math.max(0.6, amt);
       const fr = ctx.createLinearGradient(0, b1[1] - hh * 2.2, 0, b1[1]); fr.addColorStop(0, 'rgba(200,210,235,0)'); fr.addColorStop(1, 'rgba(200,210,235,0.16)'); ctx.fillStyle = fr; ctx.fillRect(R.x0, b1[1] - hh * 2.2, R.w, hh * 2.2 + 4);
@@ -239,12 +297,13 @@ const Studio = (() => {
   }
   function outside(ctx, cfg, M, v, t, L, fl) {
     // Flats: a few lights go off for a while and come back, the odd telly flickers blue
-    (M.lit || []).forEach((m, i) => { const r = rng(1000 + i), kind = r(), x = m[0] * v.iw, y = m[1] * v.ih, w2 = m[2] * v.iw, h2 = m[3] * v.ih;
+    const tb = v.tbox, pc = v.EL ? 1 - cl(v.EL.out, 0, 1) : 1;
+    (M.lit || []).forEach((m, i) => { const r = rng(1000 + i), kind = r(), x = m[0] * v.iw, y = m[1] * v.ih, w2 = m[2] * v.iw, h2 = m[3] * v.ih; if (tb && x > tb[0] && x < tb[2] && y > tb[1] && y < tb[3]) return;
       if (kind < 0.22) { const a = r() * L, d = L * (0.2 + r() * 0.35), on = pmod(t - a, L) > d; if (!on) { ctx.fillStyle = m[4] || 'rgba(40,40,52,0.92)'; ctx.fillRect(x - 0.6, y - 0.6, w2 + 1.2, h2 + 1.2); } }
       else if (kind < 0.27) { const q = 0.5 + 0.5 * Math.sin(t * (7 + r() * 5) + Math.sin(t * 2.3 + i) * 3); ctx.fillStyle = `rgba(110,150,255,${0.25 + 0.35 * q})`; ctx.fillRect(x, y, w2, h2); } });
     // Street lamps shimmer in the wet
     const gs = glowSprite('rgba(255,190,110,0.9)');
-    (M.street || []).forEach((m, i) => { const x = m[0] * v.iw, y = m[1] * v.ih, rr = (m[2] || 0.012) * v.iw, q = 0.75 + 0.18 * wob(t, L, 300 + i, [5, 9, 14]); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 * q; ctx.drawImage(gs, x - rr * 2.4, y - rr * 2.4, rr * 4.8, rr * 4.8); ctx.globalAlpha = 0.18 * q; ctx.drawImage(gs, x - rr * 0.6, y - rr * 0.2, rr * 1.2, rr * 7); ctx.restore(); });
+    (M.street || []).forEach((m, i) => { const x = m[0] * v.iw, y = m[1] * v.ih, rr = (m[2] || 0.012) * v.iw, q = 0.75 + 0.18 * wob(t, L, 300 + i, [5, 9, 14]); if (pc <= 0.01) return; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 * q * pc; ctx.drawImage(gs, x - rr * 2.4, y - rr * 2.4, rr * 4.8, rr * 4.8); ctx.globalAlpha = 0.18 * q * pc; ctx.drawImage(gs, x - rr * 0.6, y - rr * 0.2, rr * 1.2, rr * 7); ctx.restore(); });
     // Cars along the road: headlights coming, red lights going
     const road = (M.road || []).map(m => P(m, v)); if (road.length >= 2) {
       const lens = [0]; for (let i = 1; i < road.length; i++) lens.push(lens[i - 1] + Math.hypot(road[i][0] - road[i - 1][0], road[i][1] - road[i - 1][1])); const tot = lens[lens.length - 1] || 1;
@@ -351,6 +410,8 @@ const Studio = (() => {
       ctx.save(); ctx.globalCompositeOperation = 'screen'; const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, v.iw * 0.85); g.addColorStop(0, `rgba(150,165,240,${0.3 * e})`); g.addColorStop(0.4, `rgba(110,125,200,${0.13 * e})`); g.addColorStop(1, `rgba(80,90,160,${0.05 * e})`); ctx.fillStyle = g; ctx.fillRect(0, 0, v.iw, v.ih);
       // The window's shape thrown softly across the floor, stretched away from the window
       ctx.globalAlpha = 0.5 * cl(e, 0, 1.2); ctx.drawImage(floorLight(Q, v), 0, 0, v.iw, v.ih); ctx.restore(); }
+    // Whatever is going on outside lights the room too (the avatar carries on regardless)
+    if (v.EL && M.glass) { const Q = M.glass.map(m => P(m, v)); v.EL.glow.forEach(([rgb, e]) => windowGlow(ctx, Q, v, rgb, e)); }
     void S;
   }
 
@@ -590,7 +651,7 @@ const Studio = (() => {
     if (S0.cars !== false && cfg.outside !== false && ((cfg.marks && cfg.marks.road) || []).length >= 2) { const n = Math.max(1, Math.round(L / 15)), rc = rng(77); for (let k = 0; k < n; k++) { const st = (k + rc() * 0.6) * L / n, dur = 4 + rc() * 3, dir = rc() < 0.5 ? 1 : -1; for (let tt = st; tt < total + tail; tt += L) { let lp = 0; const nr = rng(hash('car' + k + tt));
           add(tt, x => { const u = x / dur, e = Math.sin(Math.PI * cl(u, 0, 1)) ** 2; lp += 0.08 * ((nr() * 2 - 1) - lp); return lp * e * 0.14; }, dur, dir > 0 ? 0.3 : 0.7); } } }
     // Thunder: a crack for the close ones, then a long rumble rolling round
-    if (S0.thunder !== false) { const hits = []; flashTimes(cfg).forEach(f => { for (let tt = f.t; tt < total + tail; tt += L) hits.push({ t: tt, big: f.big, seed: f.seed }); }); (cfg.stings || []).forEach(s2 => { if (s2.k === 'thunder') hits.push({ t: +s2.start || 0, big: true, seed: hash(s2.id), pow: +s2.pow || 1 }); });
+    if (S0.thunder !== false) { const hits = []; flashTimes(cfg).forEach(f => { for (let tt = f.t; tt < total + tail; tt += L) hits.push({ t: tt, big: f.big, seed: f.seed }); }); (cfg.stings || []).forEach(s2 => { if (s2.k === 'thunder') hits.push({ t: +s2.start || 0, big: true, seed: hash(s2.id), pow: +s2.pow || 1 }); }); if (Ev) Ev.thunders(cfg).forEach(h => hits.push(h));
       hits.forEach(h => { const rr = rng(h.seed + 5), delay = h.big ? 0.15 + rr() * 0.5 : 0.8 + rr() * 1.4, len = 4 + rr() * 3, pw = (h.pow || 1) * (h.big ? 1 : 0.6); let b1 = 0, b2 = 0, l1 = 0, l2 = 0, c1 = 0, env = 0;
         add(h.t + delay, x => { const n = rr() * 2 - 1; b1 = (b1 + 0.03 * n) * 0.998; l1 += 0.02 * (b1 - l1); b2 = (b2 + 0.03 * (rr() * 2 - 1)) * 0.998; l2 += 0.06 * (b2 - l2); env += 0.0004 * ((0.4 + 0.6 * Math.abs(Math.sin(x * 2.1 + Math.sin(x * 0.7) * 3))) - env);
           const att = cl(x / 0.25, 0, 1), dec = Math.exp(-Math.max(0, x - 0.3) / (len * 0.45)), crack = h.big ? (c1 += 0.5 * (n - c1), c1 * Math.exp(-x / 0.12) * 0.6) : 0; return (l1 * 1.6 + l2 * 0.9) * att * dec * (0.6 + env) * 0.55 * pw + crack * 0.6 * pw; }, len + 1, 0.4 + rr() * 0.2); }); }
@@ -598,6 +659,8 @@ const Studio = (() => {
     (cfg.stings || []).forEach(s2 => { const st = +s2.start || 0, d = Math.max(0.2, +s2.dur || 1);
       if (s2.k === 'lightsoff' || s2.k === 'blackout') { add(st, x => Math.sin(TAU * 70 * x) * 0.35 * Math.exp(-x / 0.06), 0.3, 0.5); add(st + d, x => Math.sin(TAU * 90 * x) * 0.2 * Math.exp(-x / 0.05), 0.25, 0.5); }
       if (s2.k === 'flicker') { const rb = rng(hash(s2.id)); add(st, x => { const on = Math.sin(x * 47) > 0.15 ? 1 : 0; return (Math.sign(Math.sin(TAU * 100 * x)) * 0.5 + (rb() - 0.5) * 0.4) * 0.06 * on; }, d, 0.5); } });
+    // Whatever is going on outside: the plane, the bangs, sirens, the seagull...
+    if (Ev && S0.outside !== false && (cfg.events || []).length) Ev.sound(cfg, add, sr);
     // Join the end round to the start so a loop never clicks, then keep it all in range
     const M0 = Math.ceil(total * sr);
     if (loopIt) { const X = Math.min(Math.floor(2 * sr), N - M0); for (let i = 0; i < X; i++) { const f = i / X, a = Math.sin(f * Math.PI / 2), b = Math.cos(f * Math.PI / 2); Lc[i] = Lc[i] * a + Lc[M0 + i] * b; Rc[i] = Rc[i] * a + Rc[M0 + i] * b; } }
@@ -620,17 +683,20 @@ const Studio = (() => {
     tracks(cfg, look) { const d = duration(cfg), T = [];
       if (cfg.avatar) { const inf = typeof Media !== 'undefined' && Media.info(cfg.avatar.id); T.push({ id: 'av', name: 'Avatar', colour: '#a03a6a', items: [{ id: 'AV', start: 0, end: inf ? Math.max(0.3, inf.dur - (+cfg.avatar.inPt || 0)) : d, label: '🎙 ' + (cfg.avatar.name || 'Avatar'), colour: '#a03a6a', move: false, trim: 'none', title: 'Your avatar video' }] }); }
       T.push({ id: 'room', name: 'Room', colour: '#4f6fd0', items: (cfg.stings || []).map(s2 => ({ id: 'S:' + s2.id, start: +s2.start || 0, end: (+s2.start || 0) + Math.max(0.2, +s2.dur || 1), label: (STINGS.find(x => x[0] === s2.k) || [, s2.k])[1], colour: s2.k === 'thunder' || s2.k === 'lightning' ? '#5b6fd8' : '#b0703a', move: true, trim: 'both', minLen: 0.2 })) });
+      if (Ev) T.push({ id: 'out', name: 'Outside', colour: '#c0603a', items: (cfg.events || []).filter(e => Ev.LEN[e.k]).map(e => ({ id: 'X:' + e.id, start: +e.start || 0, end: (+e.start || 0) + Ev.durOf(e), label: e.k === 'spell' ? '💡 ' + (Ev.cleanWord(e.text) || 'Word') : Ev.nameOf(e.k), colour: Ev.TINT[e.k] || '#c0603a', move: true, trim: 'both', minLen: 1 })) });
       const fr = (cfg.marks && cfg.marks.frames) || []; fr.forEach(f => { const its = (cfg.shows || []).filter(sh => sh.frame === f.id); if (!its.length) return; T.push({ id: 'f:' + f.id, name: f.name || 'Frame', colour: '#b0458f', items: its.map(sh => ({ id: 'W:' + sh.id, start: +sh.start || 0, end: (+sh.start || 0) + Math.max(0.3, +sh.dur || 5), label: sh.kind === 'text' ? '“' + (sh.text || 'Headline') + '”' : sh.kind === 'clip' ? '🎞 ' + (NAMES[sh.mod] || 'Clip') : '🖼 ' + (sh.name || 'Picture'), colour: '#b0458f', move: true, trim: 'both', minLen: 0.3 })) }); });
       return T; },
-    update(cfg, id, ch) { const [k, x] = id.split(':'); const it = k === 'S' ? (cfg.stings || []).find(q => q.id === x) : k === 'W' ? (cfg.shows || []).find(q => q.id === x) : null; if (!it) return; it.start = r2(Math.max(0, ch.start)); it.dur = r2(Math.max(0.2, ch.end - ch.start)); },
+    update(cfg, id, ch) { const [k, x] = id.split(':'); const it = k === 'S' ? (cfg.stings || []).find(q => q.id === x) : k === 'W' ? (cfg.shows || []).find(q => q.id === x) : k === 'X' ? (cfg.events || []).find(q => q.id === x) : null; if (!it) return; it.start = r2(Math.max(0, ch.start)); it.dur = r2(Math.max(k === 'X' ? 1 : 0.2, ch.end - ch.start)); },
     adds: [
+      ...(Ev ? [{ label: 'Outside', title: 'Something happens out the window: a plane into the flats, a seagull, the polis, a UFO and more, at the playhead', choices: () => Ev.KINDS.map(([k, l]) => ({ label: l, key: k, icon: Ev.icon(k) })),
+        fn(cfg, t, sel, ch) { const k = (ch && ch.key) || 'gull', e = { id: nid('x'), k, start: r2(Math.max(0, t)), dur: Ev.LEN[k] }; if (k === 'spell') e.text = 'BAWS'; cfg.events = cfg.events || []; cfg.events.push(e); return 'X:' + e.id; } }] : []),
       { label: 'Sting', title: 'Thunder, a flash of lightning, or the lights flickering or going off, at the playhead', choices: () => STINGS.map(([k, l]) => ({ label: l, key: k, icon: c => { const g = c.getContext('2d'); g.fillStyle = k === 'thunder' || k === 'lightning' ? '#2c3a7a' : '#3a2a14'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = k === 'thunder' || k === 'lightning' ? '#dfe4ff' : '#ffb35c'; g.lineWidth = 3; g.beginPath(); if (k === 'thunder' || k === 'lightning') { g.moveTo(c.width * 0.55, 4); g.lineTo(c.width * 0.4, c.height * 0.5); g.lineTo(c.width * 0.58, c.height * 0.5); g.lineTo(c.width * 0.42, c.height - 4); } else { g.arc(c.width / 2, c.height * 0.42, c.height * 0.22, 0, TAU); } g.stroke(); } })),
         fn(cfg, t, sel, ch) { const k = (ch && ch.key) || 'thunder', s2 = { id: nid('s'), k, start: r2(Math.max(0, t)), dur: STING_LEN[k] || 2, pow: 1 }; cfg.stings = cfg.stings || []; cfg.stings.push(s2); return 'S:' + s2.id; } },
       { label: 'In a frame', title: 'Show a picture, a headline or a clip in one of the frames on your wall', choices: cfg0 => { const fr = (cfg0 && cfg0.marks && cfg0.marks.frames) || (hooks.cfg && hooks.cfg().marks.frames) || []; return fr.length ? fr.map(f => ({ label: f.name || 'Frame', key: f.id, icon: c => { const g = c.getContext('2d'); g.fillStyle = '#2a2230'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#ff7ce0'; g.lineWidth = 3; g.strokeRect(c.width * 0.25, c.height * 0.18, c.width * 0.5, c.height * 0.64); } })) : [{ label: 'No frames marked yet: mark them on the left', key: '' }]; },
         fn(cfg, t, sel, ch) { const fr = (cfg.marks && cfg.marks.frames) || [], f = fr.find(x => x.id === (ch && ch.key)) || fr[0]; if (!f) return null; const sh = { id: nid('w'), frame: f.id, kind: 'text', text: 'HEADLINE HERE', style: 'paper', start: r2(Math.max(0, t)), dur: 6 }; cfg.shows = cfg.shows || []; cfg.shows.push(sh); return 'W:' + sh.id; } },
     ],
-    remove(cfg, id) { const [k, x] = id.split(':'); if (k === 'S') cfg.stings = (cfg.stings || []).filter(q => q.id !== x); if (k === 'W') cfg.shows = (cfg.shows || []).filter(q => q.id !== x); if (k === 'AV') cfg.avatar = null; if (cfg.mark) removeMark(cfg, id); },
-    duplicate(cfg, id) { const [k, x] = id.split(':'); const list = k === 'S' ? cfg.stings : k === 'W' ? cfg.shows : null; const it = list && list.find(q => q.id === x); if (!it) return null; const c = JSON.parse(JSON.stringify(it)); c.id = nid(k === 'S' ? 's' : 'w'); c.start = r2((+it.start || 0) + (+it.dur || 1)); list.push(c); return k + ':' + c.id; },
+    remove(cfg, id) { const [k, x] = id.split(':'); if (k === 'X') cfg.events = (cfg.events || []).filter(q => q.id !== x); if (k === 'S') cfg.stings = (cfg.stings || []).filter(q => q.id !== x); if (k === 'W') cfg.shows = (cfg.shows || []).filter(q => q.id !== x); if (k === 'AV') cfg.avatar = null; if (cfg.mark) removeMark(cfg, id); },
+    duplicate(cfg, id) { const [k, x] = id.split(':'); const list = k === 'S' ? cfg.stings : k === 'W' ? cfg.shows : k === 'X' ? cfg.events : null; const it = list && list.find(q => q.id === x); if (!it) return null; const c = JSON.parse(JSON.stringify(it)); c.id = nid(k === 'S' ? 's' : k === 'X' ? 'x' : 'w'); if (k === 'X') c.dur = Ev.durOf(it); c.start = r2((+it.start || 0) + (+it.dur || 1)); list.push(c); return k + ':' + c.id; },
     inspect(root, cfg, id, changed, done) { panel(root, cfg, changed, id, done); },
     scene(root, cfg, changed) { panel(root, cfg, changed, null, null); },
     /* On the preview: drag yourself about, click a frame to choose what it shows; while marking, drag the marks */
@@ -685,6 +751,7 @@ const Studio = (() => {
     if (k === 'S') { const s2 = (cfg.stings || []).find(q => q.id === a); if (s2) { root.append(card('Sting', field('What happens', sel(s2.k, STINGS, v => { s2.k = v; ch(); }, 'Sting')), grid2(field('Starts at (seconds)', num(s2.start, v => { s2.start = r2(v); changed(); }, 0, 3600, 0.1, 'Start')), field('Lasts (seconds)', num(s2.dur, v => { s2.dur = r2(v); changed(); }, 0.2, 60, 0.1, 'Length'))),
       s2.k === 'thunder' || s2.k === 'lightning' ? field('How big', range(+s2.pow || 1, 0.3, 2, 0.05, v => { s2.pow = r2(v); }, 'How big')) : '', H('p', { className: 'hint', textContent: s2.k === 'thunder' ? 'Lightning lights the room, the lamps dip, and the thunder is in the sound file.' : s2.k === 'lightsoff' ? 'The lamps go out and flicker back on at the end.' : s2.k === 'blackout' ? 'The whole room goes dark apart from the window.' : '' }), foot())); return; } }
     if (k === 'W') { const sh = (cfg.shows || []).find(q => q.id === a); if (sh) { showCard(sh); return; } }
+    if (k === 'X' && Ev) { const e = (cfg.events || []).find(q => q.id === a); if (e) { eventCard(e); return; } }
     if (k === 'F' || k === 'Fm' || k === 'Fc') { const f = M.frames.find(x => x.id === a); if (f) { frameCard(f); return; } }
     if (k === 'AV') { avatarCard(); return; }
     if (k === 'NE' || k === 'NQ') { neonCard(true); return; }
@@ -692,7 +759,7 @@ const Studio = (() => {
       root.append(card(names[k], H('p', { className: 'hint', textContent: k === 'PL' ? 'Drag it over the plant; a corner makes it bigger or smaller.' + (M.plants[+a] ? '' : '') : k === 'O' ? 'Whatever is inside this shape stays in front of the rain on the glass.' : k === 'L' ? 'Put it on the bulb; a corner sets how far its glow reaches.' : 'Drag it into place.' }),
         k === 'PL' && M.plants[+a] ? field('Fixed at', seg([['top', 'The top (hanging)'], ['bottom', 'The bottom (in a pot)']], M.plants[+a][4] || 'top', v => { M.plants[+a][4] = v; ch(); })) : '',
         foot(k !== 'G' ? btn('Remove it', () => { removeMark(cfg, id); changed(); hooks.select && hooks.select(null); }) : ''))); return; }
-    roomCard(); if (roomBmp(cfg)) { weatherCard(); neonCard(false); avatarCard(); framesCard(); soundCard(); }
+    roomCard(); if (roomBmp(cfg)) { weatherCard(); if (Ev) flatsCard(); neonCard(false); avatarCard(); framesCard(); soundCard(); }
 
     function roomCard() {
       const note = H('p', { className: 'hint' }), has = !!roomBmp(cfg);
@@ -750,6 +817,23 @@ const Studio = (() => {
         grid2(field('Shadow on the floor', range(A.shadow == null ? 0.5 : +A.shadow, 0, 1, 0.05, v => set('shadow', v), 'Shadow')), field('Flip left to right', seg([['0', 'No'], ['1', 'Yes']], A.mirror ? '1' : '0', v => { A.mirror = v === '1'; ch(); }))),
         H('div', { className: 'btnrow' }, btn('Fill the frame with the video', () => { A.x = 0.5; A.y = 0.5; A.h = 1; ch(); }), btn('Change video', pickVid), btn('Change to PNG sequence', pickPng), btn('Remove', () => { cfg.avatar = null; ch(); })), note, done ? foot() : ''));
     }
+    // The flats across the road: what state they are in at the start (so the damage carries on from video to video), and
+    // a quick way to add something happening out there
+    function flatsCard() {
+      const evs = (cfg.events || []).filter(e => Ev.LEN[e.k]), endState = Ev.towerAt(cfg, 1e9).s, nm = st => (Ev.TOWER.find(x => x[0] === st) || [, st])[1].toLowerCase();
+      root.append(card('Outside the window', H('p', { className: 'hint', textContent: 'Things happen in the flats across the road, and you never notice. Add one at the playhead below or with + Outside on the timeline.' }),
+        field('Add at the playhead', sel('', [['', 'Choose what happens…'], ...Ev.KINDS], v2 => { if (!v2) return; const e = { id: nid('x'), k: v2, start: r2(now()), dur: Ev.LEN[v2] }; if (v2 === 'spell') e.text = 'BAWS'; cfg.events = cfg.events || []; cfg.events.push(e); changed(); hooks.select && hooks.select('X:' + e.id); }, 'Add something outside')),
+        field('The big block of flats at the start', seg(Ev.TOWER, Ev.TOWER.some(x => x[0] === cfg.tower) ? cfg.tower : 'standing', v2 => { cfg.tower = v2; ch(); })),
+        H('p', { className: 'hint', textContent: (evs.length ? evs.length + ' thing' + (evs.length > 1 ? 's' : '') + ' happen' + (evs.length > 1 ? '' : 's') + ' out there in this clip. ' : '') + (endState !== (cfg.tower || 'standing') ? 'By the end the flats are ' + nm(endState) + '. For your next video, press the button below: the flats start ' + nm(endState) + ' and the bar that did it comes off the timeline.' : 'Set this to however your last video left them, so the damage carries on.') }),
+        endState !== (cfg.tower || 'standing') ? H('div', { className: 'btnrow' }, btn('Set up for the next video: ' + nm(endState) + ' from the start', () => { cfg.tower = endState; cfg.events = (cfg.events || []).filter(e => e.k !== 'plane' && e.k !== 'demolish'); ch(); })) : ''));
+    }
+    function eventCard(e) {
+      const kids = [field('What happens', sel(e.k, Ev.KINDS, v2 => { e.k = v2; e.dur = Ev.LEN[v2]; if (v2 === 'spell' && !e.text) e.text = 'BAWS'; ch(); }, 'What happens')), H('p', { className: 'hint', textContent: Ev.HINT[e.k] || '' })];
+      if (e.k === 'spell') kids.push(field('The word', txt(e.text == null ? 'BAWS' : e.text, v2 => { e.text = v2.toUpperCase().slice(0, 24); changed(false); }, 'BAWS', 'Word'), 'Letters, numbers, ! and ?. Up to 3 letters sit still on the block; longer words scroll across it.'));
+      kids.push(grid2(field('Starts at (seconds)', num(+e.start || 0, v2 => { e.start = r2(v2); changed(); }, 0, 3600, 0.1, 'Start')), field('Lasts (seconds)', num(Ev.durOf(e), v2 => { e.dur = r2(v2); changed(); }, 1, 120, 0.1, 'Length'), 'Longer plays it slower. Normal is ' + Ev.LEN[e.k] + ' s.')));
+      kids.push(foot(btn('Normal speed', () => { e.dur = Ev.LEN[e.k]; ch(); })));
+      root.append(card(Ev.nameOf(e.k), ...kids));
+    }
     function neonCard(picked) {
       const N = neonOf(cfg), set = (o) => { cfg.neon = Object.assign({}, N, o); }, fr = (eff(cfg).marks.frames || []);
       const kids = [H('p', { className: 'hint', textContent: N.style === 'neon' ? 'A neon outline of the squid. Drag it on the preview to move it, or a corner to change its size.' : 'Your PatterSquid logo, lit up and set into the wall at the same angle, glowing onto the wall round it. Every so often the squid blinks. Drag it to move it, and drag the four pink dots to tilt it to match the wall.' }),
@@ -786,10 +870,11 @@ const Studio = (() => {
     function soundCard() {
       const S0 = cfg.sound = Object.assign({ on: true, vol: 0.8, thunder: true, cars: true }, cfg.sound || {}), note = H('p', { className: 'hint' });
       const make = () => { const d = duration(cfg); return soundData(cfg, null, d); };
-      root.append(card('Sound', H('p', { className: 'hint', textContent: 'Thunder that rolls in after each flash, cars going past outside, wind when it snows, and a clunk or buzz when the lights go. No rain. Saved as a WAV to put under your voice in Premiere or After Effects.' }),
+      root.append(card('Sound', H('p', { className: 'hint', textContent: 'Thunder that rolls in after each flash, cars going past outside, wind when it snows, a clunk or buzz when the lights go, and whatever is happening outside. No rain. Saved as a WAV to put under your voice in Premiere or After Effects.' }),
         field('Sound', seg([['1', 'On'], ['0', 'Off']], S0.on !== false ? '1' : '0', v => { S0.on = v === '1'; ch(); })),
         S0.on !== false ? H('div', {}, field('Volume', range(S0.vol, 0, 1.5, 0.05, v => { S0.vol = r2(v); }, 'Volume')),
           grid2(field('Thunder', seg([['1', 'On'], ['0', 'Off']], S0.thunder !== false ? '1' : '0', v => { S0.thunder = v === '1'; ch(); })), field('Cars outside', seg([['1', 'On'], ['0', 'Off']], S0.cars !== false ? '1' : '0', v => { S0.cars = v === '1'; ch(); }))),
+          Ev ? field('Things happening outside (the plane, sirens, the seagull…)', seg([['1', 'On'], ['0', 'Off']], S0.outside !== false ? '1' : '0', v => { S0.outside = v === '1'; ch(); })) : '',
           H('div', { className: 'btnrow' }, btn('▶ Listen', () => { note.textContent = 'Making the sound…'; setTimeout(() => { const on = listen(make()); note.textContent = on ? 'Playing. Press Listen again to stop.' : ''; }, 20); }), btn('Save the sound (WAV)', () => { note.textContent = 'Making the sound…'; setTimeout(async () => { try { await E.saveBlob(wav(make()), (cfg.room && cfg.room.name ? cfg.room.name.replace(/\.\w+$/, '') : 'studio') + ' sound.wav', [{ description: 'WAV sound', accept: { 'audio/wav': ['.wav'] } }]); note.textContent = 'Saved.'; } catch (e) { note.textContent = ''; } }, 20); }, 'primary')), note) : ''));
     }
   }

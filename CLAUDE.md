@@ -80,7 +80,18 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   light stings. **No rain sound**: he tried it and did not want it.
 * In the Video tab, "Avatar gaps: Your studio" shows the studio in every [ME] gap, with his avatar video carrying on from gap
   to gap (one take, lines in order). `projects/my-studio.patter.json` is his room, already marked.
-* Tests: `dev/tests/studio_*.py` (frames, video, worker parity, seamless loop, Video gaps, random clicking).
+* **Outside events** (`dev/src/studio_events.js`, `StudioEvents`): a running gag in the flats across the road. `cfg.events`
+  is a list of `{ id, k, start, dur, text }` bars on an Outside track (+ Outside on the timeline, or the Outside the window
+  card): plane, demolish, squid, telly, bonfire, polis, carfire, ufo, gull, summer, spell (`text`, 3x5 font on the block's
+  window grid, scrolls when longer than 3 letters), strike (power cut outside and in the room). A longer bar plays slower.
+  `cfg.tower` is the state of the big block at the start (standing, rubble, leaning, scaffold, patched) so damage carries on
+  between videos; the plane leaves it rubble (a broken stump and a pile, never still standing), the demolition leaves it
+  leaning. The block is cut out of the room (`towerKit`: `marks.tower` outline plus aerials found against the plate) and
+  `dev/assets/studio-plate.jpg` (the view with the block removed, embedded as `STUDIO_PLATE`) fills in behind it.
+  `marks.tower2` is the block to its right (used once the big one is gone), `marks.spots.green` the grass for the bonfire
+  and UFO. Events light the room through the window (`Ev.light`), and have their own sounds (no rain).
+* Tests: `dev/tests/studio_*.py` (frames, video, worker parity, seamless loop, Video gaps, random clicking,
+  `studio_events_ui.py`, `studio_events_par.py`, `studio_events_loop.py`).
 
 ## Packs (data only, no code)
 
