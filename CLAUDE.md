@@ -91,7 +91,13 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   `marks.tower2` is the block to its right (used once the big one is gone), `marks.spots.green` the grass for the bonfire
   and UFO. Events light the room through the window (`Ev.light`), and have their own sounds (no rain).
 * Tests: `dev/tests/studio_*.py` (frames, video, worker parity, seamless loop, Video gaps, random clicking,
-  `studio_events_ui.py`, `studio_events_par.py`, `studio_events_loop.py`).
+  `studio_events_ui.py`, `studio_events_par.py`, `studio_events_loop.py`, and `studio_sweep.py`: every weather, state of the
+  flats, shape, avatar and own room with all twelve events, for errors, blank frames and frame times). Several tests read
+  fixtures from `dev/tmp_room.png`, `dev/tmp_marks.json`, `dev/tmp_avpng/` and `dev/tmp_avgreen.webm` (gitignored; make them
+  again from his room picture and a short avatar clip if missing).
+* Event layers are drawn a little smaller than full size and enlarged on the way in (that is their softness; no blur
+  filter), all the light thrown into the room is one pass, and `cfg.vfocus` (auto, you, window, middle) sets where a 9:16
+  frame looks (auto: you, else the window when events are on, else the middle).
 
 ## Packs (data only, no code)
 

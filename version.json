@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.29.21",
+  "version": "2026.10.29.22",
   "file": "app/patter-studio.html",
-  "notes": "The giant PatterSquid's tentacles now move naturally: waves run down them, they bulge and sag round the flats, tighten from the root out, and the ends curl and feel about."
+  "notes": "Studio check and speed-up: outside events draw up to twice as fast, the room light from them is one pass, the sign, mist and headlines in frames are no longer redrawn every frame, snow now lies on the leaning block and the rubble, and vertical videos keep the window in shot when something is happening outside."
 }
