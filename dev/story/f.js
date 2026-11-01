@@ -64,11 +64,11 @@
     list.filter(it => !isBehind(it)).forEach(drawC);
     drawWater(g, wtr, lt, true);
     // Speech, thoughts and phone calls
-    drawn.forEach(d => { const a = d.it.st.active; if (!d.F || !a || !TALK.includes(a.a.k) || !(a.a.text || '').trim()) return; const sw = a.a.swear || cfg.swear || 'show'; bubble(g, { t0: a.a.start, d: a.a.dur, text: sw === 'beep' ? beep(a.a.text) : a.a.text, scribble: sw === 'scribble', how: a.a.k === 'say' || a.a.k === 'phone' ? 'say' : a.a.k === 'shouttv' ? 'shout' : a.a.k, seed: a.a.start * 10 | 0 }, d.F, lt, { x0: v.x0, x1: v.x1, y0: v.y0 }); });
+    drawn.forEach(d => { const a = d.it.st.active; if (!d.F || !a || !TALK.includes(a.a.k) || !String(a.a.text || '').trim()) return; const sw = a.a.swear || cfg.swear || 'show'; bubble(g, { t0: a.a.start, d: a.a.dur, text: sw === 'beep' ? beep(a.a.text) : a.a.text, scribble: sw === 'scribble', how: a.a.k === 'say' || a.a.k === 'phone' ? 'say' : a.a.k === 'shouttv' ? 'shout' : a.a.k, seed: a.a.start * 10 | 0 }, d.F, lt, { x0: v.x0, x1: v.x1, y0: v.y0 }); });
     g.restore();
     // Screen text: the place name, captions, time jumps
     const lab = sc.label; if (lab) { const x = (H > W ? 60 : 80) * u, y = (H > W ? 140 : 96) * u; const pz = look && look.paused; text(g, lab, x, y, 50 * u, CH.yellow, 'left', pz ? 1 : cl(lt / 0.9, 0, 1)); const tw = measure(lab, 50 * u); line(g, partial([[x, y + 32 * u], [x + tw, y + 28 * u]], pz ? 1 : cl((lt - 0.5) / 0.6, 0, 1)), CH.yellow, 4 * u); }
     (sc.extra || []).forEach(a => { if (lt < a.start || lt >= a.start + a.dur) return; const p = (lt - a.start) / a.dur;
-      if (a.k === 'caption') text(g, a.text || '', W / 2, (H > W ? 330 : 250) * u, 58 * u, CH.white, 'center', cl((lt - a.start) / Math.max(0.6, (a.text || '').length * 0.04), 0, 1));
+      if (a.k === 'caption') text(g, a.text || '', W / 2, (H > W ? 330 : 250) * u, 58 * u, CH.white, 'center', cl((lt - a.start) / Math.max(0.6, String(a.text || '').length * 0.04), 0, 1));
       if (a.k === 'timejump') { const al = Math.min(cl(p / 0.15, 0, 1), cl((1 - p) / 0.15, 0, 1)), cx = W / 2, cy = H / 2 - 160 * u; g.save(); g.globalAlpha = 0.85 * al; g.fillStyle = BOARD; g.fillRect(0, 0, W, H); g.globalAlpha = al; text(g, a.text || '', W / 2, H / 2, 96 * u, CH.yellow, 'center', cl(p / 0.4, 0, 1)); line(g, circP(cx, cy, 60 * u, 60 * u), CH.white, 6 * u); line(g, [[cx, cy], [cx + Math.cos(p * 12) * 44 * u, cy + Math.sin(p * 12) * 44 * u]], CH.yellow, 5 * u); line(g, [[cx, cy], [cx + Math.cos(p * 1.2 - 1.57) * 30 * u, cy + Math.sin(p * 1.2 - 1.57) * 30 * u]], CH.white, 6 * u); g.restore(); } });
   }

@@ -33,7 +33,7 @@ const MapMod = (() => {
     });
     let fin = null;
     if (cfg.finale === 'all' && items.length > 1) { const pts = []; items.forEach(it => { pts.push(it.pt); if (it.P) { const P = it.P, d = Math.max(P.bw, P.bh) * 0.6; pts.push([P.c[0] - d * 57, P.c[1]], [P.c[0] + d * 57, P.c[1]]); } }); const target = Globe.camForPoints(pts, W, H, H > W ? 0.85 : 0.92); const fl = Globe.flight(cam, target); fin = t; segs.push({ kind: 'fly', t0: t, dur: fl.dur, fl }); t += fl.dur; cam = target; }
-    const hold = (+cfg.hold || 0) + 0.4; segs.push({ kind: 'hold', t0: t, dur: hold, cam }); t += hold;
+    const hold = Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.4; segs.push({ kind: 'hold', t0: t, dur: hold, cam }); t += hold;
     cp = { u, sp, items, segs, dur: Math.max(3, t), fin }; ck = key; return cp;
   }
   function camAt(p, t) {
@@ -109,7 +109,7 @@ const MapMod = (() => {
   const editor = { formIsScene: true,
     tracks(cfg, look) { if (GeoData.state.status !== 'ready') return [{ id: 'stops', name: 'Stops', items: [] }]; const { W, H } = E.dims(look.format), p = plan(cfg, look, W, H), last = p.segs[p.segs.length - 1];
       const out = [{ id: 'stops', name: 'Stops', colour: '#f5821f', items: p.items.map(it => ({ id: 'stop:' + cfg.stops.indexOf(it.s), start: it.fly0, end: it.a + it.act, label: it.s.name, colour: E.hexMix(E.COLOURS[it.s.colour] || '#f5821f', '#16213a', 0.45), move: false, trim: 'end', minLen: 0.5, maxLen: 120, timed: true, title: 'Fly in, then stay. Drag the right edge to slow this stop down or speed it up.' })) }];
-      const end = []; if (p.fin !== null) end.push({ id: 'finale', start: p.fin, end: last.t0, label: 'Pull back', colour: '#3a4660', move: false, trim: 'none' }); end.push(holdClip(last.t0, last.t0 + (+cfg.hold || 0))); out.push({ id: 'end', name: 'End', items: end }); return out; },
+      const end = []; if (p.fin !== null) end.push({ id: 'finale', start: p.fin, end: last.t0, label: 'Pull back', colour: '#3a4660', move: false, trim: 'none' }); end.push(holdClip(last.t0, last.t0 + Math.max(0, Math.min(10, +cfg.hold || 0)))); out.push({ id: 'end', name: 'End', items: end }); return out; },
     update(cfg, id, ch) { if (id === 'hold') return holdUpd(cfg, ch); E.setTm(cfg, id, ch.end - ch.start); },
     resetTiming(cfg, id) { const s = id.startsWith('stop:') && cfg.stops[+id.split(':')[1]]; if (s) delete s.hold; },
     scene(root, cfg, changed) { form(root, cfg, changed); } };

@@ -8,7 +8,7 @@ const Picto = (() => {
   let ck = '', cp = null;
   function plan(cfg, look, W, H) {
     const key = JSON.stringify(cfg) + look.format + (E.fontVersion || 0); if (key === ck) return cp;
-    const u = Math.min(W, H) / 1080, tall = H > W, N = cfg.total, G = cfg.groups.map(g => ({ col: E.COLOURS[g.colour] || '#f5821f', pct: cl(+g.pct || 0, 0, 100), label: g.label || '' }));
+    const u = Math.min(W, H) / 1080, tall = H > W, N = Math.round(cl(+cfg.total || 100, 1, 1000)), G = (Array.isArray(cfg.groups) ? cfg.groups : []).filter(g => g && typeof g === 'object').map(g => ({ col: E.COLOURS[g.colour] || '#f5821f', pct: cl(+g.pct || 0, 0, 100), label: g.label == null ? '' : String(g.label) }));
     let tot = 0; G.forEach(g => { g.pct = Math.min(g.pct, 100 - tot); tot += g.pct; g.n = Math.round(g.pct / 100 * N); });
     let used = G.reduce((a, g) => a + g.n, 0); while (used > N) { const g = G.reduce((a, b) => b.n > a.n ? b : a); g.n--; used--; }
     const headH = H * (tall ? 0.13 : 0.17), legH = cfg.legend && G.some(g => g.n) ? H * (tall ? 0.16 : 0.15) : H * 0.04, pad = W * 0.05;
@@ -21,7 +21,7 @@ const Picto = (() => {
     G.forEach((g, gi) => { for (let j = 0; j < g.n; j++) { asg[order[k]] = gi; rank[order[k]] = j; k++; } });
     const waveK = 0.9 / Math.max(1, cols + rows), starts = []; let tt = 1.3;
     const gf = []; G.forEach((g, i) => { starts.push(tt); const base = g.n ? Math.min(1.0, g.n * 0.035) + 0.75 : 0, auto = base + (g.n ? Math.max(0, +(cfg.groups[i] || {}).wait || 0) : 0), L = E.tm(cfg, 'grp:' + i) ?? auto; gf.push(base ? Math.min(1, L / base) : 1); tt += g.n ? L : 0; });
-    const end = tt + 0.2, dur = end + (+cfg.hold || 0) + 0.3, base = cfg.iconColour === 'grey' ? '#c9c3b4' : '#ffffff';
+    const end = tt + 0.2, dur = end + Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.3, base = cfg.iconColour === 'grey' ? '#c9c3b4' : '#ffffff';
     cp = { u, tall, N, G, cols, rows, s, ox, oy, asg, rank, waveK, starts, gf, end, dur, headH, legH, pad, base }; ck = key; return cp;
   }
   const duration = (cfg, look) => { const { W, H } = E.dims(look.format); return plan(cfg, look, W, H).dur; };
@@ -91,7 +91,7 @@ const Picto = (() => {
   const holdClip = (a, b) => ({ id: 'hold', start: a, end: b, label: 'Hold', colour: '#3a4660', move: false, trim: 'end', minLen: 0.01, maxLen: 10, title: 'Drag the right edge to hold the last shot for longer' });
   const editor = { formIsScene: true,
     tracks(cfg, look) { const { W, H } = E.dims(look.format), p = plan(cfg, look, W, H), items = p.G.map((g, i) => ({ id: 'grp:' + i, start: p.starts[i], end: p.starts[i + 1] ?? p.end - 0.2, label: (g.label || 'Group ' + (i + 1)) + ' ' + g.pct + '%', colour: E.hexMix(g.col, '#16213a', 0.45), move: false, trim: 'end', minLen: 0.3, maxLen: 60, timed: true, title: 'Drag the right edge to slow this group down or speed it up' }));
-      return [{ id: 'groups', name: 'Groups', items }, { id: 'end', name: 'End', items: [holdClip(p.end, p.end + (+cfg.hold || 0))] }]; },
+      return [{ id: 'groups', name: 'Groups', items }, { id: 'end', name: 'End', items: [holdClip(p.end, p.end + Math.max(0, Math.min(10, +cfg.hold || 0)))] }]; },
     update(cfg, id, ch) { if (id === 'hold') return holdUpd(cfg, ch); E.setTm(cfg, id, ch.end - ch.start); },
     resetTiming(cfg, id) { const g = id.startsWith('grp:') && cfg.groups[+id.split(':')[1]]; if (g) g.wait = 0; },
     scene(root, cfg, changed) { form(root, cfg, changed); } };

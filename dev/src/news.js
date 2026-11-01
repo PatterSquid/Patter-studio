@@ -101,7 +101,7 @@ const News = (() => {
     }
     const lastC = cards[N - 1];
     if (punch) key2(t + 1.3, cfg.ending === 'whole' ? wide : bothShot(lastC)); else key2(t + 1.3, [W / 2, H / 2, 1.06]);
-    const end = t + 1.3 + (+cfg.hold || 0) + 0.3, lk = keys[keys.length - 1]; keys.push([end + 1, lk[1], lk[2], lk[3] * 1.03]);
+    const end = t + 1.3 + Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.3, lk = keys[keys.length - 1]; keys.push([end + 1, lk[1], lk[2], lk[3] * 1.03]);
     cp = { u, tall, cards, keys, fit, dur: end, holdStart: t + 1.3 };
     ck = key; return cp;
   }
@@ -201,7 +201,7 @@ const News = (() => {
   const editor = { camera: true,
     tracks(cfg, look) { migrate(cfg); const { W, H } = E.dims(look.format), p = plan(cfg, look, W, H), cs = p.cards;
       return [{ id: 'arts', name: 'Articles', colour: '#e3302c', items: cs.map((c, k) => ({ id: 'art:' + c.i, start: c.T.entry, end: k < cs.length - 1 ? Math.max(c.T.entry + 0.5, cs[k + 1].T.entry) : Math.max(c.T.entry + 0.5, c.done || p.holdStart - 1.3), label: c.hl.join(' '), colour: E.hexMix(E.COLOURS[cfg.articles[c.i].mastColour] || '#e3302c', '#16213a', 0.4), trim: cfg.pacing === 'pile' ? 'none' : 'end', minLen: 0.8, title: 'Drag to change when it lands. Drag the right edge to stay on it for longer.' })) },
-        { id: 'end', name: 'End', items: [{ id: 'hold', start: p.holdStart, end: p.holdStart + (+cfg.hold || 0), label: 'Hold', colour: '#3a4660', move: false, trim: 'end', minLen: 0.01, maxLen: 10 }] }]; },
+        { id: 'end', name: 'End', items: [{ id: 'hold', start: p.holdStart, end: p.holdStart + Math.max(0, Math.min(10, +cfg.hold || 0)), label: 'Hold', colour: '#3a4660', move: false, trim: 'end', minLen: 0.01, maxLen: 10 }] }]; },
     update(cfg, id, ch) {
       if (id === 'hold') { cfg.hold = Math.max(0, Math.min(10, Math.round((ch.end - ch.start) * 2) / 2)); return; }
       const i = +id.split(':')[1], a = cfg.articles[i]; if (!a) return; const { W, H } = E.dims('16:9'), p = plan(cfg, { format: '16:9' }, W, H), c = p.cards.find(x => x.i === i);

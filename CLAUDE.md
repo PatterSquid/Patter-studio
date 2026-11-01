@@ -42,6 +42,24 @@ git add -A && git commit && git push origin main
   render sweeps, undo round trips, launcher update and rollback, packs UI). They were written with absolute paths from
   the original session; adjust paths before running.
 * Headless Chromium cannot encode H.264, so check exports with PNG sequences or by drawing frames directly.
+* `dev/src/repair.js` (`Repair.clip`) mends every clip as it loads (saved state, opened files, templates, From Claude
+  projects, the clips inside a Video and the tab clips in Studio frames) against its tab's `defaults()`. It only mends
+  structure (a list where a value belongs, a value where a list belongs, numbers that are not numbers, empty top level
+  values, broken corners, Story actions without a start or length); plain values may legitimately swap type (a Story spot
+  is "left" or 660, a beard is true or "stubble"), so it leaves those alone. `tests/repair_check.py` proves it changes
+  nothing in good settings (examples, his projects, pack set pieces, random clicking); `tests/damaged.js` (run with
+  `tests/runjs.py tests/damaged.js '{"n":40,"repair":true,"mods":["story"]}'`) feeds every tab damaged settings.
+* `defaults()` must hand out fresh objects (`tests/shared_defaults.js`), and opening a tab's panel must not change its
+  clip (`tests/panel_tidy.js`); either breaks redo. Undo also ignores changes nobody made (between an undo or redo and his
+  next click, key or typing), so a panel tidying up or a picture finishing loading never wipes the redo list.
+* Other checks: `tests/leak.py` (memory over a long session), `tests/prof.py <tab>` (frame times and hot spots at
+  1080p). The map tabs draw the globe with WebGL, which headless Chromium emulates in software (about 250 ms a frame
+  here, a few ms on his PC), so do not chase map frame times in tests. Run browsers one or two at a time: there are two
+  cores and five browsers at once get killed for memory. Never `pkill -f` a pattern that also appears in your own
+  command line (it kills your shell).
+* `tests/launch.py` makes its pretend releases from the current build, dated 2099, in `dev/fakehome/` (served by the
+  test server, gitignored). `tests/video2.py` needs `dev/tmp_dogclip.webm` (any short WebM: `ffmpeg -f lavfi -i
+  testsrc=size=640x360:rate=30 -t 4 -c:v libvpx dev/tmp_dogclip.webm`).
 * Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
   after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).

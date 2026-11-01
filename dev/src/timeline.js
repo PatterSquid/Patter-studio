@@ -23,7 +23,7 @@ const Timeline = (() => {
     // Each stop's bar: wait at the stop, then move on. A dragged bar longer than normal adds waiting; shorter speeds both up.
     st.forEach((s, i) => { const last = i === n - 1, base = last ? HOLD : SEG + HOLD, auto = base + Math.max(0, +s[2] || 0), L = E.tm(cfg, 'stop:' + cfg.stops.indexOf(s)) ?? auto, f = Math.min(1, L / base);
       T.push(acc); Hs.push(HOLD * f + Math.max(0, L - base) * (last ? 1 : 0)); Ss.push(SEG * f); acc += last ? Hs[i] : Math.max(L, base * f); });
-    const endT = T[n - 1] + Hs[n - 1] + 0.2, pull = cfg.camera ? 1.3 : 0.2, dur = endT + pull + (+cfg.hold || 0) + 0.3;
+    const endT = T[n - 1] + Hs[n - 1] + 0.2, pull = cfg.camera ? 1.3 : 0.2, dur = endT + pull + Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.3;
     const line = vert ? W * 0.5 : H * 0.56;
     let gap2 = Infinity; for (let i = 0; i + 2 < n; i++) gap2 = Math.min(gap2, pos[i + 2] - pos[i]);
     const cardW = vert ? W * 0.36 : Math.min(380 * u, Math.max(190 * u, (isFinite(gap2) ? gap2 : (s1 - s0) * 2) - 26 * u));
@@ -110,7 +110,7 @@ const Timeline = (() => {
   const editor = { formIsScene: true,
     tracks(cfg, look) { const { W, H } = E.dims(look.format), p = plan(cfg, look, W, H), items = p.st.map((s, i) => ({ id: 'stop:' + cfg.stops.indexOf(s), start: p.T[i], end: (p.T[i + 1] ?? (p.endT - 0.2)), label: [s[0], s[1]].filter(Boolean).join(': ') || 'Stop', colour: '#7a4a1c', move: false, trim: 'end', minLen: 0.3, timed: true, title: 'Drag the right edge to slow this stop down or speed it up' }));
       items.unshift({ id: 'intro', start: 0, end: p.START, label: 'Intro', colour: '#3a4660', move: false, trim: 'end', minLen: 0.3, maxLen: 20, timed: true, title: 'Drag the right edge to change when the first stop arrives' });
-      return [{ id: 'stops', name: 'Stops', colour: p.mk, items }, { id: 'end', name: 'End', items: [holdClip(p.endT + p.pull, p.endT + p.pull + (+cfg.hold || 0))] }]; },
+      return [{ id: 'stops', name: 'Stops', colour: p.mk, items }, { id: 'end', name: 'End', items: [holdClip(p.endT + p.pull, p.endT + p.pull + Math.max(0, Math.min(10, +cfg.hold || 0)))] }]; },
     update(cfg, id, ch) { if (id === 'hold') return holdUpd(cfg, ch); E.setTm(cfg, id, ch.end - ch.start); },
     resetTiming(cfg, id) { const s = id.startsWith('stop:') && cfg.stops[+id.split(':')[1]]; if (s) s[2] = 0; },
     scene(root, cfg, changed) { form(root, cfg, changed); } };

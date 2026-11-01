@@ -22,7 +22,7 @@ const Charts = (() => {
     const rows = cfg.rows.map(r => [String(r[0]).trim(), parseFloat(String(r[1]).replace(/[^0-9.\-]/g, ''))]).filter(r => r[0] !== '' && isFinite(r[1]));
     if (rows.length < 2) rows.push(...[['A', 1], ['B', 2]].slice(rows.length));
     const L = rows.map(r => r[0]), V = rows.map(r => r[1]), n = V.length, bar = cfg.type === 'bar';
-    const dec = cfg.decimals === 'auto' ? Math.min(2, Math.max(0, ...cfg.rows.map(r => ((String(r[1]).split('.')[1]) || '').replace(/[^0-9]/g, '').length))) : +cfg.decimals;
+    const dec = cfg.decimals === 'auto' ? Math.min(2, Math.max(0, ...cfg.rows.map(r => ((String(r && r[1]).split('.')[1]) || '').replace(/[^0-9]/g, '').length))) : Math.round(cl(+cfg.decimals || 0, 0, 6));
     let mn = Math.min(...V), mx = Math.max(...V);
     if (bar || cfg.zeroBase) { mn = Math.min(0, mn); mx = Math.max(0, mx); }
     const pad = (mx - mn) * 0.1 || Math.abs(mx) * 0.1 || 1;
@@ -62,7 +62,7 @@ const Charts = (() => {
         map = starts; drawEnd = starts[n - 1] + 0.9 * f; return drawEnd - T0; };
       const got = run(1); if (wantDraw) run(wantDraw / Math.max(0.05, got));
     }
-    const pull = cfg.camera ? 1.3 : 0.3, endStart = drawEnd + pull + (+cfg.hold || 0), dur = endStart + END_DUR[cfg.ending || 'none'] + 0.4;
+    const pull = cfg.camera ? 1.3 : 0.3, endStart = drawEnd + pull + Math.max(0, Math.min(10, +cfg.hold || 0)), dur = endStart + END_DUR[cfg.ending || 'none'] + 0.4;
     const hlCol = E.COLOURS[cfg.hlColour] || '#e3302c', col = E.COLOURS[cfg.colour] || '#f5821f';
     cache = { u, tall, L, V, n, bar, dec, lo, hi, ticks, fmt, tfmt, titleY, P, A, X, Y, bandW, barW, every, ms, reach, map, T0, drawEnd, pull, endStart, dur, col, hlCol };
     cacheKey = key; return cache;
@@ -135,7 +135,7 @@ const Charts = (() => {
       }
     }
     // Title banner in screen space
-    if (cfg.title) { const hs = spring((t - 0.05) * 1.1, 6.5, 9); E.banner(ctx, cfg.title.toUpperCase(), W / 2, p.titleY, (p.tall ? 52 : 48) * u * fitScale(ctx, cfg.title.toUpperCase(), W * 0.86, (p.tall ? 52 : 48) * u), C.accent2, '#fff', C, (-2 - 6 * (1 - hs)) * Math.PI / 180, 0.6 + 0.4 * hs); }
+    if (cfg.title) { const hs = spring((t - 0.05) * 1.1, 6.5, 9); E.banner(ctx, String(cfg.title).toUpperCase(), W / 2, p.titleY, (p.tall ? 52 : 48) * u * fitScale(ctx, String(cfg.title).toUpperCase(), W * 0.86, (p.tall ? 52 : 48) * u), C.accent2, '#fff', C, (-2 - 6 * (1 - hs)) * Math.PI / 180, 0.6 + 0.4 * hs); }
     const fdIn = 1 - ease.expo(t / 0.35); if (fdIn > 0 && !look.transparent) { ctx.fillStyle = C.bg; ctx.globalAlpha = fdIn; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   }
   function fitScale(ctx, text, maxW, fs) { ctx.font = fd(fs); const w = ctx.measureText(text).width + fs * 0.9; return Math.min(1, maxW / w); }
@@ -203,7 +203,7 @@ const Charts = (() => {
     ctx.save(); ctx.globalAlpha = fade;
     if (uu > 0.45 && uu < 1.4) E.ripple(ctx, px, py, 90 * u, (uu - 0.45) / 0.95, C.accent2, u);
     E.arrow(ctx, tx, ty, ang, 110 * u, C.accent2, C, 1 + Math.sin(uu * 14) * Math.exp(-uu * 3) * 0.12);
-    if (m.caption) { const bs = spring((uu - 0.5) * 1.2, 6.5, 9); if (bs > 0) { const cap = m.caption.toUpperCase(), fs = 40 * u * fitScale(ctx, cap, (p.A.x1 - p.A.x0) * 0.5, 40 * u); let bx = px + ux * 200 * u, by = py + uy * 175 * u; ctx.font = fd(fs); const bw = ctx.measureText(cap).width + fs; bx = cl(bx, p.A.x0 + bw / 2, p.A.x1 - bw / 2); by = cl(by, p.P.y0 + 60 * u, p.A.y1 - 40 * u); E.banner(ctx, cap, bx, by, fs, C.paper, C.ink, C, (-3 - 6 * (1 - bs)) * Math.PI / 180, 0.6 + 0.4 * bs); } }
+    if (m.caption) { const bs = spring((uu - 0.5) * 1.2, 6.5, 9); if (bs > 0) { const cap = String(m.caption).toUpperCase(), fs = 40 * u * fitScale(ctx, cap, (p.A.x1 - p.A.x0) * 0.5, 40 * u); let bx = px + ux * 200 * u, by = py + uy * 175 * u; ctx.font = fd(fs); const bw = ctx.measureText(cap).width + fs; bx = cl(bx, p.A.x0 + bw / 2, p.A.x1 - bw / 2); by = cl(by, p.P.y0 + 60 * u, p.A.y1 - 40 * u); E.banner(ctx, cap, bx, by, fs, C.paper, C.ink, C, (-3 - 6 * (1 - bs)) * Math.PI / 180, 0.6 + 0.4 * bs); } }
     ctx.restore();
   }
 
@@ -232,7 +232,7 @@ const Charts = (() => {
       ctx.save(); ctx.globalAlpha = fadeS; const R = 300 * u * s1;
       E.star(ctx, cx, cy, R * 1.12, R * 0.62, 13, C.accent2, C, u, et * 0.4, 5);
       E.star(ctx, cx, cy, R * 0.82, R * 0.46, 11, '#f7c531', C, u, -et * 0.5 + 0.3, 9);
-      if (cfg.endText) { const txt = cfg.endText.toUpperCase(), fs = R * 0.36 * Math.min(1, 6 / Math.max(3, txt.length)); ctx.font = fd(fs); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = fs * 0.14; ctx.strokeStyle = C.ink; ctx.lineJoin = 'round'; ctx.strokeText(txt, cx, cy); ctx.fillStyle = '#fff'; ctx.fillText(txt, cx, cy); }
+      if (cfg.endText) { const txt = String(cfg.endText).toUpperCase(), fs = R * 0.36 * Math.min(1, 6 / Math.max(3, txt.length)); ctx.font = fd(fs); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = fs * 0.14; ctx.strokeStyle = C.ink; ctx.lineJoin = 'round'; ctx.strokeText(txt, cx, cy); ctx.fillStyle = '#fff'; ctx.fillText(txt, cx, cy); }
       ctx.restore();
     }
     E.burst(ctx, cx, cy, 380 * u, (et - 0.05) / 0.5, C, u, 18);
@@ -314,7 +314,7 @@ const Charts = (() => {
     tracks(cfg, look) { const { W, H } = E.dims(look.format), p = plan(cfg, look, W, H), hs = p.drawEnd + p.pull;
       const out = [{ id: 'data', name: 'Chart', colour: p.col, items: [{ id: 'intro', start: 0, end: p.T0, label: 'Title', colour: '#3a4660', move: false, trim: 'end', minLen: 0.3, maxLen: 20, timed: true, title: 'Drag the right edge to show the title for longer before the data starts' }, { id: 'draw', start: p.T0, end: p.drawEnd, label: cfg.type === 'bar' ? 'Bars grow' : 'Line draws', colour: E.hexMix(p.col, '#16213a', 0.35), move: false, trim: 'end', minLen: 0.5, maxLen: 120, timed: true, title: 'Drag the right edge to draw the chart slower or quicker' }] }];
       if (p.ms.length) out.push({ id: 'ms', name: 'Milestones', colour: p.hlCol, items: p.ms.map((m, k) => ({ id: 'ms:' + k, start: p.reach[m.idx] - 0.45, end: p.reach[m.idx] + 0.55, label: m.caption || 'Milestone', colour: E.hexMix(p.hlCol, '#16213a', 0.4), move: false, trim: 'none' })) });
-      out.push({ id: 'end', name: 'End', items: [holdClip(hs, hs + (+cfg.hold || 0)), ...(cfg.ending && cfg.ending !== 'none' ? [{ id: 'ending', start: p.endStart, end: p.dur - 0.4, label: 'Ending', colour: '#6a2a2a', move: false, trim: 'none' }] : [])] });
+      out.push({ id: 'end', name: 'End', items: [holdClip(hs, hs + Math.max(0, Math.min(10, +cfg.hold || 0))), ...(cfg.ending && cfg.ending !== 'none' ? [{ id: 'ending', start: p.endStart, end: p.dur - 0.4, label: 'Ending', colour: '#6a2a2a', move: false, trim: 'none' }] : [])] });
       return out; },
     update(cfg, id, ch) { if (id === 'hold') holdUpd(cfg, ch); else if (id === 'intro' || id === 'draw') E.setTm(cfg, id, ch.end - ch.start); },
     scene(root, cfg, changed) { form(root, cfg, changed); } };

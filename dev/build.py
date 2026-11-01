@@ -18,7 +18,7 @@ order = open(os.path.join(ROOT, 'story', 'ORDER')).read().split()
 open(os.path.join(SRC, 'story.js'), 'w').write(''.join(open(os.path.join(ROOT, 'story', f)).read() for f in order))
 
 FILES = ['mp4mux.js', 'engine.js', 'ui.js', 'charts.js', 'timeline.js', 'picto.js', 'geodata.js', 'globegl.js', 'globe.js', 'routes.js',
-         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'video.js', 'studio_room.js', 'studio_events.js', 'studio.js', 'layers.js', 'editor.js', 'render.js', 'app.js']
+         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'video.js', 'studio_room.js', 'studio_events.js', 'studio.js', 'layers.js', 'editor.js', 'render.js', 'repair.js', 'app.js']
 VERSION = open(os.path.join(ROOT, 'VERSION')).read().strip()
 html = open(os.path.join(SRC, 'index.html')).read()
 css = open(os.path.join(SRC, 'style.css')).read()

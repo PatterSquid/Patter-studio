@@ -6,7 +6,7 @@ async def main():
         pg.on('pageerror',lambda e:errs.append('PAGEERR '+str(e)))
         await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
         await pg.goto('http://127.0.0.1:8765/dist/test.html'); await pg.wait_for_timeout(2000)
-        await pg.evaluate("()=>document.getElementById('packsBtn').click()"); await pg.wait_for_timeout(500)
+        await pg.evaluate("()=>document.getElementById('libBtn').click()"); await pg.wait_for_timeout(800); await pg.locator('dialog button', has_text='Packs and updates').click(); await pg.wait_for_timeout(600)
         print('dialog before:', (await pg.locator('dialog').inner_text())[:300].replace('\n',' | '))
         await pg.set_input_files('dialog input[type=file]', '/home/claude/patter-studio/packs/bank_robbery.json'); await pg.wait_for_timeout(1000)
         print('dialog after:', (await pg.locator('dialog').inner_text())[:400].replace('\n',' | '))

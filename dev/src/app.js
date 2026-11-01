@@ -70,7 +70,7 @@
 
   const mod = () => MODULES[state.module];
   // Fill in any settings missing from older saves or hand edited projects, so every clip type gets a complete set.
-  const fillDefaults = () => { Object.keys(state.cfg || {}).forEach(k => { const M = MODULES[k]; const c = state.cfg[k]; if (M && c && typeof c === 'object') state.cfg[k] = Object.assign(M.defaults(), c); }); };
+  const fillDefaults = () => { const mend = (box) => Object.keys(box || {}).forEach(k => { const M = MODULES[k]; let c = box[k]; if (!M) return; if (!c || typeof c !== 'object' || Array.isArray(c)) { if (box === state.cfg) delete box[k]; return; } try { Repair.clip(k, c, MODULES); } catch (e) { console.warn('repair', k, e); } }); mend(state.cfg); mend(state.stash); };
   fillDefaults(); writeLight();
   const cfg = () => state.cfg[state.module] || (state.cfg[state.module] = mod().defaults());
   const status = $('status');
@@ -114,11 +114,18 @@
   $('manualBtn').addEventListener('click', () => { state.manual = !state.manual; if (state.manual) buildForm(); layoutPanels(); save(); });
   // Undo history, per clip type
   let hist = [], fut = [], lastSnap = null;
-  function commit() { const s = JSON.stringify(cfg()); if (lastSnap === null) { lastSnap = s; return; } if (s !== lastSnap) { hist.push(lastSnap); if (hist.length > 150) hist.shift(); fut = []; lastSnap = s; } }
-  function restore(snap) { state.cfg[state.module] = JSON.parse(snap); lastSnap = snap; save(); refreshAll(); }
+  // After an undo or redo, changes nobody made (a panel tidying up, a picture finishing loading) are part of the state
+  // that came back, not a new edit, so they must not wipe the redo list. His next click, key or typing ends that.
+  let quiet = false;
+  const isUndoBtn = e => { const b = e.target && e.target.closest && e.target.closest('button'); return !!(b && /^(Undo|Redo)$/.test(b.textContent.trim())); };
+  ['pointerdown', 'click', 'input', 'change'].forEach(t => document.addEventListener(t, e => { if (!isUndoBtn(e)) quiet = false; }, true));
+  document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if (!((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) && !/^(control|meta|shift|alt)$/.test(k)) quiet = false; }, true);
+  function commit() { const s = JSON.stringify(cfg()); if (lastSnap === null) { lastSnap = s; return; } if (s !== lastSnap && quiet) { lastSnap = s; return; } if (s !== lastSnap) { hist.push(lastSnap); if (hist.length > 150) hist.shift(); fut = []; lastSnap = s; } }
+  function restore(snap) { state.cfg[state.module] = JSON.parse(snap); lastSnap = snap; quiet = true; refreshAll(); lastSnap = JSON.stringify(cfg()); save(); }   // anything the panels tidy while rebuilding belongs to the restored state, not a new edit (which would wipe redo)
+  window.PatterUndo = { sizes: () => ({ back: hist.length, forward: fut.length, quiet }) };   // for the tests
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
+  function refreshAll() { if (ed) ed.closePop(); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); }); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
   function switchTab(m) { if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
@@ -330,7 +337,7 @@
     await DB.put('templates', { id: uid(), name, created: Date.now(), module: state.module, look: JSON.parse(JSON.stringify(state.look)), cfg: c, assets, thumb: await makeThumb() }); say('Template saved.');
   }
   // Load a template's settings and layers into the current project, on its tab, keeping undo
-  function applyTemplate(tp) { if (!MODULES[tp.module]) { say('That template was made on the old Blackboard tab, which has been retired. Use Story with the Blank board place instead.'); return; } commit(); state.cfg[tp.module] = JSON.parse(JSON.stringify(tp.cfg)); Object.assign(state.assets, tp.assets || {}); Layers.setAssets(tp.assets || {}); if (state.module !== tp.module) switchTab(tp.module); else { commit(); refreshAll(); begin(); } save(); dlg.close(); say('Template applied. Undo puts it back.'); }
+  function applyTemplate(tp) { if (!MODULES[tp.module]) { say('That template was made on the old Blackboard tab, which has been retired. Use Story with the Blank board place instead.'); return; } commit(); state.cfg[tp.module] = JSON.parse(JSON.stringify(tp.cfg)); try { Repair.clip(tp.module, state.cfg[tp.module], MODULES); } catch (e) { } Object.assign(state.assets, tp.assets || {}); Layers.setAssets(tp.assets || {}); if (state.module !== tp.module) switchTab(tp.module); else { commit(); refreshAll(); begin(); } save(); dlg.close(); say('Template applied. Undo puts it back.'); }
   async function useTemplate(tp) { const s = fresh(); s.module = tp.module; s.look = Object.assign(s.look, tp.look); s.cfg = { [tp.module]: JSON.parse(JSON.stringify(tp.cfg)) }; s.assets = Object.assign({}, tp.assets); s.name = tp.name; await newProject(s); dlg.close(); }
   async function openHistory() {
     await autosave(true); const vs = (await DB.versions(state.pid).catch(() => [])).sort((a, b) => b.time - a.time);

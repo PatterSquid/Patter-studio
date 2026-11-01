@@ -175,7 +175,7 @@ const Globe = (() => {
   function placeLabels(ctx, items, W, H, u, C, col) {
     const live = items.filter(i => i.text && i.prog > 0), np = live.reduce((a, i) => a + Math.min(1, i.prog), 0), k = lerp(1, 0.8, ease.sine(cl(np - 3, 0, 1)));
     const fs = (H > W ? 64 : 58) * u * k, m = 20 * u, top = 150 * u, g = 22 * u, sstep = v => { v = cl(v, 0, 1); return v * v * (3 - 2 * v); };
-    const L = live.map(it => { const T = it.text.toUpperCase(); ctx.font = fd(fs); const w = ctx.measureText(T).width + fs * 0.9, h = fs * 1.42, [[x0, y0], [x1, y1]] = it.box, cx = (x0 + x1) / 2;
+    const L = live.map(it => { const T = String(it.text).toUpperCase(); ctx.font = fd(fs); const w = ctx.measureText(T).width + fs * 0.9, h = fs * 1.42, [[x0, y0], [x1, y1]] = it.box, cx = (x0 + x1) / 2;
       const below = y1 + g + h / 2, above = y0 - g - h / 2, flip = sstep((below + h / 2 - (H - m)) / h);
       return { T, w, h, prog: it.prog, a: it.alpha ?? 1, x: cl(cx, w / 2 + m, W - w / 2 - m), y: lerp(below, above, flip) }; });
     const clampY = p => { p.y = cl(p.y, top + p.h / 2, H - m - p.h / 2); };

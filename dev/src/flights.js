@@ -84,7 +84,7 @@ const Flights = (() => {
       const outD = Math.max(out.dur * 1.25, 2.2); push(outD, q => out.at(q)); cam = allC; if (span > outD) hold(span - outD, allC);
       const back = Globe.flight(cam, ends); push(Math.max(1.4, back.dur), q => back.at(q)); hold(0.8 * sp, ends);
     }
-    hold((+cfg.hold || 0) + 0.4, cam);
+    hold(Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.4, cam);
     cp = { u, sp, routes, segs, dur: Math.max(3, t), F, T }; ck = key; return cp;
   }
   function camAt(p, t) {
@@ -287,7 +287,7 @@ const Flights = (() => {
       const item = (r, i) => ({ id: 'route:' + i, start: r.start, end: r.arrive, label: r[0].name + ' to ' + r[1].name, colour: '#5d5222', move: false, trim: 'end', minLen: 0.8, maxLen: 120, timed: true, title: 'Drag the right edge to make this journey slower or quicker' });
       // A journey in order sits on one track; journeys that overlap each get their own so every bar can be grabbed
       const rows = cfg.mode === 'chain' || p.routes.length < 2 ? [{ id: 'routes', name: 'Journeys', colour: E.COLOURS[cfg.routeColour] || '#f7c531', items: p.routes.map(item) }] : p.routes.map((r, i) => ({ id: 'routes:' + i, name: r[1 - (cfg.mode === 'many-to-one' ? 1 : 0)].name, colour: E.COLOURS[cfg.routeColour] || '#f7c531', items: [item(r, i)] }));
-      return [...rows, { id: 'end', name: 'End', items: [holdClip(last.t0, last.t0 + (+cfg.hold || 0))] }]; },
+      return [...rows, { id: 'end', name: 'End', items: [holdClip(last.t0, last.t0 + Math.max(0, Math.min(10, +cfg.hold || 0)))] }]; },
     update(cfg, id, ch) { if (id === 'hold') holdUpd(cfg, ch); else if (id.startsWith('route:')) E.setTm(cfg, id, ch.end - ch.start); },
     scene(root, cfg, changed) { form(root, cfg, changed); } };
   return { id: 'flights', name: 'Flights', defaults, duration, draw, form, editor, _plan: plan };

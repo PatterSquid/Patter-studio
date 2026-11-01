@@ -7,7 +7,8 @@ const Studio = (() => {
   const { cl, lerp, rng } = E;
   const TAU = Math.PI * 2;
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
-  const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const keyOpts = { key: 'auto', tol: 0.5, fps: 30 };
+  const mk = (w, h) => { w = Math.min(8192, Math.max(1, Math.ceil(w) || 1)); h = Math.min(8192, Math.max(1, Math.ceil(h) || 1)); if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   const hash = s => { let h = 2166136261; s = String(s || ''); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const fract = x => x - Math.floor(x);
@@ -42,7 +43,7 @@ const Studio = (() => {
     return cfg.room.asset === BUILTIN && !cfg.marksOwn ? Object.assign({}, cfg, { marks: STUDIO_MARKS }) : cfg; };
   function defaults() {
     return { room: hasBuiltin ? { asset: BUILTIN, name: 'Your studio' } : null, marks: builtinMarks(), weather: 'rain', rain: 0.9, lightning: 1, lamps: 1, flicker: 0.5, outside: true, sway: true, clouds: true, drift: 'gentle', loop: 30, len: 0,
-      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q }, avatar: null, stings: [], shows: [], events: [], tower: 'standing', sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
+      neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q.map(p => p.slice()) }, avatar: null, stings: [], shows: [], events: [], tower: 'standing', sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
   function duration(cfg) {
@@ -577,6 +578,7 @@ const Studio = (() => {
   function drawLogoSign(ctx, N, B, eyes, t, L, room, px, cfg, v) {
     const a = typeof Layers !== 'undefined' && Layers.assets[LOGO]; if (!a || !a.bmp) { ready(); return; }
     const Q = B.Q, [cx, cy] = qCentre(Q), side = Math.max(Math.hypot(Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]), Math.hypot(Q[3][0] - Q[0][0], Q[3][1] - Q[0][1])), hum = 0.975 + 0.02 * wob(t, L, 77, [41, 67, 97]); let lit = cl(room, 0, 1) * hum;
+    if (!(side > 0.5 && side < 1e5 && isFinite(cx + cy))) return;                       // corners that make no sign
     // Light thrown out onto everything round it, and down onto whatever is below
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.42 * lit; ctx.drawImage(glowSprite('rgba(110,160,255,0.6)'), cx - side * 1.35, cy - side * 1.3, side * 2.7, side * 2.6);
@@ -762,7 +764,7 @@ const Studio = (() => {
     const range = (v0, min, max, step, fn, label, fmt = x => Math.round(x * 100) + '%') => { const out = H('span', { className: 'st-rv', textContent: fmt(v0) }), inp = H('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(v0), 'aria-label': label, on: { input: e => { const x = +e.target.value; out.textContent = fmt(x); fn(x); changed(false); }, change: () => changed() } }); return H('div', { className: 'st-range' }, inp, out); };
     const foot = (...b) => H('div', { className: 'btnrow' }, ...b, done ? btn('Done', done) : '');
     if (!cfg.room && hasBuiltin) { cfg.room = { asset: BUILTIN, name: 'Your studio' }; if (!(cfg.marks && cfg.marks.glass)) cfg.marks = builtinMarks(); if (cfg.clouds == null) cfg.clouds = true; }
-    const M = cfg.marks = Object.assign({ glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }, cfg.marks || {});
+    const M = cfg.marks = (cfg.marks && typeof cfg.marks === 'object') ? cfg.marks : {}; Object.entries({ glass: null, front: [], lamps: [], frames: [], plants: [], street: [], lit: [], road: [] }).forEach(([q, v]) => { if (!(q in M)) M[q] = v; });   // fill gaps in place: rebuilding the object would reorder it and count as an edit
     const now = () => (typeof Layers !== 'undefined' && Layers.hooks && Layers.hooks.time ? Layers.hooks.time() : 0);
     const [k, a] = (id || '').split(':');
     if (k === 'S') { const s2 = (cfg.stings || []).find(q => q.id === a); if (s2) { root.append(card('Sting', field('What happens', sel(s2.k, STINGS, v => { s2.k = v; ch(); }, 'Sting')), grid2(field('Starts at (seconds)', num(s2.start, v => { s2.start = r2(v); changed(); }, 0, 3600, 0.1, 'Start')), field('Lasts (seconds)', num(s2.dur, v => { s2.dur = r2(v); changed(); }, 0.2, 60, 0.1, 'Length'))),
@@ -815,10 +817,10 @@ const Studio = (() => {
         H('p', { className: 'hint', textContent: 'Add thunder, lightning, flickers and lights off at a moment with + Sting on the timeline. Camera moves, captions, name titles and a subscribe reminder are under Layers.' })));
     }
     function avatarCard() {
-      const A = cfg.avatar, note = H('p', { className: 'hint' }), inf = A && typeof Media !== 'undefined' ? Media.info(A.id) : null, opts = cfg._key || (cfg._key = { key: 'auto', tol: 0.5, fps: 30 });
+      const A = cfg.avatar, note = H('p', { className: 'hint' }), inf = A && typeof Media !== 'undefined' ? Media.info(A.id) : null, opts = keyOpts;   // how to read the next avatar file: a panel setting, not part of the clip
       const load = (src, what) => { if (typeof Media === 'undefined' || !Media.importAvatar) { note.textContent = 'Videos can only be added in the app itself.'; return; } note.textContent = 'Reading ' + what + '…';
         Media.importAvatar(src, { key: opts.key, tol: opts.tol, fps: opts.fps }, q => { note.textContent = 'Reading ' + what + ': ' + Math.round(q * 100) + '%'; })
-          .then(m => { cfg.avatar = Object.assign({ x: 0.5, y: 0.5, h: 1, inPt: 0, grade: 0.6, warm: 0.5, cool: 0.45, shadow: 0.5 }, A || {}, { id: m.id, name: m.name }); delete cfg._key; changed(); redo(); const n2 = root.querySelector('.av-note'); if (n2) n2.textContent = (m.key === 'green' || m.key === 'blue' ? 'The ' + m.key + ' screen was taken out. ' : '') + (m.cut ? 'Only the first 10 minutes were read. ' : '') + (m.unsaved ? 'There was no room to keep it on this computer, so add it again after closing the app.' : ''); })
+          .then(m => { cfg.avatar = Object.assign({ x: 0.5, y: 0.5, h: 1, inPt: 0, grade: 0.6, warm: 0.5, cool: 0.45, shadow: 0.5 }, A || {}, { id: m.id, name: m.name }); delete cfg._key; Object.assign(keyOpts, { key: 'auto', tol: 0.5, fps: 30 }); changed(); redo(); const n2 = root.querySelector('.av-note'); if (n2) n2.textContent = (m.key === 'green' || m.key === 'blue' ? 'The ' + m.key + ' screen was taken out. ' : '') + (m.cut ? 'Only the first 10 minutes were read. ' : '') + (m.unsaved ? 'There was no room to keep it on this computer, so add it again after closing the app.' : ''); })
           .catch(e => { note.textContent = e.message || String(e); }); };
       const pickVid = () => { const inp = H('input', { type: 'file', accept: 'video/*,.webm,.mov,.mp4' }); inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) load(f, f.name); }; inp.click(); };
       const pickPng = () => { const inp = H('input', { type: 'file', accept: 'image/png,image/webp', multiple: true }); inp.onchange = () => { const fs = [...(inp.files || [])]; if (fs.length) load(fs, fs.length + ' pictures'); }; inp.click(); };
@@ -860,7 +862,7 @@ const Studio = (() => {
       if (N.style !== 'neon') kids.push(H('div', { className: 'btnrow' }, btn('Smaller', () => { set({ q: qScale(N.q, 0.9) }); ch(); }), btn('Bigger', () => { set({ q: qScale(N.q, 1.1) }); ch(); }), btn('Straighten', () => { const c2 = qCentre(N.q), w2 = (Math.hypot(N.q[1][0] - N.q[0][0], N.q[1][1] - N.q[0][1]) + Math.hypot(N.q[2][0] - N.q[3][0], N.q[2][1] - N.q[3][1])) / 4, h2 = w2 * 1920 / 1080; set({ q: [[c2[0] - w2, c2[1] - h2], [c2[0] + w2, c2[1] - h2], [c2[0] + w2, c2[1] + h2], [c2[0] - w2, c2[1] + h2]].map(p => p.map(r4)) }); ch(); })),
         fr.length ? field('Hang it in a frame', sel('', [['', 'Choose a frame…'], ...fr.map(f => [f.id, f.name || 'Frame'])], v2 => { const f = fr.find(x => x.id === v2); if (f) { set({ q: qInFrame(f.p) }); ch(); } }, 'Hang it in a frame')) : '');
       else kids.push(field('Name next to it', seg([['1', 'Yes'], ['0', 'No']], N.text ? '1' : '0', v2 => { set({ text: v2 === '1' }); ch(); })));
-      kids.push(H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, style: N.style }); ch(); }), picked && done ? btn('Done', done) : ''));
+      kids.push(H('div', { className: 'btnrow' }, btn('Put it back where it was', () => { cfg.neon = Object.assign({}, NEON0, { on: N.on, style: N.style, q: SIGN_Q.map(p => p.slice()) }); ch(); }), picked && done ? btn('Done', done) : ''));
       root.append(card('PatterSquid sign', ...kids));
     }
     function framesCard() {

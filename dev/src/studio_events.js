@@ -6,7 +6,7 @@
 const StudioEvents = (() => {
   const { cl, lerp, rng } = E;
   const TAU = Math.PI * 2;
-  const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const mk = (w, h) => { w = Math.min(8192, Math.max(1, Math.ceil(w) || 1)); h = Math.min(8192, Math.max(1, Math.ceil(h) || 1)); if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   const sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const hash = s => { let h = 2166136261; s = String(s || ''); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const pmod = (x, m) => ((x % m) + m) % m;
