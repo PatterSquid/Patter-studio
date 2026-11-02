@@ -125,17 +125,17 @@
   window.PatterUndo = { sizes: () => ({ back: hist.length, forward: fut.length, quiet }) };   // for the tests
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { if (ed) ed.closePop(); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
+  function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); }); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
   function switchTab(m) { if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
   /* ---------- Editing a clip from the Video tab: it is opened in its own tab (that tab's usual clip is put aside), and goes
      back into the video when you return to the Video tab ---------- */
-  const vItem = id => ((state.cfg.video && state.cfg.video.items) || []).find(x => x.id === id);
+  const vItem = id => { const c = state.cfg.video; if (!c) return null; const f = typeof Video !== 'undefined' && Video.findItem ? Video.findItem(c, id) : null; return f ? f.it : (c.items || []).find(x => x.id === id); };   // clips on any track
   function openItem(id) { const it = vItem(id); if (!it || !MODULES[it.mod]) return; if (state.edit) finishEdit(); state.stash = state.stash || {}; state.stash[it.mod] = state.cfg[it.mod] || null; state.cfg[it.mod] = it.cfg = Object.assign(MODULES[it.mod].defaults(), it.cfg || {}); state.edit = { id, mod: it.mod }; switchTab(it.mod); say('Editing this clip from your video. Press Back to the video when you are done.'); }
   function finishEdit() { const e = state.edit; if (!e) return; const it = vItem(e.id); if (it && state.cfg[e.mod]) it.cfg = state.cfg[e.mod]; state.cfg[e.mod] = (state.stash && state.stash[e.mod]) || MODULES[e.mod].defaults(); if (state.stash) delete state.stash[e.mod]; state.edit = null; save(); }
-  function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = state.cfg.video.items.indexOf(it) + 1;
+  function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = (Video.allPlaced ? Video.allPlaced(state.cfg.video, state.look).findIndex(p => p.it === it) : state.cfg.video.items.indexOf(it)) + 1;
     el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
   if (typeof Studio !== 'undefined' && Studio.ready) Studio.ready().then(() => { if (Layers.hooks.onAsset) Layers.hooks.onAsset(Studio.BUILTIN); });
   if (typeof Studio !== 'undefined') Object.assign(Studio.hooks, { cfg: () => state.cfg.studio || Studio.defaults(), select: id => { if (ed) ed.select(id); buildInspector(); } });
@@ -151,6 +151,7 @@
   const viewLook = () => (ed && ed.camOff && mod().editor && mod().editor.camera ? Object.assign({}, state.look, { noCam: true }) : state.look);
   const player = E.Player($('prev'), () => ({ mod: mod(), cfg: cfg(), look: viewLook() }), (t, d, playing) => {
     if (ed) { ed.setTime(t); ed.drawOverlay(t); ed.syncPlay(playing); }
+    if (cutUI && state.module === 'video') cutUI.frame(t, playing);
     if (!scrubbing) scrub.value = Math.round(t / d * 1000);
     timeEl.textContent = t.toFixed(1) + ' / ' + d.toFixed(1) + ' s'; playBtn.textContent = playing ? 'Pause' : 'Play'; playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
   });
@@ -162,6 +163,7 @@
   if (autoplay()) player.play();
   // Smooth preview: while you're not changing anything, background workers draw the whole clip ahead of time,
   // and playback uses those frames, so heavy map clips play at full speed. Any change throws them away and starts again.
+  const cutLive = () => state.module === 'video' && typeof Video !== 'undefined' && Video.isCut && Video.isCut(cfg());
   SP = (() => {
     const FPS = 30, on = () => { try { return localStorage.getItem('patter-smooth') !== '0'; } catch (e) { return true; } };
     let key = '', blobs = [], bmps = new Map(), pend = new Set(), total = 0, have = 0, ctrl = null, timer = 0, held = false;
@@ -169,7 +171,7 @@
     const bar = () => { const p = total ? have / total * 100 : 0; scrub.style.setProperty('--buf', p.toFixed(1) + '%'); scrub.classList.toggle('buffering', on() && total > 0 && have < total); scrub.classList.toggle('cached', on() && total > 0 && have >= total); };
     const clear = () => { if (ctrl) ctrl.abort(); ctrl = null; blobs = []; bmps.forEach(b => b.close && b.close()); bmps.clear(); pend.clear(); total = 0; have = 0; bar(); };
     async function start() {
-      if (held || !on() || state.look.transparent || typeof Render === 'undefined' || !Render.buildPreview) return; const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;
+      if (held || !on() || state.look.transparent || typeof Render === 'undefined' || !Render.buildPreview || cutLive()) return; const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;
       const m = mod(), { W } = E.dims(state.look.format), cw = $('prev').clientWidth * Math.min(2, window.devicePixelRatio || 1), scale = Math.max(0.25, Math.min(0.6, cw / W));
       try { await Render.buildPreview(m, JSON.parse(JSON.stringify(cfg())), Object.assign({}, state.look, { transparent: false }), { fps: FPS, scale, signal: c.signal, workers: Math.max(1, Math.min(3, Render.cores() - 1)),
         onFrame: (i, blob, n) => { if (c.signal.aborted || key !== k) return; blobs[i] = blob; total = n; have++; if (have % 6 === 0 || have === n) bar(); } }); } catch (e) { }
@@ -179,7 +181,7 @@
       hold(v) { held = v; if (v) { clearTimeout(timer); if (ctrl && have < total) clear(); } else this.touch(); },
       enabled: on,
       // Frame for time t if it's ready (decoding a few ahead so playback never waits)
-      frameAt(t) { if (!total || !on() || state.look.transparent || (ed && ed.camOff) || state.pq === 'full') return null; const i = Math.min(total - 1, Math.round(t * FPS));
+      frameAt(t) { if (!total || !on() || state.look.transparent || cutLive() || (ed && ed.camOff) || state.pq === 'full') return null; const i = Math.min(total - 1, Math.round(t * FPS));
         for (let j = i; j < Math.min(total, i + 10); j++) if (blobs[j] && !bmps.has(j) && !pend.has(j)) { pend.add(j); const kk = key; createImageBitmap(blobs[j]).then(b => { pend.delete(j); if (kk === key) bmps.set(j, b); else b.close(); }).catch(() => pend.delete(j)); }
         bmps.forEach((b, j) => { if (j < i - 2 || j > i + 20) { b.close && b.close(); bmps.delete(j); } });
         return bmps.get(i) || null; },
@@ -213,6 +215,21 @@
     changed: full => { save(); if (full) { commit(); ed.build(); buildInspector(); if (state.manual) buildForm(); } },
     select: () => buildInspector(), undo, redo,
     focusInspector: () => { const f = $('inspector').querySelector('textarea, input[type=text]'); if (f) { f.focus(); f.select && f.select(); } } });
+  // The Video tab's editing workspace
+  let cutUI = null, cutInsp = null;
+  if (typeof CutUI !== 'undefined') {
+    const cutO = { getCfg: () => state.cfg.video || (state.cfg.video = MODULES.video.defaults()), getLook: () => state.look, player, ed, say, undo, redo, getRange,
+      changed: full => { save(); if (full !== false) { commit(); ed.build(); buildInspector(); } else { clearTimeout(formTimer); formTimer = setTimeout(() => { commit(); ed.build(); }, 350); } },
+      commit, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem: id => openItem(id), rebuildInspector: () => buildInspector(), fileBase: () => fileBase(),
+      setLook: (k, v) => { state.look[k] = v; if (k === 'format') layoutPreview(); syncLook(); save(); ed.build(); buildInspector(); },
+      onExport: on => { player.pause(); player.freeze(on); if (SP) SP.hold(on); } };
+    cutUI = CutUI.create(cutO); cutO.ui = cutUI; cutInsp = CutInspect.create(cutO, cutUI); window.PatterCut = { ui: cutUI, insp: cutInsp, player, select: id => ed.select(id) };   // the tests drive the editor through this
+    Object.assign(Video.hooks, { inspect: (...a) => cutInsp.inspect(...a), scene: (...a) => cutInsp.scene(...a), time: () => player.t, cfg: () => state.cfg.video });
+    const gBuild = ed.build; ed.build = () => { gBuild(); if (cutUI.active) cutUI.build(); };
+    const gSel = ed.select; ed.select = (id, q) => { gSel(id, q); if (cutUI.active) cutUI.markSel(); };
+    // Export from the Video tab goes through the editor's own exporter (sound, footage, every frame exact)
+    const xb = H('button', { type: 'button', className: 'cut-x', textContent: 'Export', title: 'Export the video (Ctrl+E)', on: { click: () => cutInsp.exportDialog() } }); document.querySelector('.transport').append(xb);
+  }
   Object.assign(Layers.hooks, {
     time: () => player.t, selKey: () => ed.selKey,
     seek: (t, ki) => { player.pause(); player.seek(t); ed.selKey = ki; ed.setTime(t); buildInspector(); },
@@ -234,6 +251,7 @@
   const SHORTCUTS = [
     ['Playback', [['Space', 'Play or pause'], ['Home or End', 'Jump to the start or the end'], [', or .', 'Step one frame back or forward (hold Shift for one second)'], ['Left or Right', 'Step a frame when nothing is selected'], ['J or L', 'Jump to the previous or next keyframe'], ['P', 'Loop the in to out range']]],
     ['Editing', [['Click', 'Select something on the preview or the timeline'], ['Drag a bar edge', 'Make that part slower or quicker. Everything after it moves along to match'], ['Right click a bar', 'Put its timing back to automatic'], ['Shift click or drag a box', 'Select several layers on the timeline, then move, duplicate, delete or save them together'], ['Drag the playhead', 'Scrub through the clip. It snaps to bar edges and keyframes; hold Alt to scrub freely'], ['Arrow keys', 'Nudge the selected item (hold Shift for bigger steps)'], ['Ctrl + C', 'Copy the selected layer'], ['Ctrl + V', 'Paste a layer at the playhead (works across tabs)'], ['Ctrl + D', 'Duplicate the selected item'], ['Delete', 'Delete the selected keyframe, or the item'], ['K', 'Add a keyframe to the selected layer'], ['B', 'Put the selected layer behind the scene, or back in front'], ['T', 'Add a text layer'], ['Esc', 'Deselect'], ['Shift while dragging', 'Move a keyframed layer\'s whole path, or turn in 15 degree steps']]],
+    ['Video editor (Video tab)', [['S or Ctrl + B', 'Split at the playhead (the selected clip, or everything under the playhead)'], ['Delete', 'Delete the selected clip'], ['Shift + Delete', 'Delete and close the gap'], ['Q or W', 'Trim the clip\'s start or end to the playhead'], ['Up or Down', 'Jump to the previous or next cut'], ['F', 'Freeze the frame at the playhead'], ['M', 'Add a marker'], ['Ctrl + C, Ctrl + V', 'Copy a clip, paste it at the playhead'], ['Ctrl + A', 'Select every clip'], ['+ or -', 'Zoom the timeline (or Ctrl + wheel)'], ['Drag files in', 'Import footage, sound and pictures (onto the timeline to place them)']]],
     ['Range and export', [['I', 'Set the in point at the playhead'], ['O', 'Set the out point at the playhead'], ['X', 'Clear the in and out points'], ['Ctrl + E', 'Export']]],
     ['Projects', [['Ctrl + Z', 'Undo'], ['Ctrl + Shift + Z or Ctrl + Y', 'Redo'], ['Ctrl + S', 'Save now and keep a version'], ['?', 'Show this sheet']]],
   ];
@@ -244,11 +262,12 @@
     const ae = document.activeElement, typing = /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !(ae.type === 'checkbox' || ae.type === 'range'), ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (document.querySelector('dialog[open]')) return;
     if (ctrl && k === 's') { e.preventDefault(); autosave('version').then(() => say('Saved, with a version kept in History.')); return; }
-    if (ctrl && k === 'e') { e.preventDefault(); $('exportBtn').click(); return; }
+    if (ctrl && k === 'e') { e.preventDefault(); if (state.module === 'video' && cutInsp) cutInsp.exportDialog(); else $('exportBtn').click(); return; }
     if (typing) return;
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (ctrl && k === 'y') { e.preventDefault(); redo(); return; }
+    if (state.module === 'video' && cutUI && cutUI.key(e)) { e.preventDefault(); return; }
     const E2 = mod().editor;
     if (ctrl && k === 'c') { if (ed.selected && E2.copy && ed.selected.startsWith('L:')) { clip = E2.copy(cfg(), ed.selected); say('Layer copied. Press Ctrl+V to paste it at the playhead, on any tab.'); e.preventDefault(); } return; }
     if (ctrl && k === 'v') { if (clip && E2.paste) { e.preventDefault(); addLayerNow(() => E2.paste(cfg(), clip, player.t)); } return; }
@@ -410,6 +429,7 @@
   const fileBase = () => { const t = (state.name && !/^Untitled clip/.test(state.name) ? state.name : (cfg().title || cfg().headline || cfg().heading || (cfg().articles && cfg().articles[0] && cfg().articles[0].headline) || state.module)).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'clip'; return `${t}-${state.look.format === '9:16' ? 'vertical' : '1080p'}`; };
   exportBtn.addEventListener('click', async () => {
     if (exportBtn.disabled) return;
+    if (state.module === 'video' && cutInsp) { cutInsp.exportDialog(); return; }
     const fps = +$('fps').value, blur = ['smart', 'off', 'full'].includes($('blur').value) ? $('blur').value : 'smart', look = JSON.parse(JSON.stringify(state.look)), c = JSON.parse(JSON.stringify(cfg())), m = mod(), range = $('rangeOn').checked ? getRange() : null;
     abort = new AbortController(); exportBtn.disabled = true; cancelBtn.hidden = false; fill.style.width = '0%';
     player.pause(); player.freeze(true); if (SP) SP.hold(true); const t0 = performance.now(); say('Getting ready to render…');

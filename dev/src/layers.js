@@ -788,7 +788,7 @@ const Layers = (() => {
         return { guides };
       },
       resize(cfg, id, s, f) { if (!isL(id)) return ie.resize && ie.resize(cfg, id, s, f); const L = find(cfg, id); if (!L || !s) return; setVals(L, s, { s: cl(s.v.s * f, 0.05, 12) }); },
-      rotate(cfg, id, s, deg, mods) { if (!isL(id)) return; const L = find(cfg, id); if (!L || !s) return; let r = s.v.rot + deg; if (mods && mods.shift) r = Math.round(r / 15) * 15; setVals(L, s, { rot: r }); },
+      rotate(cfg, id, s, deg, mods) { if (!isL(id)) return ie.rotate && ie.rotate(cfg, id, s, deg, mods); const L = find(cfg, id); if (!L || !s) return; let r = s.v.rot + deg; if (mods && mods.shift) r = Math.round(r / 15) * 15; setVals(L, s, { rot: r }); },
       retime(cfg, id, idx, tAbs) { const L = find(cfg, id); if (!L || !L.keys || !L.keys[idx]) return idx; const st = num(L.start, 0), len = num(L.end, st + 3) - st, k = L.keys[idx]; k.t = r2(cl(tAbs - st, 0, len)); L.keys.sort((a, b) => a.t - b.t); return L.keys.indexOf(k); },
       lockTrack(cfg, id) { const L = find(cfg, id); if (L) { L.locked = !L.locked; if (!L.locked) delete L.locked; } },
       hideTrack(cfg, id) { const L = find(cfg, id); if (L) { L.hidden = !L.hidden; if (!L.hidden) delete L.hidden; } },

@@ -64,17 +64,48 @@ git add -A && git commit && git push origin main
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
   after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).
 
-## The Video tab (dev/src/video.js)
+## The Video tab: the editor (dev/src/video.js and dev/src/cut_*.js)
 
-The Video tab strings clips from the other tabs into one running order with avatar gaps (where the video cuts to the
-user's avatar talking to camera; he uses full cuts). `cfg.items` is a list of `{ kind: 'clip', mod, cfg, name, inPt, hold }`
-and `{ kind: 'avatar', text, dur }`. Each clip keeps a full config for its tab. Pressing Edit opens the clip in its own tab
-(the tab's own clip is put aside in `state.stash`) and Back to the video writes it back (`state.edit`). Gaps export black,
-green or see through, and show a labelled card only in the preview.
+The Video tab is a full video editor laid out like CapCut: library on the left (`.cut-lib`: Media, Audio with made-on-the-spot
+sound effects, Text, Stickers, Effects, Transitions, Filters, Patter clips), the player in the middle with Export, the
+selected clip's settings on the right in tabs, and a multi-track timeline below (`.cut-tl`). `body.cut` switches the
+layout; the other tabs are untouched. He asked for it to give him everything CapCut does for editing, at a professional
+standard and as easy to use.
 
-When he sends a script, build it as a Video tab project: one clip per beat (Story scenes for sketches, charts, maps,
-newspapers where they fit), an avatar gap for every line marked [ME], new drawings as a pack. Hand it over as a
-.patter.json project file plus an MP4 preview.
+* **Model** (`cfg.video`, version `v: 2`, backward compatible). `items` is the magnetic **main track**: clips butt up in
+  order, and a transition on a clip (`tr: { k, d }`) overlaps it with the next. Kinds: `clip` (a tab clip: `mod`, `cfg`,
+  `inPt`, `outPt`, `hold`), `media` (his footage or a picture: `asset`, `src0`, `src1` seconds in the file, or `dur` for
+  pictures, `file` its name for relinking), `avatar` (gap), `colour` (card: `fill`). `tracks` holds overlay video tracks
+  (`kind: 'video'`, items with `start`; also `adjust` clips that grade everything under them) and audio tracks
+  (`kind: 'audio'`, `audio` clips; `duck` lowers the track under talking, `talk` marks voiceover). Every visual clip can have
+  `x y s rot op flipH flipV fit crop blend bg`, `col` (grade: CutGL.ADJUST plus `look`, `lookAmt`), `fx` (effects), `key`
+  (chroma key), `mask`, `anIn anOut anLoop`, `kf` (keyframes `{ prop: [[t, v, ease]] }` for x y s rot op vol), `speed`,
+  `pitch`, `rev`, `still` (freeze frame). Sound: `vol` (dB), `mute`, `fadeIn`, `fadeOut`, `enhance`, `denoise`. Also
+  `markers`, `bin` (assets in this project), `bg` (black, blur, white), `gap`, `studio`, `duckDb`, `main*` track flags.
+* `cut_mp4.js`: our own MP4/MOV/M4A reader (`MP4In`: sample tables, edit lists, rotation, H.264, HEVC, VP9, AV1, AAC, Opus,
+  PCM) and streaming writer (`MP4Out`: video plus sound, 64 bit, writes to a file sink or Blob pieces). No outside
+  libraries (npm and GitHub downloads are blocked in this environment).
+* `cut_media.js` (`CutMedia`): his files kept whole in IndexedDB `patter-cut`; import makes thumbnails and a waveform in the
+  background; the preview plays through hidden video elements kept locked to the playhead (`live`); exports read exact
+  frames with WebCodecs (`videoReader`, element seeking for non-MP4) and samples with `audioReader`.
+* `cut_gl.js` (`CutGL`): one WebGL2 shader pass for colour, looks, effects and chroma key, at the size shown.
+* `cut_audio.js` (`CutAudio`): one set of gain rules for the live preview (audio elements through Web Audio) and the
+  export mix (OfflineAudioContext in blocks, crossfaded joins), voice enhance, noise reduction, ducking, WSOLA time stretch
+  for speed with the pitch kept, AAC (else Opus) encoding, WAV.
+* `cut_export.js` (`CutExport.run`): renders on the main thread with exact frames, mixes sound alongside, streams to disk.
+  MP4 (H.264 plus AAC on his PC; VP9 and Opus here in headless), PNG sequence, WAV. The Video tab always exports through it.
+* `cut_ui.js` (`CutUI`) is the workspace and timeline; `cut_insp.js` (`CutInspect`) the clip, transition, track and project
+  panels and the export window. Selections: `C:id` clip, `T:id` transition after a main clip, `K:id` track, `L:id` layer.
+  `window.PatterCut` is the hook the tests use.
+* Tests: `tests/cut_ui.py` (22 real mouse and keyboard steps through import, drag, split, trim, move between tracks,
+  transitions, grading, keyframes, undo, sound effects, export), `tests/cut_monkey.py` (random clicking, dragging and keys
+  with footage loaded; checks the timeline stays sane), `tests/cut_damaged.js` (damaged editor videos), plus `video1.py`
+  and `video2.py`. They read fixtures from `dev/tmp_cut/` (gitignored): make them with ffmpeg as VP9 plus Opus MP4 (headless
+  Chromium has no H.264 or AAC), e.g. `long.mp4` 6 s 640x360 30 fps with a 500 Hz tone, `vp9opus.mp4`, `red.png`,
+  `tone.mp3`. Software WebGL makes grading look slow in headless timings; on his PC it is a millisecond or two.
+* When he sends a script, build it as a Video tab project: one clip per beat (Story scenes for sketches, charts, maps,
+  newspapers where they fit), an avatar gap for every line marked [ME], new drawings as a pack. Hand it over as a
+  .patter.json project file plus an MP4 preview. His own footage isn't in project files: clips keep `file` so he can relink.
 
 ## The Studio tab (dev/src/studio.js)
 

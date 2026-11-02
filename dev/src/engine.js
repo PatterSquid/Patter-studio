@@ -149,7 +149,7 @@ const E = (() => {
       const { mod, cfg, look } = st, { W, H } = dims(look.format); dur = mod.duration(cfg, look);
       if (playing && !scrubbing) { t += dt; if (loop) { if (t > loop[1] || t < loop[0] - 0.05) t = loop[0]; } else if (t >= dur) { t = dur; playing = false; } }
       // When paused, only redraw if something actually changed (time, settings or size), so the computer isn't kept busy
-      if (!playing) { const key = t.toFixed(4) + '|' + mode + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
+      if (!playing) { const key = t.toFixed(4) + '|' + mode + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
       const dpr = mode === 'draft' ? Math.min(1, window.devicePixelRatio || 1) * 0.5 : Math.min(window.devicePixelRatio || 1, 2) * (mode === 'full' ? 1 : quality), cw = canvas.clientWidth, ch = canvas.clientHeight;
       if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
       const fs = performance.now();
@@ -272,5 +272,5 @@ const E = (() => {
   // Timing overrides from dragging bars on the timeline: cfg.timing[id] = seconds. Missing means automatic.
   const tm = (cfg, id) => { const v = cfg && cfg.timing && +cfg.timing[id]; return v > 0 && isFinite(v) ? v : undefined; };
   const setTm = (cfg, id, v) => { if (!cfg.timing || typeof cfg.timing !== 'object') cfg.timing = {}; cfg.timing[id] = Math.round(Math.max(0.1, Math.min(600, v)) * 100) / 100; };
-  return { tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker };
+  return { tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
 })();

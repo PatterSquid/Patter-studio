@@ -49,11 +49,19 @@ const Repair = (() => {
   function clip(k, cfg, mods, depth) {
     const M = mods[k]; if (!M || !plain(cfg) || (depth || 0) > 3) return 0; let n = 0;
     if (k === 'video') {
-      n += fix(cfg, M.defaults(), ['items', 'studio']);
+      n += fix(cfg, M.defaults(), ['items', 'studio', 'tracks', 'markers', 'bin']);
       if (!Array.isArray(cfg.items)) { cfg.items = []; n++; }
-      const keep = cfg.items.filter(it => plain(it) && (it.kind === 'avatar' || (it.kind === 'clip' && typeof it.mod === 'string')));
+      ['tracks', 'markers', 'bin'].forEach(k => { if (cfg[k] != null && !Array.isArray(cfg[k])) { cfg[k] = []; n++; } });
+      // Editor clips: footage, sound, colour cards and adjustments, on the main track or on their own tracks
+      const okItem = it => plain(it) && (it.kind === 'avatar' || (it.kind === 'clip' && typeof it.mod === 'string') || ((it.kind === 'media' || it.kind === 'audio') && typeof it.asset === 'string') || it.kind === 'colour' || it.kind === 'adjust');
+      const nums = it => { if (it.kind === 'colour' && typeof it.col === 'string') { it.fill = it.col; delete it.col; n++; } if (it.fill != null && typeof it.fill !== 'string') { delete it.fill; n++; } ['start', 'src0', 'src1', 'dur', 'speed', 'x', 'y', 's', 'rot', 'op', 'vol', 'fadeIn', 'fadeOut', 'inPt', 'outPt', 'still'].forEach(f => { if (it[f] != null && it[f] !== '' && !isFinite(+it[f])) { delete it[f]; n++; } }); if (it.start != null && +it.start < 0) { it.start = 0; n++; } if (it.start != null && +it.start > 36000) { it.start = 36000; n++; } if (Array.isArray(it.fx)) { const fx = it.fx.filter(f => plain(f) && typeof f.k === 'string'); if (fx.length !== it.fx.length) { it.fx = fx; n++; } } if (it.kf != null && !plain(it.kf)) { delete it.kf; n++; }
+        if (plain(it.kf)) Object.keys(it.kf).forEach(k => { const L = it.kf[k]; if (!Array.isArray(L)) { delete it.kf[k]; n++; return; } const ok = L.filter(q => Array.isArray(q) && isFinite(+q[0]) && isFinite(+q[1])); if (ok.length !== L.length) { it.kf[k] = ok; n++; } if (!ok.length) { delete it.kf[k]; } });
+        if (typeof it.id !== 'string' || !it.id) { it.id = 'r' + Math.random().toString(36).slice(2, 9); n++; } ['fx'].forEach(f => { if (it[f] != null && !Array.isArray(it[f])) { delete it[f]; n++; } }); ['col', 'key', 'mask', 'tr', 'anIn', 'anOut', 'anLoop'].forEach(f => { if (it[f] != null && !plain(it[f])) { delete it[f]; n++; } }); if (it.crop != null && !(Array.isArray(it.crop) && it.crop.length === 4 && it.crop.every(x => isFinite(+x)))) { delete it.crop; n++; } };
+      if (Array.isArray(cfg.tracks)) { const tk = cfg.tracks.filter(T => plain(T) && (T.kind === 'video' || T.kind === 'audio')); if (tk.length !== cfg.tracks.length) { cfg.tracks = tk; n++; }
+        tk.forEach(T => { if (typeof T.id !== 'string') { T.id = 't' + Math.random().toString(36).slice(2, 9); n++; } if (!Array.isArray(T.items)) { T.items = []; n++; } const ki = T.items.filter(okItem); if (ki.length !== T.items.length) { T.items = ki; n++; } ki.forEach(it => { nums(it); if (it.kind === 'clip' && mods[it.mod]) { if (!plain(it.cfg)) { it.cfg = mods[it.mod].defaults(); n++; } else n += clip(it.mod, it.cfg, mods, (depth || 0) + 1); } }); }); }
+      const keep = cfg.items.filter(okItem);
       if (keep.length !== cfg.items.length) { cfg.items = keep; n++; }
-      keep.forEach(it => {
+      keep.forEach(it => { nums(it);
         if (it.kind === 'avatar') { if (typeof it.text !== 'string') { it.text = it.text == null ? '' : String(it.text); n++; } if (!(+it.dur > 0)) { it.dur = 3; n++; } return; }
         ['inPt', 'hold'].forEach(f => { if (it[f] != null && !isFinite(+it[f])) { it[f] = 0; n++; } });
         if (mods[it.mod]) { if (!plain(it.cfg)) { it.cfg = mods[it.mod].defaults(); n++; } else n += clip(it.mod, it.cfg, mods, (depth || 0) + 1); }
