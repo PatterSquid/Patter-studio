@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.01.1",
+  "version": "2026.11.02.1",
   "file": "app/patter-studio.html",
-  "notes": "Full check and repair: damaged or old projects mend themselves on opening, redo no longer lost in the Studio, add menus close on tab change, safer pictogram and chart limits"
+  "notes": "New Video editor: multi track timeline for your own footage and sound, transitions, colour grading and looks, effects, masks, chroma key, keyframes, speed, audio mixing with ducking and voice enhance, MP4 export with sound"
 }
