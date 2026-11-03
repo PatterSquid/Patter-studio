@@ -89,11 +89,16 @@ standard and as easy to use.
   background; the preview plays through hidden video elements kept locked to the playhead (`live`); exports read exact
   frames with WebCodecs (`videoReader`, element seeking for non-MP4) and samples with `audioReader`.
 * `cut_gl.js` (`CutGL`): one WebGL2 shader pass for colour, looks, effects and chroma key, at the size shown.
+* Sound files: MP4/MOV/M4A through `MP4In`, WAV read straight from the file in pieces (`wavReader`), anything else
+  (MP3, OGG, FLAC) decoded whole, refused past about 1.6 GB decoded.
 * `cut_audio.js` (`CutAudio`): one set of gain rules for the live preview (audio elements through Web Audio) and the
   export mix (OfflineAudioContext in blocks, crossfaded joins), voice enhance, noise reduction, ducking, WSOLA time stretch
   for speed with the pitch kept, AAC (else Opus) encoding, WAV.
 * `cut_export.js` (`CutExport.run`): renders on the main thread with exact frames, mixes sound alongside, streams to disk.
   MP4 (H.264 plus AAC on his PC; VP9 and Opus here in headless), PNG sequence, WAV. The Video tab always exports through it.
+* Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
+  waveform for the part near the screen; the clip boxes are see-through (`.st`) on top. Do not go back to a canvas per clip:
+  hundreds of canvases made the browser composite every frame (110 ms a frame with 500 clips, 17 ms now).
 * `cut_ui.js` (`CutUI`) is the workspace and timeline; `cut_insp.js` (`CutInspect`) the clip, transition, track and project
   panels and the export window. Selections: `C:id` clip, `T:id` transition after a main clip, `K:id` track, `L:id` layer.
   `window.PatterCut` is the hook the tests use.

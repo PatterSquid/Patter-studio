@@ -26,6 +26,9 @@ const CutExport = (() => {
     const t0 = o.range ? cl(o.range[0], 0, dur) : 0, t1 = o.range ? cl(o.range[1], t0 + 1 / fps, dur) : dur, n = Math.max(1, Math.round((t1 - t0) * fps));
     const lookX = Object.assign({}, look, { preview: false, transparent: !!o.png && !!look.transparent, paused: true });
     const say = (p, msg) => o.onProgress && o.onProgress(p, msg);
+    // Our own stop signal: follows the caller's, and also fires when anything fails, so the sound mixing stops with it
+    const stopper = new AbortController(), signal = stopper.signal; if (o.signal) { if (o.signal.aborted) stopper.abort(); else o.signal.addEventListener('abort', () => stopper.abort(), { once: true }); }
+    let venc = null, aenc = null, sink = null, wavSink = null, ok = false;
     // Everything the video uses, loaded first
     say(0, 'Getting your footage ready…');
     const ids = Video.assetsUsed(cfg); for (const id of ids) { if (!(await CutMedia.blobOf(id))) throw new Error('A file used in the video is missing from this computer: ' + ((CutMedia.info(id) || {}).name || id) + '. Import it again or remove it.'); }
@@ -50,16 +53,16 @@ const CutExport = (() => {
       /* PNG sequence (see through), for After Effects */
       if (o.png) {
         const toPng = c => c.convertToBlob ? c.convertToBlob({ type: 'image/png' }) : new Promise(r => c.toBlob(r, 'image/png')); const zip = o.dir ? null : E.Zip();
-        for (let i = 0; i < n; i++) { if (o.signal && o.signal.aborted) throw new Error('Export cancelled.'); await drawFrame(i); const b = await toPng(canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
+        for (let i = 0; i < n; i++) { if (signal.aborted) throw new Error('Export cancelled.'); await drawFrame(i); const b = await toPng(canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
           if (o.dir) { const fh = await o.dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(b); await w.close(); } else zip.add(name, new Uint8Array(await b.arrayBuffer())); if (i % 3 === 0) prog(i); }
-        let wav = null; if (o.wav && CutAudio.hasSound(cfg, lookX)) wav = await wavOnly(cfg, lookX, t0, t1, o);
+        let wav = null; if (o.wav && CutAudio.hasSound(cfg, lookX)) wav = await wavOnly(cfg, lookX, t0, t1, Object.assign({}, o, { signal })); ok = true;
         return { zip: zip ? zip.blob() : null, wav, frames: n, W, H };
       }
       /* MP4 */
       if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot encode video. Use Microsoft Edge or Google Chrome.');
       const vcfg = await pickVideo(W, H, fps, o.quality || 'high'); if (!vcfg) throw new Error('No video encoder is available at ' + W + ' x ' + H + '. Try a lower resolution.');
       const withAudio = o.audio !== false && CutAudio.hasSound(cfg, lookX), acfg = withAudio ? await CutAudio.pickEncoder() : null;
-      const sink = o.sink || MP4Out.blobSink();
+      sink = o.sink || MP4Out.blobSink();
       let vdesc = null, err = null; const vq = [];
       // Video packets wait until the encoder has said how it is set up (the first packet carries that)
       let mux = null, aq = [], adesc = null;
@@ -72,17 +75,17 @@ const CutExport = (() => {
       const vOut = (d, ts, key) => { const pts = Math.round(ts * fps * 1000 / 1e6), dts = vIdx++ * 1000; early.push([d, pts, dts, key]);
         if (reorder === null && early.length < 16) return; if (reorder === null) reorder = Math.max(0, ...early.map(e => e[2] - e[1]));
         early.splice(0).forEach(([dd, p2, d2, k2]) => vq.push([dd, 1000, p2 - d2 + reorder, k2])); vReady = true; flushQueues(); };
-      const venc = new VideoEncoder({ output: (chunk, meta) => { if (!vdesc && meta && meta.decoderConfig && meta.decoderConfig.description) vdesc = new Uint8Array(meta.decoderConfig.description); const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); vOut(d, chunk.timestamp, chunk.type === 'key'); }, error: e => { err = e; } });
+      venc = new VideoEncoder({ output: (chunk, meta) => { if (!vdesc && meta && meta.decoderConfig && meta.decoderConfig.description) vdesc = new Uint8Array(meta.decoderConfig.description); const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); vOut(d, chunk.timestamp, chunk.type === 'key'); }, error: e => { err = e; } });
       const vconf = Object.assign({}, vcfg); delete vconf.fam; venc.configure(vconf);
       // B-frames would need composition offsets; encoders here give frames in order, so the offset is the timestamp minus the decode position
       // Sound runs alongside, a little ahead of the pictures
-      let videoT = 0, audioErr = null, audioDone = !acfg; const wavSink = o.wav && o.wavSink ? o.wavSink : null; let wavFrames = 0;
+      let videoT = 0, audioErr = null, audioDone = !acfg; wavSink = o.wav && o.wavSink ? o.wavSink : null; let wavFrames = 0;
       if (wavSink) await wavSink.write(CutAudio.wavHeader(0));
-      const aenc = acfg ? CutAudio.encoder(acfg, (d, dur, desc) => { if (desc && !adesc) adesc = desc; aReady = true; aq.push([d, dur, 0, true]); flushQueues(); }) : null;
-      const audioTask = (acfg || wavSink) && CutAudio.hasSound(cfg, lookX) ? CutAudio.mix(cfg, lookX, t0, t1, { signal: o.signal, onBlock: async (pl, start) => { if (aenc) await aenc.add(pl); if (wavSink) { await wavSink.write(CutAudio.wavBlock(pl)); wavFrames += pl[0].length; } while ((start / CutAudio.SR) > videoT + 12 && !err && !(o.signal && o.signal.aborted)) await sleep(15); } })
+      aenc = acfg ? CutAudio.encoder(acfg, (d, dur, desc) => { if (desc && !adesc) adesc = desc; aReady = true; aq.push([d, dur, 0, true]); flushQueues(); }) : null;
+      const audioTask = (acfg || wavSink) && CutAudio.hasSound(cfg, lookX) ? CutAudio.mix(cfg, lookX, t0, t1, { signal, onBlock: async (pl, start) => { if (aenc) await aenc.add(pl); if (wavSink) { await wavSink.write(CutAudio.wavBlock(pl)); wavFrames += pl[0].length; } while ((start / CutAudio.SR) > videoT + 12 && !err && !signal.aborted) await sleep(15); } })
         .then(() => { audioDone = true; }).catch(e => { audioErr = e; audioDone = true; }) : (audioDone = true, null);
       for (let i = 0; i < n; i++) {
-        if (o.signal && o.signal.aborted) throw new Error('Export cancelled.'); if (err) throw err; if (audioErr) throw audioErr;
+        if (signal.aborted) throw new Error('Export cancelled.'); if (err) throw err; if (audioErr) throw audioErr;
         await drawFrame(i); videoT = i / fps;
         const vf = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
         while (venc.encodeQueueSize > 6) await sleep(2);
@@ -96,9 +99,14 @@ const CutExport = (() => {
       if (!mux) ensureMux();
       await mux.finish(); await sink.close();
       if (wavSink) { if (wavSink.patch) await wavSink.patch(0, CutAudio.wavHeader(wavFrames)); await wavSink.close(); }
-      const blob = sink.blob ? await sink.blob('video/mp4') : null;
+      ok = true; const blob = sink.blob ? await sink.blob('video/mp4') : null;
       return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
-    } finally { readers.forEach(R => { try { R.close(); } catch (e) { } }); readers.clear(); }
+    } finally {
+      readers.forEach(R => { try { R.close(); } catch (e) { } }); readers.clear();
+      // A failed or cancelled export lets go of the encoders (his PC has only a few hardware ones), stops the mixing and
+      // throws away the half written file rather than leaving it open
+      if (!ok) { stopper.abort(); try { if (venc && venc.state !== 'closed') venc.close(); } catch (e) { } if (aenc) aenc.close(); for (const s2 of [sink, wavSink]) if (s2 && s2.abort) await s2.abort(); }
+    }
   }
   // The mix on its own, as a WAV
   async function wavOnly(cfg, look, t0, t1, o = {}) {

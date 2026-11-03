@@ -227,7 +227,7 @@ const MP4Out = (() => {
   }
 
   // Sinks: straight to a file on disk (no size limit), or to Blob pieces that are assembled at the end
-  function fileSink(writable) { let at = 0; return { async write(u) { await writable.write({ type: 'write', position: at, data: u }); at += u.length; }, async patch(p, u) { await writable.write({ type: 'write', position: p, data: u }); }, async close() { await writable.close(); } }; }
+  function fileSink(writable) { let at = 0; return { async write(u) { await writable.write({ type: 'write', position: at, data: u }); at += u.length; }, async patch(p, u) { await writable.write({ type: 'write', position: p, data: u }); }, async close() { await writable.close(); }, async abort() { try { await writable.abort(); } catch (e) { } } }; }
   function blobSink() {
     const parts = [], cur = []; let curBytes = 0, patches = [];
     const seal = () => { if (cur.length) { parts.push(new Blob(cur)); cur.length = 0; curBytes = 0; } };

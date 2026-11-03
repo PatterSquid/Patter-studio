@@ -327,7 +327,9 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-clip.locked{cursor:default;filter:saturate(.5)}
 .ct-clip.muted{filter:saturate(.7)}
 .ct-clip.drop{outline:2px dashed var(--bru)}
-.ct-clip canvas.strip{position:absolute;top:0;left:0;height:100%;pointer-events:none;opacity:.95}
+.ct-strips{position:absolute;top:0;left:0;height:100%;pointer-events:none}
+.ct-clip.st{background:transparent}
+.ct-clip.st.moving{background:color-mix(in srgb,var(--c) 70%,#000)}
 .ct-clip .lbl{position:absolute;left:6px;top:2px;right:6px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px #000,0 0 3px #000;pointer-events:none;z-index:1}
 .ct-clip .hl,.ct-clip .hr{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2}
 .ct-clip .hl{left:0}.ct-clip .hr{right:0}

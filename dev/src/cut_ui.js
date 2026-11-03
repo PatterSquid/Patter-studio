@@ -93,7 +93,7 @@ const CutUI = (() => {
       if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(H('div', { className: 'cl-orow' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })))); libBody.append(d); }
       CutMedia.usage().then(u => { if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
     }
-    function paintCard(cv, m) { const g = cv.getContext('2d'); g.fillStyle = '#0b1424'; g.fillRect(0, 0, 160, 90);
+    function paintCard(cv, m) { const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#0b1424'; g.fillRect(0, 0, 160, 90);
       if (m.kind === 'audio' || (!m.thumbs && m.peaks)) { g.fillStyle = '#3fbf7f'; const P = m.peaks; if (P) for (let x = 0; x < 160; x++) { const v = P[Math.floor(x / 160 * P.length)] / 255 * 38; g.fillRect(x, 45 - v, 1, v * 2); } else { g.fillStyle = '#3fbf7f'; g.font = '28px sans-serif'; g.textAlign = 'center'; g.fillText('♪', 80, 56); } return; }
       const b = CutMedia.thumb(m.id, m.dur ? m.dur * 0.3 : 0); if (b) { const k = Math.max(160 / b.width, 90 / b.height); g.drawImage(b, (160 - b.width * k) / 2, (90 - b.height * k) / 2, b.width * k, b.height * k); } else { g.fillStyle = '#556'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText('Reading…', 80, 50); } }
     function lookThumb(cv, k) { const g = cv.getContext('2d'), w = cv.width, h = cv.height, src = H('canvas', { width: w, height: h }), sg = src.getContext('2d');
@@ -259,7 +259,7 @@ const CutUI = (() => {
       rowList.forEach(r => { const row = H('div', { className: 'ct-row k-' + r.kind + (r.T && r.T.hide ? ' hid' : '') + (r.kind === 'main' && c.mainHide ? ' hid' : ''), style: `height:${r.h}px`, 'data-row': r.id }), lane = H('div', { className: 'ct-lane', style: `width:${Wd}px`, 'data-row': r.id });
         row.append(head(r), lane); rows.append(row); r.lane = lane; fillLane(r, lane, c, lk); });
       play.style.height = (ruler.offsetHeight + rows.offsetHeight) + 'px';
-      setTime(curT, true); markSel(); paintSoon();
+      setTime(curT, true); markSel(); paint();
     }
     function drawRuler(Wd) {
       ruler.innerHTML = ''; ruler.style.width = (HEAD + Wd) + 'px'; ruler.append(H('div', { className: 'ct-corner', textContent: tc(curT, fpsOf()) }));
@@ -293,6 +293,7 @@ const CutUI = (() => {
       lane.addEventListener('dragover', laneDragOver); lane.addEventListener('drop', laneDrop); lane.addEventListener('dragleave', () => dropMark(null));
       if (r.kind === 'layer') { r.tr.items.forEach(it => { const el = H('div', { className: 'ct-clip lay' + (it.locked ? ' locked' : ''), style: `left:${it.start * pps}px;width:${Math.max(6, (it.end - it.start) * pps)}px;--c:${it.colour || r.tr.colour || '#7a5ab8'}`, 'data-id': it.id, title: it.label, tabIndex: 0 }, H('span', { className: 'lbl', textContent: it.label }));
         if (!it.locked) el.append(H('b', { className: 'hl' }), H('b', { className: 'hr' })); (it.keys || []).forEach(k => el.append(H('i', { className: 'kf', style: `left:${(k - it.start) * pps}px` }))); el.addEventListener('pointerdown', e => clipDown(e, { layer: true, it, r })); lane.append(el); }); return; }
+      const scv = H('canvas', { className: 'ct-strips' }); lane.append(scv); lane._cv = scv;
       const list = r.kind === 'main' ? V().layout(c, lk).map(x => ({ it: x.it, t0: x.t0, d: x.d, o: x })) : (r.T.items || []).map(it => ({ it, t0: +it.start || 0, d: V().lenOf(it, lk) }));
       list.forEach((p, idx) => { const el = clipEl(p, r); lane.append(el); });
       if (r.kind === 'main') { const L = V().layout(c, lk); L.slice(0, -1).forEach(x => { const has = x.it.tr && x.it.tr.k && x.it.tr.k !== 'none', at = x.t0 + x.d - (has ? x.trOut / 2 : 0);
@@ -302,8 +303,7 @@ const CutUI = (() => {
     }
     function clipEl(p, r) {
       const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, kind = it.kind === 'clip' ? it.mod : it.kind === 'media' ? (m && m.kind === 'image' ? 'image' : 'media') : it.kind;
-      const el = H('div', { className: 'ct-clip k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 });
-      const cv = H('canvas', { className: 'strip' }); el.append(cv);
+      const el = H('div', { className: 'ct-clip st k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 });
       const badges = []; if (it.speed && +it.speed !== 1) badges.push('⏩' + (+it.speed).toFixed(2).replace(/\.?0+$/, '') + 'x'); if (it.rev) badges.push('⟲'); if (it.still != null) badges.push('❄'); if (it.col && (it.col.look || Object.keys(it.col).some(k => k !== 'look' && k !== 'lookAmt' && +it.col[k]))) badges.push('◐'); if (it.fx && it.fx.length) badges.push('✦' + it.fx.length); if (it.key && it.key.on) badges.push('⬚'); if (it.mask && it.mask.k && it.mask.k !== 'none') badges.push('◯'); if (it.kf && Object.values(it.kf).some(L => L && L.length)) badges.push('◆'); if (it.mute) badges.push('🔇'); if (it.enhance) badges.push('🎙');
       el.append(H('span', { className: 'lbl', textContent: V().NAME(it) + (badges.length ? '  ' + badges.join(' ') : '') }), H('b', { className: 'hl', title: 'Drag to trim' }), H('b', { className: 'hr', title: 'Drag to trim' }));
       if (it.fadeIn) el.append(H('i', { className: 'fdi', style: `width:${Math.min(p.d, +it.fadeIn) * pps}px` })); if (it.fadeOut) el.append(H('i', { className: 'fdo', style: `width:${Math.min(p.d, +it.fadeOut) * pps}px` }));
@@ -317,17 +317,28 @@ const CutUI = (() => {
     }
     // Filmstrips and waveforms, painted for whatever part of each clip is on screen
     let paintTimer = 0; const paintSoon = () => { cancelAnimationFrame(paintTimer); paintTimer = requestAnimationFrame(paint); };
+    // One canvas per track paints every clip's body, filmstrip and waveform for the part on screen (a canvas per clip made
+    // the browser composite hundreds of layers every frame: 110 ms a frame with 500 clips, 17 ms with this)
+    const bodyCol = {}; function bodyOf(el) { const c = getComputedStyle(el).getPropertyValue('--c').trim() || '#556677'; if (bodyCol[c]) return bodyCol[c]; let r = 85, g = 102, b = 119; const m = /^#?([0-9a-f]{6})$/i.exec(c) || /^#?([0-9a-f]{3})$/i.exec(c); if (m) { const h = m[1].length === 3 ? m[1].replace(/./g, x => x + x) : m[1]; r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16); } return (bodyCol[c] = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b * 0.7)})`); }
     function paint() {
-      if (!active) return; const vl = scroll.scrollLeft - HEAD, vr = vl + scroll.clientWidth;
-      rows.querySelectorAll('.ct-clip').forEach(el => { const cv = el.querySelector('canvas.strip'), p = el._p; if (!cv || !p) return; const x0 = p.t0 * pps, w = p.d * pps, a = Math.max(0, vl - x0), b = Math.min(w, vr - x0); if (b <= a) return;
-        const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.ceil(b - a), ch = el.clientHeight; if (cw <= 0 || ch <= 0) return; cv.style.left = a + 'px'; cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
-        const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch); const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null;
-        const wave = m && m.peaks && (it.kind === 'audio' || (it.kind === 'media' && m.kind === 'video' && !it.mute)), thumbs = m && m.thumbs && it.kind === 'media';
-        const thH = wave && thumbs ? Math.round(ch * 0.62) : ch;
-        if (thumbs) { const tw = Math.max(20, Math.round(thH * (m.thumbs.w / m.thumbs.h))); for (let x = Math.floor(a / tw) * tw; x < b; x += tw) { const local = (x + tw / 2) / pps, s = m.kind === 'image' ? 0 : V().srcTime(it, Math.min(p.d, local)), bm = CutMedia.thumb(it.asset, s); if (bm) g.drawImage(bm, x - a, 0, tw, thH); } }
-        if (wave) { const y0 = thumbs ? thH : 0, hh = ch - y0, mid = y0 + hh / 2; g.fillStyle = it.kind === 'audio' ? 'rgba(160,255,200,0.9)' : 'rgba(150,230,255,0.85)';
-          for (let x = 0; x < cw; x++) { const local = (a + x) / pps, s = V().srcTime(it, local); let v = 0; const span = V().speedOf(it) / pps; for (let k = 0; k < 3; k++) v = Math.max(v, CutMedia.peakAt(it.asset, s + span * k / 3)); const gn = Math.min(1.6, Math.sqrt(CutAudio.clipGain({ it, d: p.d, trackDb: 0 }, local))); const hv = v * gn * hh * 0.48; g.fillRect(x, mid - hv, 1, Math.max(1, hv * 2)); } }
-        if (it.kind === 'clip' && !thumbs) { /* tab clips: a faint stripe pattern so they read as Patter clips */ g.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = -(a % 16); x < cw; x += 16) g.fillRect(x, 0, 8, ch); }
+      if (!active) return; const sw = scroll.clientWidth, vl = Math.max(0, scroll.scrollLeft - HEAD - sw), vr = scroll.scrollLeft - HEAD + sw * 2, dpr = Math.min(2, window.devicePixelRatio || 1);
+      rows.querySelectorAll('.ct-lane').forEach(lane => { const cv = lane._cv; if (!cv) return; const lw = lane.clientWidth, ch = lane.clientHeight, x0 = Math.max(0, Math.min(vl, lw)), x1 = Math.max(x0, Math.min(vr, lw)), cw = Math.ceil(x1 - x0); if (cw <= 0 || ch <= 0) return;
+        const els = [...lane.children].filter(el => el._p && el.classList.contains('st') && !el.classList.contains('moving') && el.offsetLeft < x1 && el.offsetLeft + el.offsetWidth > x0);
+        const sig = [x0, cw, ch, dpr, pps, CutMedia.thumbTick].concat(els.map(el => { const it = el._p.it, m = it.asset ? CutMedia.info(it.asset) : null; return el.offsetLeft + ',' + el.offsetWidth + ',' + el.className + ',' + JSON.stringify(it) + ',' + (m ? (m.thumbs ? 1 : 0) + (m.peaks ? 2 : 0) + (m.level || 0) : -1); })).join('|');
+        if (cv._sig === sig) return; cv._sig = sig;
+        cv.style.left = x0 + 'px'; cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr); if (cv.width !== pw) cv.width = pw; if (cv.height !== ph) cv.height = ph;
+        const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
+        els.forEach(el => { const p = el._p, it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, bx = el.offsetLeft + el.clientLeft - x0, by = el.offsetTop + el.clientTop, bw = el.clientWidth, bh = el.clientHeight; if (bw <= 0 || bh <= 0) return;
+          const a = Math.max(0, -bx), b = Math.min(bw, cw - bx); if (b <= a) return; const w = b - a;
+          g.save(); g.beginPath(); if (g.roundRect) g.roundRect(bx, by, bw, bh, 5); else g.rect(bx, by, bw, bh); g.clip(); g.fillStyle = bodyOf(el); g.fillRect(bx + a, by, w, bh);
+          if (el.classList.contains('locked') || el.classList.contains('muted')) g.filter = 'saturate(' + (el.classList.contains('locked') ? 0.5 : 0.7) + ')';
+          g.translate(bx + a, by); g.globalAlpha = 0.95;
+          const wave = m && m.peaks && (it.kind === 'audio' || (it.kind === 'media' && m.kind === 'video' && !it.mute)), thumbs = m && m.thumbs && it.kind === 'media', thH = wave && thumbs ? Math.round(bh * 0.62) : bh;
+          if (thumbs) { const tw = Math.max(20, Math.round(thH * (m.thumbs.w / m.thumbs.h))); for (let x = Math.floor(a / tw) * tw; x < b; x += tw) { const local = (x + tw / 2) / pps, sT = m.kind === 'image' ? 0 : V().srcTime(it, Math.min(p.d, local)), bm = CutMedia.thumb(it.asset, sT); if (bm) g.drawImage(bm, x - a, 0, tw, thH); } }
+          if (wave) { const y0 = thumbs ? thH : 0, hh = bh - y0, mid = y0 + hh / 2, span = V().speedOf(it) / pps; g.fillStyle = it.kind === 'audio' ? 'rgba(160,255,200,0.9)' : 'rgba(150,230,255,0.85)';
+            for (let x = 0; x < w; x++) { const local = (a + x) / pps, sT = V().srcTime(it, local); let v = 0; for (let k = 0; k < 3; k++) v = Math.max(v, CutMedia.peakAt(it.asset, sT + span * k / 3)); const gn = Math.min(1.6, Math.sqrt(CutAudio.clipGain({ it, d: p.d, trackDb: 0 }, local))); const hv = v * gn * hh * 0.48; g.fillRect(x, mid - hv, 1, Math.max(1, hv * 2)); } }
+          if (it.kind === 'clip' && !thumbs) { g.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = -(a % 16); x < w; x += 16) g.fillRect(x, 0, 8, bh); }
+          g.restore(); });
       });
     }
     CutMedia.onChange(() => { if (active) { paintSoon(); if (libTab === 'media' || libTab === 'audio') drawLibSoon(); } });
@@ -335,7 +346,7 @@ const CutUI = (() => {
     scroll.addEventListener('wheel', e => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); const r = scroll.getBoundingClientRect(), x = e.clientX - r.left + scroll.scrollLeft - HEAD, tAt = x / pps; pps = cl(pps * (e.deltaY < 0 ? 1.15 : 1 / 1.15), 4, 800); fitted = true; build(); scroll.scrollLeft = Math.max(0, tAt * pps - (e.clientX - r.left) + HEAD); zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); } else if (e.shiftKey) { e.preventDefault(); scroll.scrollLeft += e.deltaY; } }, { passive: false });
     const laneT = clientX => { const r = rows.getBoundingClientRect(); return Math.max(0, (clientX - r.left - HEAD) / pps); };
     const rowAt = clientY => { const els = [...rows.children]; for (const el of els) { const r = el.getBoundingClientRect(); if (clientY >= r.top && clientY < r.bottom) { const id = el.dataset.row; return id === 'new' ? { kind: 'new' } : rowList.find(x => x.id === id) || null; } } const first = els[0]; if (first && clientY < first.getBoundingClientRect().top) return { kind: 'new' }; return null; };
-    function setTime(t, quiet) { curT = t; play.style.left = (HEAD + t * pps) + 'px'; const cn = ruler.querySelector('.ct-corner'); if (cn) cn.textContent = tc(t, fpsOf());
+    function setTime(t, quiet) { curT = t; play.style.left = '0px'; play.style.transform = 'translateX(' + (HEAD + t * pps) + 'px)'; const cn = ruler.querySelector('.ct-corner'), tx = tc(t, fpsOf()); if (cn && cn.textContent !== tx) cn.textContent = tx;
       if (!quiet && o.player.playing && !drag) { const x = HEAD + t * pps, l = scroll.scrollLeft, w = scroll.clientWidth; if (x > l + w - 60 || x < l + HEAD) scroll.scrollLeft = Math.max(0, x - HEAD - 60); } }
     function markSel() { const s = sel(); rows.querySelectorAll('.ct-clip').forEach(el => el.classList.toggle('on', el.dataset.id === s || multi.has(el.dataset.id))); rows.querySelectorAll('.ct-tr').forEach(el => el.classList.toggle('sel', 'T:' + el.dataset.tr === s)); drawBar(); }
     let multi = new Set();
@@ -368,12 +379,12 @@ const CutUI = (() => {
       drag = { el, h, moved: false, committed: false };
       const begin = () => { if (!drag.committed) { o.commit(); drag.committed = true; } };
       const mv = ev => {
-        const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); }
+        const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
         if (ctx.layer) return layerDrag(ev, ctx, h, dx, pts);
         if (h === 'm') return moveDrag(ev, ctx, el, tAt, pts, c, lk);
-        return trimDrag(ev, ctx, h, dx, pts, c, lk, JSON.parse(snap));
+        const r = trimDrag(ev, ctx, h, dx, pts, c, lk, JSON.parse(snap)); paintSoon(); return r;
       };
-      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging');
+      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging', 'moving');
         if (d && d.moved) { if (d.finish) d.finish(ev); changed(); build(); } else { const t = laneT(ev.clientX); o.player.seek(Math.min(t, dur)); setTime(t, true); } };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }

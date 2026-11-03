@@ -5,7 +5,7 @@
 const CutMedia = (() => {
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
   const meta = {}, blobs = {}, urls = {}, listeners = [], files = {};
-  let tick = 0, version = 0, nudge = 0;
+  let tick = 0, version = 0, nudge = 0, thumbTick = 0;
   const bump = (structural) => { tick++; if (structural) version++; if (inWorker) return; clearTimeout(nudge); nudge = setTimeout(() => listeners.forEach(f => { try { f(structural); } catch (e) { } }), 16); };
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const nid = () => 'cm' + Date.now().toString(36) + Math.floor(Math.random() * 1e8).toString(36);
@@ -93,7 +93,7 @@ const CutMedia = (() => {
     const m = meta[id]; if (!m || !m.thumbs) return null; const i = m.kind === 'image' ? 0 : cl(Math.floor(t / m.thumbs.step), 0, m.thumbs.n - 1), key = id + ':' + i;
     if (thumbBmp.has(key)) return thumbBmp.get(key);
     thumbBmp.set(key, null);
-    (async () => { let L = thumbsMem[id]; if (!L) { const r = await get('thumbs', id).catch(() => null); L = thumbsMem[id] = r ? r.list : null; } if (!L || !L[i]) return; const b = await createImageBitmap(L[i]); thumbBmp.set(key, b); bump(false); })();
+    (async () => { let L = thumbsMem[id]; if (!L) { const r = await get('thumbs', id).catch(() => null); L = thumbsMem[id] = r ? r.list : null; } if (!L || !L[i]) return; const b = await createImageBitmap(L[i]); thumbBmp.set(key, b); thumbTick++; bump(false); })();
     return null;
   }
 
@@ -224,7 +224,29 @@ const CutMedia = (() => {
         let ok = false; try { ok = (await AudioDecoder.isConfigSupported(cfg)).supported; } catch (e) { } if (ok) return codecReader(mp, T, cfg); }
     }
     if (mp && !mp.audio) return null;
+    const wr = await wavReader(blob).catch(() => null); if (wr) return wr;
     return wholeReader(id, blob, m);
+  }
+  // WAV files are read straight from the file a piece at a time (long voiceover recordings never sit whole in memory)
+  async function wavReader(blob) {
+    const hd = new DataView(await blob.slice(0, 12).arrayBuffer()); if (hd.byteLength < 12 || hd.getUint32(0, false) !== 0x52494646 || hd.getUint32(8, false) !== 0x57415645) return null;
+    let at = 12, fmt = null, data = null;
+    while (at + 8 <= blob.size && !(fmt && data)) { const ck = new DataView(await blob.slice(at, at + 8).arrayBuffer()), id = ck.getUint32(0, false), size = ck.getUint32(4, true);
+      if (id === 0x666d7420) { const f = new DataView(await blob.slice(at + 8, at + 8 + Math.min(size, 40)).arrayBuffer()); let tag = f.getUint16(0, true); const ch = f.getUint16(2, true), sr = f.getUint32(4, true), align = f.getUint16(12, true), bits = f.getUint16(14, true); if (tag === 0xFFFE && size >= 26) tag = f.getUint16(24, true); fmt = { tag, ch, sr, align, bits }; }
+      else if (id === 0x64617461) data = { off: at + 8, size: Math.min(size || blob.size, blob.size - at - 8) };
+      at += 8 + size + (size & 1); if (!size) break; }
+    if (!fmt || !data || !fmt.ch || !fmt.sr || !fmt.align || !((fmt.tag === 1 && [8, 16, 24, 32].includes(fmt.bits)) || (fmt.tag === 3 && fmt.bits === 32))) return null;
+    const { ch, sr, align, bits } = fmt, total = Math.floor(data.size / align), fl = fmt.tag === 3, bps = bits / 8;
+    async function read(t0, t1) {
+      const len = Math.max(0, Math.round((t1 - t0) * sr)), outs = []; for (let c = 0; c < ch; c++) outs.push(new Float32Array(len)); if (!len) return outs;
+      const f0 = Math.round(t0 * sr), a = Math.max(0, f0), b = Math.min(total, f0 + len); if (b <= a) return outs;
+      const v = new DataView(await blob.slice(data.off + a * align, data.off + b * align).arrayBuffer());
+      for (let f = a; f < b; f++) { const base = (f - a) * align, k = f - f0; for (let c = 0; c < ch; c++) { const o = base + c * bps; let x;
+          if (fl) x = v.getFloat32(o, true); else if (bits === 16) x = v.getInt16(o, true) / 32768; else if (bits === 24) { let q = v.getUint8(o) | (v.getUint8(o + 1) << 8) | (v.getUint8(o + 2) << 16); if (q & 0x800000) q -= 0x1000000; x = q / 8388608; } else if (bits === 32) x = v.getInt32(o, true) / 2147483648; else x = (v.getUint8(o) - 128) / 128;
+          outs[c][k] = x; } }
+      return outs;
+    }
+    return { sr, ch, dur: total / sr, read, close() { } };
   }
   function codecReader(mp, T, cfg) {
     const P = i => MP4In.pts(T, i), n = T.n, sr = T.sampleRate, ch = T.channels;
@@ -261,7 +283,7 @@ const CutMedia = (() => {
   const wholeCache = new Map();
   async function wholeReader(id, blob, m) {
     let buf = wholeCache.get(id);
-    if (!buf) { if (blob.size > 900e6) throw new Error('"' + m.name + '" is too big to read the sound from. Convert it to MP4 and import it again.');
+    if (!buf) { if (blob.size > 900e6 || (m.dur || 0) * 48000 * Math.max(1, m.chs || 2) * 4 > 1.6e9) throw new Error('"' + m.name + '" is too big to read the sound from. Convert it to MP4 and import it again.');
       const ab = await blob.arrayBuffer(), AC = typeof OfflineAudioContext !== 'undefined' ? OfflineAudioContext : null; if (!AC) return null;
       const ctx = new AC(1, 1, 48000); try { buf = await ctx.decodeAudioData(ab); } catch (e) { return null; }
       wholeCache.set(id, buf); while (wholeCache.size > 3) wholeCache.delete(wholeCache.keys().next().value); }
@@ -279,5 +301,5 @@ const CutMedia = (() => {
 
   if (!inWorker && typeof indexedDB !== 'undefined') loadAll();
   return { importFile, kindOf, info, list, loadAll, live, endFrame, pauseAll, videoReader, audioReader, releaseAudio, thumb, image, bitmap, peakAt, blobOf, urlOf, remove, usage,
-    onChange: f => listeners.push(f), get tick() { return tick; }, get version() { return version; }, _meta: meta, PEAK_RATE };
+    onChange: f => listeners.push(f), get tick() { return tick; }, get thumbTick() { return thumbTick; }, get version() { return version; }, _meta: meta, PEAK_RATE };
 })();

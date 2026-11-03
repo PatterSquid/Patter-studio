@@ -164,6 +164,7 @@ const CutAudio = (() => {
       async add([L, R]) { if (err) throw err; const n = L.length; if (!n) return; for (let o = 0; o < n; o += SR) { const m = Math.min(SR, n - o), data = new Float32Array(m * 2); data.set(L.subarray(o, o + m), 0); data.set(R.subarray(o, o + m), m);
           const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: m, numberOfChannels: 2, timestamp: Math.round(ts / SR * 1e6), data }); enc.encode(ad); ad.close(); ts += m; while (enc.encodeQueueSize > 20) await new Promise(r => setTimeout(r, 2)); } },
       async finish() { await enc.flush(); await pending; try { enc.close(); } catch (e) { } if (err) throw err; return desc; },
+      close() { try { if (enc.state !== 'closed') enc.close(); } catch (e) { } },
       get desc() { return desc; }, codec: config.codec,
     };
   }
