@@ -59,7 +59,7 @@ const CutUI = (() => {
     let dragData = null, mediaFilter = 'all', importing = [];
     function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { if (!c.bin.includes(id)) c.bin.push(id); }); return c.bin.filter(id => CutMedia.info(id)); }
     function drawLib() {
-      libBody.innerHTML = '';
+      libBody.innerHTML = ''; libBody._n = (libBody._n || 0) + 1;
       if (libTab === 'media' || libTab === 'audio') return drawMedia(libTab === 'audio');
       if (libTab === 'text' || libTab === 'stickers') return drawLayers(libTab);
       if (libTab === 'effects') { libBody.append(H('p', { className: 'hint', textContent: 'Click to add to the selected clip, or drag onto a clip. With nothing selected it goes on its own track at the playhead, over everything under it.' }));
@@ -91,7 +91,7 @@ const CutUI = (() => {
       // Other footage on this computer, from other projects
       const others = CutMedia.list().filter(m => !ids.includes(m.id) && (!audioOnly || m.kind === 'audio'));
       if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(H('div', { className: 'cl-orow' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })))); libBody.append(d); }
-      CutMedia.usage().then(u => { if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
+      const libDraw = libBody._n; CutMedia.usage().then(u => { if (libBody._n !== libDraw || (libTab !== 'media' && libTab !== 'audio')) return; libBody.querySelectorAll('.cl-use').forEach(x => x.remove()); if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
     }
     function paintCard(cv, m) { const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#0b1424'; g.fillRect(0, 0, 160, 90);
       if (m.kind === 'audio' || (!m.thumbs && m.peaks)) { g.fillStyle = '#3fbf7f'; const P = m.peaks; if (P) for (let x = 0; x < 160; x++) { const v = P[Math.floor(x / 160 * P.length)] / 255 * 38; g.fillRect(x, 45 - v, 1, v * 2); } else { g.fillStyle = '#3fbf7f'; g.font = '28px sans-serif'; g.textAlign = 'center'; g.fillText('♪', 80, 56); } return; }
@@ -117,7 +117,7 @@ const CutUI = (() => {
       Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a ' + l + ' clip', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
       libBody.append(g, H('h4', { className: 'cl-sub', textContent: 'Building blocks' }));
       const b = H('div', { className: 'cl-grid' });
-      b.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'Where the video cuts to you talking to camera', on: { click: () => addBlock('avatar') } }, H('i', { textContent: '🎙' }), H('span', { textContent: 'Avatar gap' })), { type: 'block', k: 'avatar' }),
+      b.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'You talking to camera in your studio, with your avatar carrying on from the last time', on: { click: () => addBlock('avatar') } }, H('i', { textContent: '🎙' }), H('span', { textContent: 'You in the studio' })), { type: 'block', k: 'avatar' }),
         drag0(H('button', { type: 'button', className: 'cl-tile', title: 'A plain colour card', on: { click: () => addBlock('colour') } }, H('i', { textContent: '■' }), H('span', { textContent: 'Colour card' })), { type: 'block', k: 'colour' }),
         drag0(H('button', { type: 'button', className: 'cl-tile', title: 'Grades and treats everything under it', on: { click: () => addBlock('adjust') } }, H('i', { textContent: '◐' }), H('span', { textContent: 'Adjustment' })), { type: 'block', k: 'adjust' }));
       libBody.append(b);
@@ -297,9 +297,35 @@ const CutUI = (() => {
       const list = r.kind === 'main' ? V().layout(c, lk).map(x => ({ it: x.it, t0: x.t0, d: x.d, o: x })) : (r.T.items || []).map(it => ({ it, t0: +it.start || 0, d: V().lenOf(it, lk) }));
       list.forEach((p, idx) => { const el = clipEl(p, r); lane.append(el); });
       if (r.kind === 'main') { const L = V().layout(c, lk); L.slice(0, -1).forEach(x => { const has = x.it.tr && x.it.tr.k && x.it.tr.k !== 'none', at = x.t0 + x.d - (has ? x.trOut / 2 : 0);
-          const d = H('button', { type: 'button', className: 'ct-tr' + (has ? ' on' : ''), style: `left:${at * pps}px`, title: has ? (V().TRANS[x.it.tr.k] || 'Transition') + ', ' + x.trOut.toFixed(2) + ' s. Click to change.' : 'Add a transition here', 'aria-label': 'Transition', 'data-tr': x.it.id, on: { click: e => { e.stopPropagation(); if (!has) { applyTrans('fade', x.it.id); } else select('T:' + x.it.id); } } });
+          const d = H('button', { type: 'button', className: 'ct-tr' + (has ? ' on' : ''), style: `left:${at * pps}px`, title: has ? (V().TRANS[x.it.tr.k] || 'Transition') + ', ' + x.trOut.toFixed(2) + ' s. Click to change.' : 'Add a transition here', 'aria-label': 'Transition', 'data-tr': x.it.id, on: { pointerdown: e => trDown(e, x, has, d), click: e => e.stopPropagation() } });
+          if (has) { const sp = H('div', { className: 'ct-trs' + (o.ed.selected === 'T:' + x.it.id ? ' on' : ''), style: `left:${(x.t0 + x.d - x.trOut) * pps}px;width:${Math.max(4, x.trOut * pps)}px`, title: 'Drag the ends to make the transition longer or shorter' }, H('b', { className: 'hl' }), H('b', { className: 'hr' }));
+            sp.addEventListener('pointerdown', e => trLenDown(e, x)); lane.append(sp); }
           d.addEventListener('dragover', e => { if (dragData && dragData.type === 'trans') { e.preventDefault(); d.classList.add('drop'); } }); d.addEventListener('dragleave', () => d.classList.remove('drop')); d.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); d.classList.remove('drop'); const dd = readDrop(e); if (dd && dd.type === 'trans') applyTrans(dd.k, x.it.id); });
           lane.append(d); }); }
+    }
+    // Transitions: drag the diamond to another cut to move it there (Ctrl or Alt keeps a copy where it was); click to pick it
+    function trDown(e, x, has, el) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const x0 = e.clientX, lane = el.parentNode; let moved = false, target = null;
+      const cuts = () => V().layout(cfg(), look()).slice(0, -1);
+      const mv = ev => { if (!has) return; if (!moved && Math.abs(ev.clientX - x0) < 4) return; moved = true; el.classList.add('dragging'); const t = laneT(ev.clientX);
+        let best = null, bd = 1e9; cuts().forEach(q => { const d = Math.abs(q.t0 + q.d - t); if (d < bd) { bd = d; best = q; } }); target = best && bd * pps < 80 ? best : null;
+        el.style.left = (t * pps) + 'px'; lane.querySelectorAll('.ct-tr').forEach(b => b.classList.toggle('drop', !!target && b.dataset.tr === target.it.id && b !== el)); };
+      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+        if (!moved) { if (!has) applyTrans('fade', x.it.id); else select('T:' + x.it.id); return; }
+        if (!target || target.it === x.it) { build(); return; }
+        o.commit(); const copy = ev.ctrlKey || ev.metaKey || ev.altKey; target.it.tr = { k: x.it.tr.k, d: x.it.tr.d || 0.5 }; if (!copy) delete x.it.tr;
+        changed(); build(); select('T:' + target.it.id); o.say(copy ? 'Transition copied to this cut.' : 'Transition moved. Hold Ctrl while you drag to copy it instead.'); };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    }
+    // Its length: drag either end of the bar over the overlap
+    function trLenDown(e, x) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const it = x.it, next = cfg().items[x.i + 1], mid = x.t0 + x.d - x.trOut / 2, x0 = e.clientX; let moved = false, raf = 0;
+      const max = Math.max(0.1, Math.min(3, V().TRMAX(it, next, look())));
+      const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 3) return; if (!moved) { moved = true; o.commit(); }
+        const dd = Math.round(cl(2 * Math.abs(laneT(ev.clientX) - mid), 0.1, max) * 20) / 20; if (dd === it.tr.d) return; it.tr.d = dd; o.changed(false); o.say('Transition ' + dd.toFixed(2) + ' s');
+        cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } select('T:' + it.id); };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }
     function clipEl(p, r) {
       const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, kind = it.kind === 'clip' ? it.mod : it.kind === 'media' ? (m && m.kind === 'image' ? 'image' : 'media') : it.kind;
@@ -394,7 +420,7 @@ const CutUI = (() => {
       Wv.editor.update(cfg(), it.id, { start: r2(s), end: r2(e2), track: null }); drag.el.style.left = s * pps + 'px'; drag.el.style.width = Math.max(6, (e2 - s) * pps) + 'px'; o.changed(false); }
     function moveDrag(ev, ctx, el, tAt, pts, c, lk) {
       const it = ctx.it, p = ctx.p, grab = tAt - p.t0, row = rowAt(ev.clientY), t = Math.max(0, laneT(ev.clientX) - grab);
-      const toMain = (row && row.kind === 'main') || it.kind === 'avatar', isAudio = it.kind === 'audio';   // avatar gaps only live on the main track
+      const toMain = (row && row.kind === 'main') || it.kind === 'avatar', isAudio = it.kind === 'audio';   // studio parts only live on the main track
       if (isAudio || (!toMain && ((row && (row.kind === 'video' || row.kind === 'new')) || ctx.r.kind !== 'main'))) {
         // Free placement on an overlay or audio track
         let s = snapT(t, pts); const se = snapT(t + p.d, pts); if (s === t && se !== t + p.d) s = se - p.d; s = Math.max(0, s);

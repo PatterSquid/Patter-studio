@@ -17,7 +17,7 @@ async def main():
         # add a map clip and an avatar gap through the timeline buttons
         await pg.click('.cl-tabs button:has-text("Patter")'); await pg.wait_for_timeout(300)
         await pg.evaluate("()=>PatterCut.player.seek(1e6)"); await pg.locator('.cl-tile', has_text='World map').click(); await pg.wait_for_timeout(800)
-        await pg.evaluate("()=>PatterCut.player.seek(1e6)"); await pg.locator('.cl-tile', has_text='Avatar gap').click(); await pg.wait_for_timeout(800)
+        await pg.evaluate("()=>PatterCut.player.seek(1e6)"); await pg.locator('.cl-tile', has_text='You in the studio').click(); await pg.wait_for_timeout(800)
         v=await V(); print('after adds', [(i['kind'], i.get('mod')) for i in v['items']])
         # set the avatar line and fit
         await pg.locator('#inspector textarea').fill('Right, so here is the thing nobody in Westminster wants tae admit'); await pg.wait_for_timeout(300)

@@ -1,6 +1,6 @@
 /* Video: the editor. A whole video on a multi-track timeline, like CapCut.
    - The main track (cfg.items) is magnetic: clips butt up one after another, with transitions overlapping them. It holds
-     clips made in the other tabs, your own footage and pictures, avatar gaps (where you talk to camera) and colour cards.
+     clips made in the other tabs, your own footage and pictures, you in your studio (where you talk to camera) and colour cards.
    - Overlay tracks (cfg.tracks, kind 'video') hold footage, pictures and clips placed freely on top, plus adjustment clips
      that grade everything under them. Audio tracks (kind 'audio') hold voiceover, music and sound effects.
    - Text, stickers and the rest come from Layers, on top of everything.
@@ -50,7 +50,7 @@ const Video = (() => {
   function duration(cfg, look) { let d = mainEnd(cfg, look); (cfg.tracks || []).forEach(T => (T.items || []).forEach(it => { d = Math.max(d, (+it.start || 0) + lenOf(it, look)); })); return Math.max(0.5, d); }
   function defaults() {
     const clip = k => { const Mo = raw(k); return Mo ? { id: nid('i'), kind: 'clip', mod: k, name: '', cfg: Mo.defaults(), inPt: 0, hold: 0 } : null; };
-    return { v: 2, gap: 'black', bg: 'black', items: [clip('broll'), { id: nid('i'), kind: 'avatar', text: 'Aye, ye heard that right. Wait till ye see the next bit.', dur: fitWords('Aye, ye heard that right. Wait till ye see the next bit.') }, clip('charts')].filter(Boolean), tracks: [], markers: [], bin: [] };
+    return { v: 2, bg: 'black', items: [clip('broll'), { id: nid('i'), kind: 'avatar', text: 'Aye, ye heard that right. Wait till ye see the next bit.', dur: fitWords('Aye, ye heard that right. Wait till ye see the next bit.') }, clip('charts')].filter(Boolean), tracks: [], markers: [], bin: [] };
   }
   // Every clip on any track, with where it plays on the whole timeline
   function allPlaced(cfg, look) {
@@ -230,12 +230,15 @@ const Video = (() => {
   }
 
   /* ---------- The frame ---------- */
-  const studioOn = cfg => cfg.gap === 'studio' && cfg.studio && typeof Studio !== 'undefined';
-  function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = cfg.studio && cfg.studio.avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
+  // Where he talks to camera the video always shows his studio with his avatar, carrying on from one [ME] part to the next.
+  // A video can keep its own copy of the studio (cfg.studio); otherwise it follows the Studio tab as it is.
+  let dfltStudio = null;
+  const studioCfg = cfg => cfg.studio || (hooks.studio && hooks.studio()) || (dfltStudio = dfltStudio || Studio.defaults());
+  const studioOn = cfg => typeof Studio !== 'undefined';
+  function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = studioOn(cfg) && studioCfg(cfg).avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
   function drawGap(ctx, o, t, cfg, look, W, H) {
-    const g0 = cfg.gap || 'black';
-    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), cfg.studio, look, W, H); } finally { ctx.restore(); } return; }
-    if (look.transparent || g0 === 'clear') ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = g0 === 'green' ? '#00b140' : '#000000'; ctx.fillRect(0, 0, W, H); }
+    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), studioCfg(cfg), look, W, H); } finally { ctx.restore(); } return; }
+    if (look.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H); }
     if (!look.preview) return;
     label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
   }
@@ -290,18 +293,18 @@ const Video = (() => {
   function imagesUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.kind === 'media') { const m = M(it.asset); if (m && m.kind === 'image') ids.add(it.asset); } }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function assetsUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.asset) ids.add(it.asset); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   // Old B roll footage (Media) inside tab clips, and the studio avatar
-  function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg)) (Studio.mediaFor(cfg.studio) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
+  function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar')) (Studio.mediaFor(studioCfg(cfg)) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, out = []; for (const p of allPlaced(cfg, lk)) { if (t < p.t0 || t >= p.t0 + p.d) continue; const it = p.it, local = t - p.t0;
-      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(cfg.studio, t, avStart(cfg, p.o, lk) + local));
+      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(studioCfg(cfg), t, avStart(cfg, p.o, lk) + local));
       if (it.kind === 'clip') { const Mo = modOf(it.mod); if (Mo && Mo.mediaAt) out.push(...(Mo.mediaAt(it.cfg, clipInner(it, local, lk)) || [])); } }
     return out; }
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip' || (cfg.tracks || []).length) return null; const Mo = modOf(o.it.mod); if (!Mo || !Mo.blurHint) return null; return Mo.blurHint(o.it.cfg, lookFor(o.it, look), clipInner(o.it, t - o.t0, look), fps, W, H); }
-  const needsMap = cfg => { const f = it => it && it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg))); return (cfg.items || []).some(f) || (cfg.tracks || []).some(T => (T.items || []).some(f)) || (studioOn(cfg) && Studio.needsMap(cfg.studio)); };
+  const needsMap = cfg => { const f = it => it && it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg))); return (cfg.items || []).some(f) || (cfg.tracks || []).some(T => (T.items || []).some(f)) || (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar') && Studio.needsMap(studioCfg(cfg))); };
   // Anything only the new editor can draw (own footage, sound, overlay tracks, grading...): exported by the editor's own exporter
   const isCut = cfg => !!((cfg.tracks || []).some(T => (T.items || []).length) || (cfg.items || []).some(it => it.kind === 'media' || it.kind === 'colour' || it.tr || it.col || it.fx || it.key || it.mask || it.anIn || it.anOut || it.anLoop || it.kf || (it.speed && +it.speed !== 1) || it.x != null || it.s != null || it.crop || it.blend || it.vol != null) || (cfg.bg && cfg.bg !== 'black'));
 
   /* ---------- Editing API (used by the editor workspace and the preview) ---------- */
-  const NAME = it => it.name || (it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'Avatar gap') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
+  const NAME = it => it.name || (it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'You in the studio') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
   const editor = { formIsScene: true,
     tracks() { return []; },
     update() { },
@@ -354,5 +357,5 @@ const Video = (() => {
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
-    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, avStart };
+    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();

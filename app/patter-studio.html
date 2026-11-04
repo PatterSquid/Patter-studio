@@ -349,6 +349,12 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-tr.on{background:var(--bru);border-color:#fff}
 .ct-tr.sel{outline:2px solid #fff}
 .ct-tr.drop{background:var(--bru);opacity:1;transform:rotate(45deg) scale(1.3)}
+.ct-tr.on{cursor:grab}.ct-tr.dragging{cursor:grabbing;opacity:1;z-index:6;transform:rotate(45deg) scale(1.25);box-shadow:0 3px 10px rgba(0,0,0,.6)}
+.ct-trs{position:absolute;top:4px;height:12px;z-index:2;pointer-events:none;border-radius:4px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.16) 0 4px,transparent 4px 9px);border:1px solid rgba(255,255,255,.28);opacity:.75}
+.ct-trs.on{opacity:1;border-color:#fff;background:repeating-linear-gradient(135deg,rgba(245,197,24,.3) 0 4px,transparent 4px 9px)}
+.ct-trs .hl,.ct-trs .hr{position:absolute;top:0;bottom:0;width:7px;pointer-events:auto;cursor:ew-resize;background:rgba(255,255,255,.35)}
+.ct-trs .hl{left:-3px;border-radius:3px 0 0 3px}.ct-trs .hr{right:-3px;border-radius:0 3px 3px 0}
+.ct-trs.on .hl,.ct-trs.on .hr,.ct-row.k-main:hover .ct-trs .hl,.ct-row.k-main:hover .ct-trs .hr{background:var(--bru)}
 .ct-play{position:absolute;top:0;width:2px;margin-left:-1px;background:#ff3b5c;z-index:5;pointer-events:none}
 .ct-play i{position:absolute;top:0;left:-6px;width:14px;height:14px;background:#ff3b5c;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%);pointer-events:auto;cursor:ew-resize}
 .ct-snapl{position:absolute;top:0;width:1px;background:#ffd34d;z-index:5;pointer-events:none}
@@ -484,7 +490,7 @@ body.cut main{grid-template-rows:minmax(160px,1fr) auto var(--tlh,clamp(210px,36
   </section>
 </main>
 <dialog id="dlg" aria-label="Dialog"></dialog>
-<script id="patter-js">window.PATTER_APP_VERSION='2026.11.03.1';
+<script id="patter-js">window.PATTER_APP_VERSION='2026.11.04.1';
 /* Minimal MP4 (ISO BMFF) muxer for one H.264 video track.
    Samples are AVC length prefixed access units, as produced by WebCodecs with avc.format = 'avc'. */
 const MP4Mux = (() => {
@@ -5847,7 +5853,7 @@ const CutAudio = (() => {
 
 /* Video: the editor. A whole video on a multi-track timeline, like CapCut.
    - The main track (cfg.items) is magnetic: clips butt up one after another, with transitions overlapping them. It holds
-     clips made in the other tabs, your own footage and pictures, avatar gaps (where you talk to camera) and colour cards.
+     clips made in the other tabs, your own footage and pictures, you in your studio (where you talk to camera) and colour cards.
    - Overlay tracks (cfg.tracks, kind 'video') hold footage, pictures and clips placed freely on top, plus adjustment clips
      that grade everything under them. Audio tracks (kind 'audio') hold voiceover, music and sound effects.
    - Text, stickers and the rest come from Layers, on top of everything.
@@ -5897,7 +5903,7 @@ const Video = (() => {
   function duration(cfg, look) { let d = mainEnd(cfg, look); (cfg.tracks || []).forEach(T => (T.items || []).forEach(it => { d = Math.max(d, (+it.start || 0) + lenOf(it, look)); })); return Math.max(0.5, d); }
   function defaults() {
     const clip = k => { const Mo = raw(k); return Mo ? { id: nid('i'), kind: 'clip', mod: k, name: '', cfg: Mo.defaults(), inPt: 0, hold: 0 } : null; };
-    return { v: 2, gap: 'black', bg: 'black', items: [clip('broll'), { id: nid('i'), kind: 'avatar', text: 'Aye, ye heard that right. Wait till ye see the next bit.', dur: fitWords('Aye, ye heard that right. Wait till ye see the next bit.') }, clip('charts')].filter(Boolean), tracks: [], markers: [], bin: [] };
+    return { v: 2, bg: 'black', items: [clip('broll'), { id: nid('i'), kind: 'avatar', text: 'Aye, ye heard that right. Wait till ye see the next bit.', dur: fitWords('Aye, ye heard that right. Wait till ye see the next bit.') }, clip('charts')].filter(Boolean), tracks: [], markers: [], bin: [] };
   }
   // Every clip on any track, with where it plays on the whole timeline
   function allPlaced(cfg, look) {
@@ -6077,12 +6083,15 @@ const Video = (() => {
   }
 
   /* ---------- The frame ---------- */
-  const studioOn = cfg => cfg.gap === 'studio' && cfg.studio && typeof Studio !== 'undefined';
-  function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = cfg.studio && cfg.studio.avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
+  // Where he talks to camera the video always shows his studio with his avatar, carrying on from one [ME] part to the next.
+  // A video can keep its own copy of the studio (cfg.studio); otherwise it follows the Studio tab as it is.
+  let dfltStudio = null;
+  const studioCfg = cfg => cfg.studio || (hooks.studio && hooks.studio()) || (dfltStudio = dfltStudio || Studio.defaults());
+  const studioOn = cfg => typeof Studio !== 'undefined';
+  function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = studioOn(cfg) && studioCfg(cfg).avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
   function drawGap(ctx, o, t, cfg, look, W, H) {
-    const g0 = cfg.gap || 'black';
-    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), cfg.studio, look, W, H); } finally { ctx.restore(); } return; }
-    if (look.transparent || g0 === 'clear') ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = g0 === 'green' ? '#00b140' : '#000000'; ctx.fillRect(0, 0, W, H); }
+    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), studioCfg(cfg), look, W, H); } finally { ctx.restore(); } return; }
+    if (look.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H); }
     if (!look.preview) return;
     label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
   }
@@ -6137,18 +6146,18 @@ const Video = (() => {
   function imagesUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.kind === 'media') { const m = M(it.asset); if (m && m.kind === 'image') ids.add(it.asset); } }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function assetsUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.asset) ids.add(it.asset); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   // Old B roll footage (Media) inside tab clips, and the studio avatar
-  function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg)) (Studio.mediaFor(cfg.studio) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
+  function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar')) (Studio.mediaFor(studioCfg(cfg)) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, out = []; for (const p of allPlaced(cfg, lk)) { if (t < p.t0 || t >= p.t0 + p.d) continue; const it = p.it, local = t - p.t0;
-      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(cfg.studio, t, avStart(cfg, p.o, lk) + local));
+      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(studioCfg(cfg), t, avStart(cfg, p.o, lk) + local));
       if (it.kind === 'clip') { const Mo = modOf(it.mod); if (Mo && Mo.mediaAt) out.push(...(Mo.mediaAt(it.cfg, clipInner(it, local, lk)) || [])); } }
     return out; }
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip' || (cfg.tracks || []).length) return null; const Mo = modOf(o.it.mod); if (!Mo || !Mo.blurHint) return null; return Mo.blurHint(o.it.cfg, lookFor(o.it, look), clipInner(o.it, t - o.t0, look), fps, W, H); }
-  const needsMap = cfg => { const f = it => it && it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg))); return (cfg.items || []).some(f) || (cfg.tracks || []).some(T => (T.items || []).some(f)) || (studioOn(cfg) && Studio.needsMap(cfg.studio)); };
+  const needsMap = cfg => { const f = it => it && it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg))); return (cfg.items || []).some(f) || (cfg.tracks || []).some(T => (T.items || []).some(f)) || (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar') && Studio.needsMap(studioCfg(cfg))); };
   // Anything only the new editor can draw (own footage, sound, overlay tracks, grading...): exported by the editor's own exporter
   const isCut = cfg => !!((cfg.tracks || []).some(T => (T.items || []).length) || (cfg.items || []).some(it => it.kind === 'media' || it.kind === 'colour' || it.tr || it.col || it.fx || it.key || it.mask || it.anIn || it.anOut || it.anLoop || it.kf || (it.speed && +it.speed !== 1) || it.x != null || it.s != null || it.crop || it.blend || it.vol != null) || (cfg.bg && cfg.bg !== 'black'));
 
   /* ---------- Editing API (used by the editor workspace and the preview) ---------- */
-  const NAME = it => it.name || (it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'Avatar gap') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
+  const NAME = it => it.name || (it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'You in the studio') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
   const editor = { formIsScene: true,
     tracks() { return []; },
     update() { },
@@ -6201,7 +6210,7 @@ const Video = (() => {
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
-    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, avStart };
+    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();
 
 /* CutExport: renders the editor's timeline to an MP4 with sound (H.264 and AAC where the computer can, otherwise the next
@@ -6397,7 +6406,7 @@ const CutUI = (() => {
     let dragData = null, mediaFilter = 'all', importing = [];
     function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { if (!c.bin.includes(id)) c.bin.push(id); }); return c.bin.filter(id => CutMedia.info(id)); }
     function drawLib() {
-      libBody.innerHTML = '';
+      libBody.innerHTML = ''; libBody._n = (libBody._n || 0) + 1;
       if (libTab === 'media' || libTab === 'audio') return drawMedia(libTab === 'audio');
       if (libTab === 'text' || libTab === 'stickers') return drawLayers(libTab);
       if (libTab === 'effects') { libBody.append(H('p', { className: 'hint', textContent: 'Click to add to the selected clip, or drag onto a clip. With nothing selected it goes on its own track at the playhead, over everything under it.' }));
@@ -6429,7 +6438,7 @@ const CutUI = (() => {
       // Other footage on this computer, from other projects
       const others = CutMedia.list().filter(m => !ids.includes(m.id) && (!audioOnly || m.kind === 'audio'));
       if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(H('div', { className: 'cl-orow' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })))); libBody.append(d); }
-      CutMedia.usage().then(u => { if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
+      const libDraw = libBody._n; CutMedia.usage().then(u => { if (libBody._n !== libDraw || (libTab !== 'media' && libTab !== 'audio')) return; libBody.querySelectorAll('.cl-use').forEach(x => x.remove()); if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
     }
     function paintCard(cv, m) { const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#0b1424'; g.fillRect(0, 0, 160, 90);
       if (m.kind === 'audio' || (!m.thumbs && m.peaks)) { g.fillStyle = '#3fbf7f'; const P = m.peaks; if (P) for (let x = 0; x < 160; x++) { const v = P[Math.floor(x / 160 * P.length)] / 255 * 38; g.fillRect(x, 45 - v, 1, v * 2); } else { g.fillStyle = '#3fbf7f'; g.font = '28px sans-serif'; g.textAlign = 'center'; g.fillText('♪', 80, 56); } return; }
@@ -6455,7 +6464,7 @@ const CutUI = (() => {
       Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a ' + l + ' clip', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
       libBody.append(g, H('h4', { className: 'cl-sub', textContent: 'Building blocks' }));
       const b = H('div', { className: 'cl-grid' });
-      b.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'Where the video cuts to you talking to camera', on: { click: () => addBlock('avatar') } }, H('i', { textContent: '🎙' }), H('span', { textContent: 'Avatar gap' })), { type: 'block', k: 'avatar' }),
+      b.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'You talking to camera in your studio, with your avatar carrying on from the last time', on: { click: () => addBlock('avatar') } }, H('i', { textContent: '🎙' }), H('span', { textContent: 'You in the studio' })), { type: 'block', k: 'avatar' }),
         drag0(H('button', { type: 'button', className: 'cl-tile', title: 'A plain colour card', on: { click: () => addBlock('colour') } }, H('i', { textContent: '■' }), H('span', { textContent: 'Colour card' })), { type: 'block', k: 'colour' }),
         drag0(H('button', { type: 'button', className: 'cl-tile', title: 'Grades and treats everything under it', on: { click: () => addBlock('adjust') } }, H('i', { textContent: '◐' }), H('span', { textContent: 'Adjustment' })), { type: 'block', k: 'adjust' }));
       libBody.append(b);
@@ -6635,9 +6644,35 @@ const CutUI = (() => {
       const list = r.kind === 'main' ? V().layout(c, lk).map(x => ({ it: x.it, t0: x.t0, d: x.d, o: x })) : (r.T.items || []).map(it => ({ it, t0: +it.start || 0, d: V().lenOf(it, lk) }));
       list.forEach((p, idx) => { const el = clipEl(p, r); lane.append(el); });
       if (r.kind === 'main') { const L = V().layout(c, lk); L.slice(0, -1).forEach(x => { const has = x.it.tr && x.it.tr.k && x.it.tr.k !== 'none', at = x.t0 + x.d - (has ? x.trOut / 2 : 0);
-          const d = H('button', { type: 'button', className: 'ct-tr' + (has ? ' on' : ''), style: `left:${at * pps}px`, title: has ? (V().TRANS[x.it.tr.k] || 'Transition') + ', ' + x.trOut.toFixed(2) + ' s. Click to change.' : 'Add a transition here', 'aria-label': 'Transition', 'data-tr': x.it.id, on: { click: e => { e.stopPropagation(); if (!has) { applyTrans('fade', x.it.id); } else select('T:' + x.it.id); } } });
+          const d = H('button', { type: 'button', className: 'ct-tr' + (has ? ' on' : ''), style: `left:${at * pps}px`, title: has ? (V().TRANS[x.it.tr.k] || 'Transition') + ', ' + x.trOut.toFixed(2) + ' s. Click to change.' : 'Add a transition here', 'aria-label': 'Transition', 'data-tr': x.it.id, on: { pointerdown: e => trDown(e, x, has, d), click: e => e.stopPropagation() } });
+          if (has) { const sp = H('div', { className: 'ct-trs' + (o.ed.selected === 'T:' + x.it.id ? ' on' : ''), style: `left:${(x.t0 + x.d - x.trOut) * pps}px;width:${Math.max(4, x.trOut * pps)}px`, title: 'Drag the ends to make the transition longer or shorter' }, H('b', { className: 'hl' }), H('b', { className: 'hr' }));
+            sp.addEventListener('pointerdown', e => trLenDown(e, x)); lane.append(sp); }
           d.addEventListener('dragover', e => { if (dragData && dragData.type === 'trans') { e.preventDefault(); d.classList.add('drop'); } }); d.addEventListener('dragleave', () => d.classList.remove('drop')); d.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); d.classList.remove('drop'); const dd = readDrop(e); if (dd && dd.type === 'trans') applyTrans(dd.k, x.it.id); });
           lane.append(d); }); }
+    }
+    // Transitions: drag the diamond to another cut to move it there (Ctrl or Alt keeps a copy where it was); click to pick it
+    function trDown(e, x, has, el) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const x0 = e.clientX, lane = el.parentNode; let moved = false, target = null;
+      const cuts = () => V().layout(cfg(), look()).slice(0, -1);
+      const mv = ev => { if (!has) return; if (!moved && Math.abs(ev.clientX - x0) < 4) return; moved = true; el.classList.add('dragging'); const t = laneT(ev.clientX);
+        let best = null, bd = 1e9; cuts().forEach(q => { const d = Math.abs(q.t0 + q.d - t); if (d < bd) { bd = d; best = q; } }); target = best && bd * pps < 80 ? best : null;
+        el.style.left = (t * pps) + 'px'; lane.querySelectorAll('.ct-tr').forEach(b => b.classList.toggle('drop', !!target && b.dataset.tr === target.it.id && b !== el)); };
+      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+        if (!moved) { if (!has) applyTrans('fade', x.it.id); else select('T:' + x.it.id); return; }
+        if (!target || target.it === x.it) { build(); return; }
+        o.commit(); const copy = ev.ctrlKey || ev.metaKey || ev.altKey; target.it.tr = { k: x.it.tr.k, d: x.it.tr.d || 0.5 }; if (!copy) delete x.it.tr;
+        changed(); build(); select('T:' + target.it.id); o.say(copy ? 'Transition copied to this cut.' : 'Transition moved. Hold Ctrl while you drag to copy it instead.'); };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    }
+    // Its length: drag either end of the bar over the overlap
+    function trLenDown(e, x) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const it = x.it, next = cfg().items[x.i + 1], mid = x.t0 + x.d - x.trOut / 2, x0 = e.clientX; let moved = false, raf = 0;
+      const max = Math.max(0.1, Math.min(3, V().TRMAX(it, next, look())));
+      const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 3) return; if (!moved) { moved = true; o.commit(); }
+        const dd = Math.round(cl(2 * Math.abs(laneT(ev.clientX) - mid), 0.1, max) * 20) / 20; if (dd === it.tr.d) return; it.tr.d = dd; o.changed(false); o.say('Transition ' + dd.toFixed(2) + ' s');
+        cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } select('T:' + it.id); };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }
     function clipEl(p, r) {
       const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, kind = it.kind === 'clip' ? it.mod : it.kind === 'media' ? (m && m.kind === 'image' ? 'image' : 'media') : it.kind;
@@ -6732,7 +6767,7 @@ const CutUI = (() => {
       Wv.editor.update(cfg(), it.id, { start: r2(s), end: r2(e2), track: null }); drag.el.style.left = s * pps + 'px'; drag.el.style.width = Math.max(6, (e2 - s) * pps) + 'px'; o.changed(false); }
     function moveDrag(ev, ctx, el, tAt, pts, c, lk) {
       const it = ctx.it, p = ctx.p, grab = tAt - p.t0, row = rowAt(ev.clientY), t = Math.max(0, laneT(ev.clientX) - grab);
-      const toMain = (row && row.kind === 'main') || it.kind === 'avatar', isAudio = it.kind === 'audio';   // avatar gaps only live on the main track
+      const toMain = (row && row.kind === 'main') || it.kind === 'avatar', isAudio = it.kind === 'audio';   // studio parts only live on the main track
       if (isAudio || (!toMain && ((row && (row.kind === 'video' || row.kind === 'new')) || ctx.r.kind !== 'main'))) {
         // Free placement on an overlay or audio track
         let s = snapT(t, pts); const se = snapT(t + p.d, pts); if (s === t && se !== t + p.d) s = se - p.d; s = Math.max(0, s);
@@ -6883,7 +6918,7 @@ const CutInspect = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
   const V = () => Video;
-  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'Gap', colour: 'Card' };
+  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'You', colour: 'Card' };
   const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Colour dodge'], ['color-burn', 'Colour burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Colour'], ['luminosity', 'Luminosity']];
 
   function create(o, ui) {
@@ -7043,8 +7078,9 @@ const CutInspect = (() => {
       body.append(sect('', UI.field('What you say here (preview only)', UI.area(it.text, v => { it.text = v; ch(false); }, 'Your line to camera', 3, 'Avatar line')),
         slider('Length', () => +it.dur || 3, v => { it.dur = r2(v); }, 0.3, 120, 0.1, v => r2(v) + ' s', { onChange: ch, commit: cm }),
         H('div', { className: 'btnrow' }, UI.btn('Fit the length to the words', () => { cm(); it.dur = V().fitWords(it.text); ch(true); o.rebuildInspector(); })),
-        c.gap === 'studio' ? UI.field('Start your avatar video at (seconds; blank carries on from the last gap)', UI.txt(it.avIn == null ? '' : String(it.avIn), v => { const n = parseFloat(v); if (v.trim() === '') delete it.avIn; else if (isFinite(n)) it.avIn = r2(Math.max(0, n)); ch(); }, 'carry on', 'Avatar start')) : '',
-        H('p', { className: 'hint', textContent: 'Avatar gaps export as ' + ({ black: 'black', green: 'green screen', clear: 'see through', studio: 'your studio with your avatar' })[c.gap || 'black'] + ' (change it with nothing selected).' })));
+        UI.field('Start your avatar video at (seconds; blank carries on from the last time you were on)', UI.txt(it.avIn == null ? '' : String(it.avIn), v => { const n = parseFloat(v); if (v.trim() === '') delete it.avIn; else if (isFinite(n)) it.avIn = r2(Math.max(0, n)); ch(); }, 'carry on', 'Avatar start')),
+        H('p', { className: 'hint', textContent: 'This shows your studio with your avatar talking. ' + (c.studio ? 'This video keeps its own copy of the studio.' : 'It follows the Studio tab, so change the weather or the flats outside there.') }),
+        H('div', { className: 'btnrow' }, c.studio ? UI.btn('Follow the Studio tab again', () => { cm(); delete c.studio; ch(true); o.rebuildInspector(); }) : UI.btn('Keep a copy of the studio as it is now', () => { cm(); c.studio = JSON.parse(JSON.stringify(Video.hooks.studio ? Video.hooks.studio() : o.tabCfg('studio'))); ch(true); o.rebuildInspector(); }))));
     }
     function colour(body, c, it, m, ch, cm) { if (typeof it.col === 'string') { it.fill = it.col; delete it.col; } body.append(sect('Card', H('input', { type: 'color', value: it.fill || '#000000', 'aria-label': 'Card colour', on: { input: e => { it.fill = e.target.value; ch(); }, change: () => cm() } }), slider('Length', () => +it.dur || 3, v => { it.dur = r2(v); }, 0.1, 600, 0.1, v => r2(v) + ' s', { onChange: ch, commit: cm }))); }
 
@@ -7055,7 +7091,7 @@ const CutInspect = (() => {
       root.append(H('section', { className: 'card cs' }, H('div', { className: 'cs-head' }, H('b', { textContent: 'Transition' }), H('span', { className: 'cs-time', textContent: 'between ' + V().NAME(it) + ' and ' + (next ? V().NAME(next) : 'the end') })),
         H('div', { className: 'cs-body' }, sect('', g), it.tr ? sect('', slider('Length', () => +it.tr.d || 0.5, v => { it.tr.d = r2(v); }, 0.1, Math.max(0.15, Math.min(3, max)), 0.05, v => r2(v) + ' s', { onChange: () => changed(), commit: () => o.commit() }),
           H('p', { className: 'hint', textContent: 'A transition overlaps the two clips, so the video gets a little shorter. Its longest is half the shorter clip.' }),
-          H('div', { className: 'btnrow' }, UI.btn('Use on every cut', () => { o.commit(); const L = c.items; L.forEach((x, i) => { if (i < L.length - 1 && x.kind !== 'avatar' && L[i + 1].kind !== 'avatar') x.tr = { k: it.tr.k, d: it.tr.d }; }); changed(true); o.say('Transition put on every cut (not next to avatar gaps).'); }), UI.btn('Remove', () => { o.commit(); delete it.tr; changed(true); o.rebuildInspector(); }))) : '')));
+          H('div', { className: 'btnrow' }, UI.btn('Use on every cut', () => { o.commit(); const L = c.items; L.forEach((x, i) => { if (i < L.length - 1) x.tr = { k: it.tr.k, d: it.tr.d }; }); changed(true); o.say('Transition put on every cut.'); }), UI.btn('Remove', () => { o.commit(); delete it.tr; changed(true); o.rebuildInspector(); }))) : '')));
     }
     /* ---------- A track ---------- */
     function trackPanel(root, c, tid, changed) {
@@ -7083,8 +7119,8 @@ const CutInspect = (() => {
         sect('Frame', chips(lk.format, [['16:9', '16:9 YouTube'], ['9:16', '9:16 Shorts and Reels']], v => o.setLook('format', v))),
         sect('Background where a clip doesn\'t fill the frame', chips(c.bg || 'black', [['black', 'Black'], ['blur', 'Blurred copy of the clip'], ['white', 'White']], v => { o.commit(); c.bg = v; changed(true); o.rebuildInspector(); })),
         sect('Patter clips colour scheme', chips(lk.scheme, Object.entries(E.SCHEMES).map(([k, s]) => [k, s.name]), v => o.setLook('scheme', v), 'wrap')),
-        sect('Avatar gaps in the export', chips(c.gap || 'black', [['black', 'Black'], ['green', 'Green screen'], ['clear', 'See through (PNG only)'], ...(typeof Studio !== 'undefined' ? [['studio', 'Your studio and avatar']] : [])], v => { o.commit(); c.gap = v; if (v === 'studio' && !c.studio) c.studio = JSON.parse(JSON.stringify(o.tabCfg('studio'))); changed(true); o.rebuildInspector(); }, 'wrap'),
-          c.gap === 'studio' ? H('div', { className: 'btnrow' }, UI.btn('Use the Studio tab as it is now', () => { o.commit(); c.studio = JSON.parse(JSON.stringify(o.tabCfg('studio'))); changed(true); })) : ''),
+        sect('Where you talk to camera', H('p', { className: 'hint', textContent: 'The \u201cYou in the studio\u201d clips show your studio with your avatar, carrying on from one to the next. ' + (c.studio ? 'This video keeps its own copy of the studio.' : 'They follow the Studio tab.') }),
+          H('div', { className: 'btnrow' }, c.studio ? UI.btn('Follow the Studio tab again', () => { o.commit(); delete c.studio; changed(true); o.rebuildInspector(); }) : UI.btn('Keep a copy of the studio as it is now', () => { o.commit(); c.studio = JSON.parse(JSON.stringify(Video.hooks.studio ? Video.hooks.studio() : o.tabCfg('studio'))); changed(true); o.rebuildInspector(); }))),
         sect('Your video', H('p', { className: 'hint', textContent: ui.short(dur) + ' long, ' + n + ' clips, ' + (c.tracks || []).length + ' extra tracks.' }),
           (c.markers || []).length ? H('div', { className: 'cs-marks' }, ...(c.markers || []).map(mk => H('button', { type: 'button', textContent: '▾ ' + ui.tc(mk.t) + (mk.label ? ' ' + mk.label : ''), on: { click: () => { o.player.pause(); o.player.seek(mk.t); ui.setTime(mk.t); } } }))) : '',
           H('div', { className: 'btnrow' }, UI.btn('+ Video track', () => { o.commit(); c.tracks = c.tracks || []; c.tracks.push({ id: V().nid('t'), kind: 'video', name: 'Overlay ' + (V().tracksOf(c, 'video').length + 1), items: [], keep: true }); changed(true); }), UI.btn('+ Audio track', () => { o.commit(); c.tracks = c.tracks || []; c.tracks.push({ id: V().nid('t'), kind: 'audio', name: 'Audio ' + (V().tracksOf(c, 'audio').length + 1), items: [], keep: true }); changed(true); }))),
@@ -10295,7 +10331,7 @@ const Repair = (() => {
     el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
   if (typeof Studio !== 'undefined' && Studio.ready) Studio.ready().then(() => { if (Layers.hooks.onAsset) Layers.hooks.onAsset(Studio.BUILTIN); });
   if (typeof Studio !== 'undefined') Object.assign(Studio.hooks, { cfg: () => state.cfg.studio || Studio.defaults(), select: id => { if (ed) ed.select(id); buildInspector(); } });
-  if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
+  if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, studio: () => state.cfg.studio || (typeof Studio !== 'undefined' ? (state.cfg.studio = Studio.defaults()) : null), tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
   drawTabs(); syncLook(); buildForm(); commit();
   $('resetMod').addEventListener('click', () => { commit(); state.cfg[state.module] = mod().defaults(); commit(); refreshAll(); save(); begin(); });
 

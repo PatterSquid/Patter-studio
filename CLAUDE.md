@@ -96,6 +96,8 @@ standard and as easy to use.
   for speed with the pitch kept, AAC (else Opus) encoding, WAV.
 * `cut_export.js` (`CutExport.run`): renders on the main thread with exact frames, mixes sound alongside, streams to disk.
   MP4 (H.264 plus AAC on his PC; VP9 and Opus here in headless), PNG sequence, WAV. The Video tab always exports through it.
+* Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
+  striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
   waveform for the part near the screen; the clip boxes are see-through (`.st`) on top. Do not go back to a canvas per clip:
   hundreds of canvases made the browser composite every frame (110 ms a frame with 500 clips, 17 ms now).
@@ -109,7 +111,7 @@ standard and as easy to use.
   Chromium has no H.264 or AAC), e.g. `long.mp4` 6 s 640x360 30 fps with a 500 Hz tone, `vp9opus.mp4`, `red.png`,
   `tone.mp3`. Software WebGL makes grading look slow in headless timings; on his PC it is a millisecond or two.
 * When he sends a script, build it as a Video tab project: one clip per beat (Story scenes for sketches, charts, maps,
-  newspapers where they fit), an avatar gap for every line marked [ME], new drawings as a pack. Hand it over as a
+  newspapers where they fit), a "You in the studio" part (kind `avatar`) for every line marked [ME], new drawings as a pack. Hand it over as a
   .patter.json project file plus an MP4 preview. His own footage isn't in project files: clips keep `file` so he can relink.
 
 ## The Studio tab (dev/src/studio.js)
@@ -135,8 +137,9 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   in one of the frames) are timeline bars.
 * `Studio.soundData` makes a separate WAV: thunder after each flash, cars outside, wind in snow, clunks and buzzes for the
   light stings. **No rain sound**: he tried it and did not want it.
-* In the Video tab, "Avatar gaps: Your studio" shows the studio in every [ME] gap, with his avatar video carrying on from gap
-  to gap (one take, lines in order). `projects/my-studio.patter.json` is his room, already marked.
+* In the Video tab, every [ME] part ("You in the studio", kind `avatar`) always shows his studio with his avatar video
+  carrying on from one part to the next (one take, lines in order). There are no black or green gaps any more (`cfg.gap` is
+  ignored). A video follows the Studio tab (`Video.hooks.studio()`) unless it keeps its own copy in `cfg.studio`. `projects/my-studio.patter.json` is his room, already marked.
 * **Outside events** (`dev/src/studio_events.js`, `StudioEvents`): a running gag in the flats across the road. `cfg.events`
   is a list of `{ id, k, start, dur, text }` bars on an Outside track (+ Outside on the timeline, or the Outside the window
   card): plane, demolish, squid, telly, bonfire, polis, carfire, ufo, gull, summer, spell (`text`, 3x5 font on the block's

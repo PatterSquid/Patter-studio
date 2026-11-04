@@ -5,7 +5,7 @@ const CutInspect = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
   const V = () => Video;
-  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'Gap', colour: 'Card' };
+  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'You', colour: 'Card' };
   const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Colour dodge'], ['color-burn', 'Colour burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Colour'], ['luminosity', 'Luminosity']];
 
   function create(o, ui) {
@@ -165,8 +165,9 @@ const CutInspect = (() => {
       body.append(sect('', UI.field('What you say here (preview only)', UI.area(it.text, v => { it.text = v; ch(false); }, 'Your line to camera', 3, 'Avatar line')),
         slider('Length', () => +it.dur || 3, v => { it.dur = r2(v); }, 0.3, 120, 0.1, v => r2(v) + ' s', { onChange: ch, commit: cm }),
         H('div', { className: 'btnrow' }, UI.btn('Fit the length to the words', () => { cm(); it.dur = V().fitWords(it.text); ch(true); o.rebuildInspector(); })),
-        c.gap === 'studio' ? UI.field('Start your avatar video at (seconds; blank carries on from the last gap)', UI.txt(it.avIn == null ? '' : String(it.avIn), v => { const n = parseFloat(v); if (v.trim() === '') delete it.avIn; else if (isFinite(n)) it.avIn = r2(Math.max(0, n)); ch(); }, 'carry on', 'Avatar start')) : '',
-        H('p', { className: 'hint', textContent: 'Avatar gaps export as ' + ({ black: 'black', green: 'green screen', clear: 'see through', studio: 'your studio with your avatar' })[c.gap || 'black'] + ' (change it with nothing selected).' })));
+        UI.field('Start your avatar video at (seconds; blank carries on from the last time you were on)', UI.txt(it.avIn == null ? '' : String(it.avIn), v => { const n = parseFloat(v); if (v.trim() === '') delete it.avIn; else if (isFinite(n)) it.avIn = r2(Math.max(0, n)); ch(); }, 'carry on', 'Avatar start')),
+        H('p', { className: 'hint', textContent: 'This shows your studio with your avatar talking. ' + (c.studio ? 'This video keeps its own copy of the studio.' : 'It follows the Studio tab, so change the weather or the flats outside there.') }),
+        H('div', { className: 'btnrow' }, c.studio ? UI.btn('Follow the Studio tab again', () => { cm(); delete c.studio; ch(true); o.rebuildInspector(); }) : UI.btn('Keep a copy of the studio as it is now', () => { cm(); c.studio = JSON.parse(JSON.stringify(Video.hooks.studio ? Video.hooks.studio() : o.tabCfg('studio'))); ch(true); o.rebuildInspector(); }))));
     }
     function colour(body, c, it, m, ch, cm) { if (typeof it.col === 'string') { it.fill = it.col; delete it.col; } body.append(sect('Card', H('input', { type: 'color', value: it.fill || '#000000', 'aria-label': 'Card colour', on: { input: e => { it.fill = e.target.value; ch(); }, change: () => cm() } }), slider('Length', () => +it.dur || 3, v => { it.dur = r2(v); }, 0.1, 600, 0.1, v => r2(v) + ' s', { onChange: ch, commit: cm }))); }
 
@@ -177,7 +178,7 @@ const CutInspect = (() => {
       root.append(H('section', { className: 'card cs' }, H('div', { className: 'cs-head' }, H('b', { textContent: 'Transition' }), H('span', { className: 'cs-time', textContent: 'between ' + V().NAME(it) + ' and ' + (next ? V().NAME(next) : 'the end') })),
         H('div', { className: 'cs-body' }, sect('', g), it.tr ? sect('', slider('Length', () => +it.tr.d || 0.5, v => { it.tr.d = r2(v); }, 0.1, Math.max(0.15, Math.min(3, max)), 0.05, v => r2(v) + ' s', { onChange: () => changed(), commit: () => o.commit() }),
           H('p', { className: 'hint', textContent: 'A transition overlaps the two clips, so the video gets a little shorter. Its longest is half the shorter clip.' }),
-          H('div', { className: 'btnrow' }, UI.btn('Use on every cut', () => { o.commit(); const L = c.items; L.forEach((x, i) => { if (i < L.length - 1 && x.kind !== 'avatar' && L[i + 1].kind !== 'avatar') x.tr = { k: it.tr.k, d: it.tr.d }; }); changed(true); o.say('Transition put on every cut (not next to avatar gaps).'); }), UI.btn('Remove', () => { o.commit(); delete it.tr; changed(true); o.rebuildInspector(); }))) : '')));
+          H('div', { className: 'btnrow' }, UI.btn('Use on every cut', () => { o.commit(); const L = c.items; L.forEach((x, i) => { if (i < L.length - 1) x.tr = { k: it.tr.k, d: it.tr.d }; }); changed(true); o.say('Transition put on every cut.'); }), UI.btn('Remove', () => { o.commit(); delete it.tr; changed(true); o.rebuildInspector(); }))) : '')));
     }
     /* ---------- A track ---------- */
     function trackPanel(root, c, tid, changed) {
@@ -205,8 +206,8 @@ const CutInspect = (() => {
         sect('Frame', chips(lk.format, [['16:9', '16:9 YouTube'], ['9:16', '9:16 Shorts and Reels']], v => o.setLook('format', v))),
         sect('Background where a clip doesn\'t fill the frame', chips(c.bg || 'black', [['black', 'Black'], ['blur', 'Blurred copy of the clip'], ['white', 'White']], v => { o.commit(); c.bg = v; changed(true); o.rebuildInspector(); })),
         sect('Patter clips colour scheme', chips(lk.scheme, Object.entries(E.SCHEMES).map(([k, s]) => [k, s.name]), v => o.setLook('scheme', v), 'wrap')),
-        sect('Avatar gaps in the export', chips(c.gap || 'black', [['black', 'Black'], ['green', 'Green screen'], ['clear', 'See through (PNG only)'], ...(typeof Studio !== 'undefined' ? [['studio', 'Your studio and avatar']] : [])], v => { o.commit(); c.gap = v; if (v === 'studio' && !c.studio) c.studio = JSON.parse(JSON.stringify(o.tabCfg('studio'))); changed(true); o.rebuildInspector(); }, 'wrap'),
-          c.gap === 'studio' ? H('div', { className: 'btnrow' }, UI.btn('Use the Studio tab as it is now', () => { o.commit(); c.studio = JSON.parse(JSON.stringify(o.tabCfg('studio'))); changed(true); })) : ''),
+        sect('Where you talk to camera', H('p', { className: 'hint', textContent: 'The \u201cYou in the studio\u201d clips show your studio with your avatar, carrying on from one to the next. ' + (c.studio ? 'This video keeps its own copy of the studio.' : 'They follow the Studio tab.') }),
+          H('div', { className: 'btnrow' }, c.studio ? UI.btn('Follow the Studio tab again', () => { o.commit(); delete c.studio; changed(true); o.rebuildInspector(); }) : UI.btn('Keep a copy of the studio as it is now', () => { o.commit(); c.studio = JSON.parse(JSON.stringify(Video.hooks.studio ? Video.hooks.studio() : o.tabCfg('studio'))); changed(true); o.rebuildInspector(); }))),
         sect('Your video', H('p', { className: 'hint', textContent: ui.short(dur) + ' long, ' + n + ' clips, ' + (c.tracks || []).length + ' extra tracks.' }),
           (c.markers || []).length ? H('div', { className: 'cs-marks' }, ...(c.markers || []).map(mk => H('button', { type: 'button', textContent: '▾ ' + ui.tc(mk.t) + (mk.label ? ' ' + mk.label : ''), on: { click: () => { o.player.pause(); o.player.seek(mk.t); ui.setTime(mk.t); } } }))) : '',
           H('div', { className: 'btnrow' }, UI.btn('+ Video track', () => { o.commit(); c.tracks = c.tracks || []; c.tracks.push({ id: V().nid('t'), kind: 'video', name: 'Overlay ' + (V().tracksOf(c, 'video').length + 1), items: [], keep: true }); changed(true); }), UI.btn('+ Audio track', () => { o.commit(); c.tracks = c.tracks || []; c.tracks.push({ id: V().nid('t'), kind: 'audio', name: 'Audio ' + (V().tracksOf(c, 'audio').length + 1), items: [], keep: true }); changed(true); }))),

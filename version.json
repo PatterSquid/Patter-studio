@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.03.1",
+  "version": "2026.11.04.1",
   "file": "app/patter-studio.html",
-  "notes": "Video editor: smooth playback in big projects, exports tidy up properly if anything goes wrong, long WAV voiceovers read straight from the file"
+  "notes": "Video editor: drag transitions to any cut and drag their ends to change the length. The parts where you talk to camera now always show your studio with your avatar."
 }
