@@ -96,6 +96,14 @@ standard and as easy to use.
   for speed with the pitch kept, AAC (else Opus) encoding, WAV.
 * `cut_export.js` (`CutExport.run`): renders on the main thread with exact frames, mixes sound alongside, streams to disk.
   MP4 (H.264 plus AAC on his PC; VP9 and Opus here in headless), PNG sequence, WAV. The Video tab always exports through it.
+* **Snap** (switch in the timeline toolbar): on, the main track is magnetic and drags snap to edges, markers and the
+  playhead (Alt while dragging skips the edge snap); off (`cfg.free`), main track clips go where they are dropped and the
+  blank between them plays as black. Each main clip may carry `gap` (blank seconds before it), honoured only when
+  `cfg.free`; `Video.setMainStarts` puts clips at wanted times (sorted, gaps worked out, overlaps pushed along),
+  `mainStarts` reads them, turning Snap on calls `closeGaps`. No transition across a gap. Delete leaves the gap with Snap
+  off; Shift+Delete still closes it.
+* Patter clips in a video are copies of their tab from when they were added; the Clip panel has "Use what's in the ...
+  tab now" (keeps place, trims and effects) besides Edit. Studio clips (`runsOn`) stretch instead of holding the last frame.
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
@@ -138,7 +146,8 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
 * `Studio.soundData` makes a separate WAV: thunder after each flash, cars outside, wind in snow, clunks and buzzes for the
   light stings. **No rain sound**: he tried it and did not want it.
 * In the Video tab, every [ME] part ("You in the studio", kind `avatar`) always shows his studio with his avatar video
-  carrying on from one part to the next (one take, lines in order). There are no black or green gaps any more (`cfg.gap` is
+  carrying on from one part to the next (one take, lines in order). The studio's own clock (weather, outside events like the
+  plane) carries on the same way (`studioT`: avatar time less its in point), so the Studio tab's timeline plays through the [ME] parts. There are no black or green gaps any more (`cfg.gap` is
   ignored). A video follows the Studio tab (`Video.hooks.studio()`) unless it keeps its own copy in `cfg.studio`. `projects/my-studio.patter.json` is his room, already marked.
 * **Outside events** (`dev/src/studio_events.js`, `StudioEvents`): a running gag in the flats across the road. `cfg.events`
   is a list of `{ id, k, start, dur, text }` bars on an Outside track (+ Outside on the timeline, or the Outside the window

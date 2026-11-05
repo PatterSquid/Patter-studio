@@ -159,7 +159,9 @@ const CutInspect = (() => {
       const d = V().natural(it, look()), [a, e] = V().clipSpan(it, look());
       body.append(sect('', UI.field('Name on the timeline', UI.txt(it.name || '', v => { it.name = v; ch(); }, V().NAMES[it.mod], 'Clip name')),
         H('p', { className: 'hint', textContent: (V().NAMES[it.mod] || 'Clip') + ', ' + d.toFixed(1) + ' s long on its own. Showing ' + a.toFixed(1) + ' s to ' + e.toFixed(1) + ' s' + (it.hold ? ', then holding the last frame for ' + (+it.hold).toFixed(1) + ' s' : '') + '. Drag its ends on the timeline to trim it or hold it longer.' }),
-        H('div', { className: 'btnrow' }, UI.btn('Edit this clip in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id), 'primary'))));
+        H('div', { className: 'btnrow' }, UI.btn('Edit this clip in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id), 'primary')),
+        H('p', { className: 'hint', textContent: 'This clip is its own copy, made when you added it, so changes in the ' + (V().NAMES[it.mod] || '') + ' tab since then are not in it. Edit it with the button above (double click it on the timeline does the same), or bring in what the tab has now.' }),
+        H('div', { className: 'btnrow' }, UI.btn('Use what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab now', () => { const src = o.tabCfg(it.mod); if (!src) return; cm(); it.cfg = JSON.parse(JSON.stringify(src)); if (!V().runsOn(it)) { const [a2, , d2] = V().clipSpan(it, look()); if (it.outPt != null && +it.outPt > d2) delete it.outPt; if (a2 >= d2 - 0.2) it.inPt = 0; } ch(true); o.rebuildInspector(); o.say('The clip now has what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab, keeping its place, trims and effects.'); }))));
     }
     function avatar(body, c, it, m, ch, cm) {
       body.append(sect('', UI.field('What you say here (preview only)', UI.area(it.text, v => { it.text = v; ch(false); }, 'Your line to camera', 3, 'Avatar line')),

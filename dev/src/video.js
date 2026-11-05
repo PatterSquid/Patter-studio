@@ -26,7 +26,9 @@ const Video = (() => {
   function natural(it, look) { const Mo = modOf(it.mod); if (!Mo || !it.cfg) return 3; let d = 3; try { d = Mo.duration(it.cfg, lookFor(it, look)); } catch (e) { } return d > 0 && isFinite(d) ? d : 3; }
   const speedOf = it => cl(+it.speed || 1, 0.05, 100);
   // A tab clip's own stretch: from its in point to its out point (seconds of the clip itself), and its whole length
-  function clipSpan(it, look) { const d = natural(it, look), a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)), e = it.outPt != null ? cl(+it.outPt, a + 0.1, d) : d; return [a, e, d]; }
+  // Clips that keep animating for as long as you like (the studio is a pure function of time), so they stretch instead of holding
+  const runsOn = it => !!it && it.kind === 'clip' && it.mod === 'studio';
+  function clipSpan(it, look) { const nat = natural(it, look), d = runsOn(it) ? Math.max(nat, 3600) : nat, a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)), e = it.outPt != null ? cl(+it.outPt, a + 0.1, d) : Math.max(a + 0.1, nat); return [a, e, d]; }
   const clipInner = (it, local, look) => { const [a, e] = clipSpan(it, look); return Math.min(e - 1e-4, a + Math.max(0, local) * speedOf(it)); };
   // Source stretch of a footage or sound clip: where it starts and ends in the file
   function srcSpan(it) { const m = M(it.asset), full = m ? (m.dur || 0) : 0; let a = cl(+it.src0 || 0, 0, Math.max(0, full - 0.04)), b = it.src1 == null ? full : cl(+it.src1, a + 0.04, Math.max(a + 0.04, full)); if (!m) b = it.src1 == null ? a + 3 : +it.src1; return [a, Math.max(a + 0.04, b)]; }
@@ -40,10 +42,23 @@ const Video = (() => {
   }
   // A transition on a main track clip overlaps it with the next one; it can't be longer than half of either
   const TRMAX = (a, b, look) => Math.max(0, Math.min(lenOf(a, look), lenOf(b, look)) / 2 - 0.02);
-  function trLen(it, next, look) { if (!it || !next || !it.tr || !it.tr.k || it.tr.k === 'none') return 0; const mx = Math.min(3, TRMAX(it, next, look)); if (mx < 0.1) return 0; return cl(+it.tr.d || 0.5, 0.1, mx); }
+  // Blank time before a main track clip (only when Snap is off; snapping closes every gap)
+  const gapOf = it => { const g = +(it && it.gap) || 0; return g > 0 ? Math.min(g, 36000) : 0; };
+  function trLen(it, next, look, free) { if (!it || !next || (free && gapOf(next) > 0) || !it.tr || !it.tr.k || it.tr.k === 'none') return 0; const mx = Math.min(3, TRMAX(it, next, look)); if (mx < 0.1) return 0; return cl(+it.tr.d || 0.5, 0.1, mx); }
   function layout(cfg, look) { const items = cfg.items || [], out = []; let t = 0;
-    for (let i = 0; i < items.length; i++) { const it = items[i], d = lenOf(it, look), o = { it, i, t0: t, d, trIn: out.length ? out[out.length - 1].trOut : 0, trOut: trLen(it, items[i + 1], look) }; out.push(o); t += d - o.trOut; }
+    for (let i = 0; i < items.length; i++) { const it = items[i], d = lenOf(it, look), g = cfg.free ? gapOf(it) : 0; t += g; const o = { it, i, t0: t, d, trIn: out.length && !g ? out[out.length - 1].trOut : 0, trOut: trLen(it, items[i + 1], look, !!cfg.free) }; out.push(o); t += d - o.trOut; }
     return out; }
+  // Puts main track clips at the times wanted (Snap off): in time order, a gap before each, never overlapping (a clip that
+  // would overlap the one before goes straight after it, and the rest follow on)
+  function setMainStarts(cfg, look, pairs) {
+    pairs = pairs.filter(q => q && q.it).sort((a, b) => a.start - b.start || (a.k || 0) - (b.k || 0)); cfg.items = pairs.map(q => q.it);
+    let pt0 = 0, pd = 0;
+    pairs.forEach((q, i) => { const it = q.it, d = lenOf(it, look), prevEnd = i ? pt0 + pd : 0, g = Math.max(0, q.start - prevEnd);
+      if (g > 0.004) it.gap = Math.round(g * 1000) / 1000; else delete it.gap;
+      pt0 = it.gap ? prevEnd + it.gap : i ? pt0 + pd - trLen(pairs[i - 1].it, it, look, true) : 0; pd = d; });
+    return cfg.items; }
+  const mainStarts = (cfg, look) => layout(cfg, look).map((o, k) => ({ it: o.it, start: o.t0, k }));
+  const closeGaps = cfg => (cfg.items || []).forEach(it => { delete it.gap; });
   const mainEnd = (cfg, look) => { const L = layout(cfg, look), l = L[L.length - 1]; return l ? l.t0 + l.d : 0; };
   function at(cfg, look, t) { const L = layout(cfg, look); if (!L.length) return null; let o = L[0]; for (const x of L) { if (x.t0 <= t + 1e-9) o = x; else break; } return o; }
   const tracksOf = (cfg, kind) => (cfg.tracks || []).filter(T => T && (!kind || T.kind === kind));
@@ -236,8 +251,11 @@ const Video = (() => {
   const studioCfg = cfg => cfg.studio || (hooks.studio && hooks.studio()) || (dfltStudio = dfltStudio || Studio.defaults());
   const studioOn = cfg => typeof Studio !== 'undefined';
   function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = studioOn(cfg) && studioCfg(cfg).avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
+  const studioT = (st, tAv) => Math.max(0, tAv - (st && st.avatar ? +st.avatar.inPt || 0 : 0));
   function drawGap(ctx, o, t, cfg, look, W, H) {
-    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), studioCfg(cfg), look, W, H); } finally { ctx.restore(); } return; }
+    // The studio's own clock (rain, lights, the plane and the rest outside) carries on from part to part with the avatar,
+    // so its timeline plays through the [ME] parts in order rather than running on behind the other clips
+    if (studioOn(cfg)) { const st = studioCfg(cfg), tAv = avStart(cfg, o, look) + (t - o.t0); ctx.save(); try { Studio.drawAt(ctx, studioT(st, tAv), tAv, st, look, W, H); } finally { ctx.restore(); } return; }
     if (look.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H); }
     if (!look.preview) return;
     label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
@@ -295,7 +313,7 @@ const Video = (() => {
   // Old B roll footage (Media) inside tab clips, and the studio avatar
   function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar')) (Studio.mediaFor(studioCfg(cfg)) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, out = []; for (const p of allPlaced(cfg, lk)) { if (t < p.t0 || t >= p.t0 + p.d) continue; const it = p.it, local = t - p.t0;
-      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(studioCfg(cfg), t, avStart(cfg, p.o, lk) + local));
+      if (it.kind === 'avatar' && studioOn(cfg) && p.o) { const st = studioCfg(cfg), tAv = avStart(cfg, p.o, lk) + local; out.push(...Studio.mediaAtAv(st, studioT(st, tAv), tAv)); }
       if (it.kind === 'clip') { const Mo = modOf(it.mod); if (Mo && Mo.mediaAt) out.push(...(Mo.mediaAt(it.cfg, clipInner(it, local, lk)) || [])); } }
     return out; }
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip' || (cfg.tracks || []).length) return null; const Mo = modOf(o.it.mod); if (!Mo || !Mo.blurHint) return null; return Mo.blurHint(o.it.cfg, lookFor(o.it, look), clipInner(o.it, t - o.t0, look), fps, W, H); }
@@ -343,7 +361,7 @@ const Video = (() => {
   // Split a clip in two at the timeline moment t
   function split(cfg, id, t, look) {
     const f = findItem(cfg, id); if (!f) return null; const it = f.it, p = allPlaced(cfg, look).find(q => q.it === it); if (!p) return null; const local = t - p.t0; if (local < 0.05 || local > p.d - 0.05) return null;
-    const b = JSON.parse(JSON.stringify(it)); b.id = nid('i');
+    const b = JSON.parse(JSON.stringify(it)); b.id = nid('i'); delete b.gap;
     if (it.kind === 'media' || it.kind === 'audio') { const m = M(it.asset); if (m && m.kind !== 'image' && it.still == null) { const s = srcTime(it, local); if (it.rev) { b.src1 = r3(s); it.src0 = r3(s); } else { it.src1 = r3(s); b.src0 = r3(s); } } else { it.dur = r3(local); b.dur = r3(p.d - local); } }
     else if (it.kind === 'clip') { const [a, e] = clipSpan(it, look), inner = a + local * speedOf(it); if (inner < e - 0.1) { b.inPt = r3(inner); it.outPt = r3(inner); it.hold = 0; } else { const left = p.d - local; it.hold = r3(Math.max(0, (+it.hold || 0) - left)); b.inPt = r3(Math.max(a, e - 0.15)); b.outPt = r3(e); b.hold = r3(Math.max(0.05, left - 0.15 / speedOf(it))); } }
     else { it.dur = r3(local); b.dur = r3(p.d - local); }
@@ -357,5 +375,5 @@ const Video = (() => {
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
-    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
+    runsOn, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();

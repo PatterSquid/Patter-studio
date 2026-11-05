@@ -318,6 +318,11 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-hn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .ct-hb{display:flex}
 .ct-hb .ci{width:24px;height:24px}
+.ct-snap{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 6px;border-radius:14px;background:#16223a;border:1px solid #2c3d5e;color:#9fb0cc;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ct-snap span{display:inline-flex;width:18px;height:18px}.ct-snap span svg{width:18px;height:18px}
+.ct-snap i{position:relative;width:26px;height:14px;border-radius:7px;background:#33425f;transition:background .15s}
+.ct-snap i::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#cfd8e8;transition:left .15s}
+.ct-snap.on{color:#fff;border-color:var(--bru)}.ct-snap.on i{background:var(--bru)}.ct-snap.on i::after{left:14px}
 .ct-tag{font-size:9px;color:var(--bru);font-style:normal;width:100%}
 .ct-lane{position:relative;flex:none;height:100%}
 .ct-clip{position:absolute;top:3px;bottom:3px;border-radius:6px;background:color-mix(in srgb,var(--c) 70%,#000);border:1px solid color-mix(in srgb,var(--c) 85%,#fff);overflow:hidden;cursor:grab;user-select:none;touch-action:none}
