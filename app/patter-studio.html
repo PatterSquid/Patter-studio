@@ -324,6 +324,11 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-hn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .ct-hb{display:flex}
 .ct-hb .ci{width:24px;height:24px}
+.ct-snap{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 6px;border-radius:14px;background:#16223a;border:1px solid #2c3d5e;color:#9fb0cc;font:600 12px system-ui,sans-serif;cursor:pointer}
+.ct-snap span{display:inline-flex;width:18px;height:18px}.ct-snap span svg{width:18px;height:18px}
+.ct-snap i{position:relative;width:26px;height:14px;border-radius:7px;background:#33425f;transition:background .15s}
+.ct-snap i::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#cfd8e8;transition:left .15s}
+.ct-snap.on{color:#fff;border-color:var(--bru)}.ct-snap.on i{background:var(--bru)}.ct-snap.on i::after{left:14px}
 .ct-tag{font-size:9px;color:var(--bru);font-style:normal;width:100%}
 .ct-lane{position:relative;flex:none;height:100%}
 .ct-clip{position:absolute;top:3px;bottom:3px;border-radius:6px;background:color-mix(in srgb,var(--c) 70%,#000);border:1px solid color-mix(in srgb,var(--c) 85%,#fff);overflow:hidden;cursor:grab;user-select:none;touch-action:none}
@@ -490,7 +495,7 @@ body.cut main{grid-template-rows:minmax(160px,1fr) auto var(--tlh,clamp(210px,36
   </section>
 </main>
 <dialog id="dlg" aria-label="Dialog"></dialog>
-<script id="patter-js">window.PATTER_APP_VERSION='2026.11.04.1';
+<script id="patter-js">window.PATTER_APP_VERSION='2026.11.05.1';
 /* Minimal MP4 (ISO BMFF) muxer for one H.264 video track.
    Samples are AVC length prefixed access units, as produced by WebCodecs with avc.format = 'avc'. */
 const MP4Mux = (() => {
@@ -5879,7 +5884,9 @@ const Video = (() => {
   function natural(it, look) { const Mo = modOf(it.mod); if (!Mo || !it.cfg) return 3; let d = 3; try { d = Mo.duration(it.cfg, lookFor(it, look)); } catch (e) { } return d > 0 && isFinite(d) ? d : 3; }
   const speedOf = it => cl(+it.speed || 1, 0.05, 100);
   // A tab clip's own stretch: from its in point to its out point (seconds of the clip itself), and its whole length
-  function clipSpan(it, look) { const d = natural(it, look), a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)), e = it.outPt != null ? cl(+it.outPt, a + 0.1, d) : d; return [a, e, d]; }
+  // Clips that keep animating for as long as you like (the studio is a pure function of time), so they stretch instead of holding
+  const runsOn = it => !!it && it.kind === 'clip' && it.mod === 'studio';
+  function clipSpan(it, look) { const nat = natural(it, look), d = runsOn(it) ? Math.max(nat, 3600) : nat, a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)), e = it.outPt != null ? cl(+it.outPt, a + 0.1, d) : Math.max(a + 0.1, nat); return [a, e, d]; }
   const clipInner = (it, local, look) => { const [a, e] = clipSpan(it, look); return Math.min(e - 1e-4, a + Math.max(0, local) * speedOf(it)); };
   // Source stretch of a footage or sound clip: where it starts and ends in the file
   function srcSpan(it) { const m = M(it.asset), full = m ? (m.dur || 0) : 0; let a = cl(+it.src0 || 0, 0, Math.max(0, full - 0.04)), b = it.src1 == null ? full : cl(+it.src1, a + 0.04, Math.max(a + 0.04, full)); if (!m) b = it.src1 == null ? a + 3 : +it.src1; return [a, Math.max(a + 0.04, b)]; }
@@ -5893,10 +5900,23 @@ const Video = (() => {
   }
   // A transition on a main track clip overlaps it with the next one; it can't be longer than half of either
   const TRMAX = (a, b, look) => Math.max(0, Math.min(lenOf(a, look), lenOf(b, look)) / 2 - 0.02);
-  function trLen(it, next, look) { if (!it || !next || !it.tr || !it.tr.k || it.tr.k === 'none') return 0; const mx = Math.min(3, TRMAX(it, next, look)); if (mx < 0.1) return 0; return cl(+it.tr.d || 0.5, 0.1, mx); }
+  // Blank time before a main track clip (only when Snap is off; snapping closes every gap)
+  const gapOf = it => { const g = +(it && it.gap) || 0; return g > 0 ? Math.min(g, 36000) : 0; };
+  function trLen(it, next, look, free) { if (!it || !next || (free && gapOf(next) > 0) || !it.tr || !it.tr.k || it.tr.k === 'none') return 0; const mx = Math.min(3, TRMAX(it, next, look)); if (mx < 0.1) return 0; return cl(+it.tr.d || 0.5, 0.1, mx); }
   function layout(cfg, look) { const items = cfg.items || [], out = []; let t = 0;
-    for (let i = 0; i < items.length; i++) { const it = items[i], d = lenOf(it, look), o = { it, i, t0: t, d, trIn: out.length ? out[out.length - 1].trOut : 0, trOut: trLen(it, items[i + 1], look) }; out.push(o); t += d - o.trOut; }
+    for (let i = 0; i < items.length; i++) { const it = items[i], d = lenOf(it, look), g = cfg.free ? gapOf(it) : 0; t += g; const o = { it, i, t0: t, d, trIn: out.length && !g ? out[out.length - 1].trOut : 0, trOut: trLen(it, items[i + 1], look, !!cfg.free) }; out.push(o); t += d - o.trOut; }
     return out; }
+  // Puts main track clips at the times wanted (Snap off): in time order, a gap before each, never overlapping (a clip that
+  // would overlap the one before goes straight after it, and the rest follow on)
+  function setMainStarts(cfg, look, pairs) {
+    pairs = pairs.filter(q => q && q.it).sort((a, b) => a.start - b.start || (a.k || 0) - (b.k || 0)); cfg.items = pairs.map(q => q.it);
+    let pt0 = 0, pd = 0;
+    pairs.forEach((q, i) => { const it = q.it, d = lenOf(it, look), prevEnd = i ? pt0 + pd : 0, g = Math.max(0, q.start - prevEnd);
+      if (g > 0.004) it.gap = Math.round(g * 1000) / 1000; else delete it.gap;
+      pt0 = it.gap ? prevEnd + it.gap : i ? pt0 + pd - trLen(pairs[i - 1].it, it, look, true) : 0; pd = d; });
+    return cfg.items; }
+  const mainStarts = (cfg, look) => layout(cfg, look).map((o, k) => ({ it: o.it, start: o.t0, k }));
+  const closeGaps = cfg => (cfg.items || []).forEach(it => { delete it.gap; });
   const mainEnd = (cfg, look) => { const L = layout(cfg, look), l = L[L.length - 1]; return l ? l.t0 + l.d : 0; };
   function at(cfg, look, t) { const L = layout(cfg, look); if (!L.length) return null; let o = L[0]; for (const x of L) { if (x.t0 <= t + 1e-9) o = x; else break; } return o; }
   const tracksOf = (cfg, kind) => (cfg.tracks || []).filter(T => T && (!kind || T.kind === kind));
@@ -6089,8 +6109,11 @@ const Video = (() => {
   const studioCfg = cfg => cfg.studio || (hooks.studio && hooks.studio()) || (dfltStudio = dfltStudio || Studio.defaults());
   const studioOn = cfg => typeof Studio !== 'undefined';
   function avStart(cfg, o, look) { let s = 0; for (const x of layout(cfg, look)) { if (x === o || x.it === o.it) break; if (x.it.kind === 'avatar') s += x.d; } const A = studioOn(cfg) && studioCfg(cfg).avatar; return (A ? +A.inPt || 0 : 0) + (o.it.avIn != null && o.it.avIn !== '' ? +o.it.avIn : s); }
+  const studioT = (st, tAv) => Math.max(0, tAv - (st && st.avatar ? +st.avatar.inPt || 0 : 0));
   function drawGap(ctx, o, t, cfg, look, W, H) {
-    if (studioOn(cfg)) { ctx.save(); try { Studio.drawAt(ctx, t, avStart(cfg, o, look) + (t - o.t0), studioCfg(cfg), look, W, H); } finally { ctx.restore(); } return; }
+    // The studio's own clock (rain, lights, the plane and the rest outside) carries on from part to part with the avatar,
+    // so its timeline plays through the [ME] parts in order rather than running on behind the other clips
+    if (studioOn(cfg)) { const st = studioCfg(cfg), tAv = avStart(cfg, o, look) + (t - o.t0); ctx.save(); try { Studio.drawAt(ctx, studioT(st, tAv), tAv, st, look, W, H); } finally { ctx.restore(); } return; }
     if (look.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H); }
     if (!look.preview) return;
     label(ctx, W, H, 'AVATAR', o.it.text || '', Math.max(0, o.d - (t - o.t0)));
@@ -6148,7 +6171,7 @@ const Video = (() => {
   // Old B roll footage (Media) inside tab clips, and the studio avatar
   function mediaFor(cfg) { const ids = new Set(); if (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar')) (Studio.mediaFor(studioCfg(cfg)) || []).forEach(x => ids.add(x)); const f = it => { const Mo = it.kind === 'clip' && modOf(it.mod); if (Mo && Mo.mediaFor) (Mo.mediaFor(it.cfg) || []).forEach(x => ids.add(x)); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function mediaAt(cfg, t, look) { const lk = look || { format: '16:9' }, out = []; for (const p of allPlaced(cfg, lk)) { if (t < p.t0 || t >= p.t0 + p.d) continue; const it = p.it, local = t - p.t0;
-      if (it.kind === 'avatar' && studioOn(cfg) && p.o) out.push(...Studio.mediaAtAv(studioCfg(cfg), t, avStart(cfg, p.o, lk) + local));
+      if (it.kind === 'avatar' && studioOn(cfg) && p.o) { const st = studioCfg(cfg), tAv = avStart(cfg, p.o, lk) + local; out.push(...Studio.mediaAtAv(st, studioT(st, tAv), tAv)); }
       if (it.kind === 'clip') { const Mo = modOf(it.mod); if (Mo && Mo.mediaAt) out.push(...(Mo.mediaAt(it.cfg, clipInner(it, local, lk)) || [])); } }
     return out; }
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip' || (cfg.tracks || []).length) return null; const Mo = modOf(o.it.mod); if (!Mo || !Mo.blurHint) return null; return Mo.blurHint(o.it.cfg, lookFor(o.it, look), clipInner(o.it, t - o.t0, look), fps, W, H); }
@@ -6196,7 +6219,7 @@ const Video = (() => {
   // Split a clip in two at the timeline moment t
   function split(cfg, id, t, look) {
     const f = findItem(cfg, id); if (!f) return null; const it = f.it, p = allPlaced(cfg, look).find(q => q.it === it); if (!p) return null; const local = t - p.t0; if (local < 0.05 || local > p.d - 0.05) return null;
-    const b = JSON.parse(JSON.stringify(it)); b.id = nid('i');
+    const b = JSON.parse(JSON.stringify(it)); b.id = nid('i'); delete b.gap;
     if (it.kind === 'media' || it.kind === 'audio') { const m = M(it.asset); if (m && m.kind !== 'image' && it.still == null) { const s = srcTime(it, local); if (it.rev) { b.src1 = r3(s); it.src0 = r3(s); } else { it.src1 = r3(s); b.src0 = r3(s); } } else { it.dur = r3(local); b.dur = r3(p.d - local); } }
     else if (it.kind === 'clip') { const [a, e] = clipSpan(it, look), inner = a + local * speedOf(it); if (inner < e - 0.1) { b.inPt = r3(inner); it.outPt = r3(inner); it.hold = 0; } else { const left = p.d - local; it.hold = r3(Math.max(0, (+it.hold || 0) - left)); b.inPt = r3(Math.max(a, e - 0.15)); b.outPt = r3(e); b.hold = r3(Math.max(0.05, left - 0.15 / speedOf(it))); } }
     else { it.dur = r3(local); b.dur = r3(p.d - local); }
@@ -6210,7 +6233,7 @@ const Video = (() => {
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
-    TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
+    runsOn, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();
 
 /* CutExport: renders the editor's timeline to an MP4 with sound (H.264 and AAC where the computer can, otherwise the next
@@ -6387,7 +6410,7 @@ const CutUI = (() => {
   function create(o) {
     /* o: { getCfg, getLook, setLook(k, v), player, ed, changed(full), commit, say, tabCfg(k), openItem(id), assetsChanged() } */
     const look = () => o.getLook(), cfg = () => o.getCfg();
-    let active = false, pps = 60, fitted = false, snapOn = true, curT = 0, drag = null, libTab = 'media', inspTab = {}, clipboard = null;
+    let active = false, pps = 60, fitted = false, altKey = false, curT = 0, drag = null, libTab = 'media', inspTab = {}, clipboard = null;
     const sel = () => o.ed.selected, select = id => { o.ed.select(id); markSel(); };
     const changed = full => o.changed(full !== false);
 
@@ -6461,7 +6484,7 @@ const CutUI = (() => {
     function drawPatter() {
       libBody.append(H('p', { className: 'hint', textContent: 'Clips from the other tabs: each starts as a copy of what is on that tab now, and Edit opens it there. Drag onto the main track or above it.' }));
       const g = H('div', { className: 'cl-grid' });
-      Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a ' + l + ' clip', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
+      Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a copy of what is in the ' + l + ' tab now', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
       libBody.append(g, H('h4', { className: 'cl-sub', textContent: 'Building blocks' }));
       const b = H('div', { className: 'cl-grid' });
       b.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'You talking to camera in your studio, with your avatar carrying on from the last time', on: { click: () => addBlock('avatar') } }, H('i', { textContent: '🎙' }), H('span', { textContent: 'You in the studio' })), { type: 'block', k: 'avatar' }),
@@ -6506,7 +6529,7 @@ const CutUI = (() => {
       insertMain(c, it, t); return 'C:' + it.id;
     }
     // Into the main track at the cut nearest t
-    function insertMain(c, it, t) { c.items = c.items || []; const L = V().layout(c, look()); let i = L.findIndex(x => t < x.t0 + x.d / 2); if (i < 0) i = L.length; c.items.splice(i, 0, it); }
+    function insertMain(c, it, t) { c.items = c.items || []; delete it.gap; if (c.free) { const pairs = V().mainStarts(c, look()); pairs.push({ it, start: Math.max(0, t), k: -1 }); V().setMainStarts(c, look(), pairs); return; } const L = V().layout(c, look()); let i = L.findIndex(x => t < x.t0 + x.d / 2); if (i < 0) i = L.length; c.items.splice(i, 0, it); }
     const endOf = id => { const p = V().allPlaced(cfg(), look()).find(q => 'C:' + q.it.id === id); return p ? p.t0 + p.d : 0; };
     function addAsset(id) { o.commit(); const m = CutMedia.info(id); const c = cfg(), t = o.player.t; let nid2;
       if (m.kind !== 'audio' && sel() && String(sel()).startsWith('C:')) { nid2 = placeAsset(id, t, null); }
@@ -6578,7 +6601,7 @@ const CutUI = (() => {
         ic('freeze', 'Freeze frame: hold this frame for 2 seconds (F)', () => freezeNow(), { disabled: !(m && m.kind === 'video') }),
         ic('detach', 'Detach the sound onto its own track', () => detachNow(), { disabled: !(m && m.kind === 'video' && m.hasAudio !== false && !it.mute) }),
         ic('marker', 'Add a marker at the playhead (M)', () => addMarker()), ic('shot', 'Save this frame as a picture (for a thumbnail)', () => saveFrame()), H('span', { className: 'ct-sep' }),
-        H('button', { type: 'button', className: 'ci' + (snapOn ? ' on' : ''), title: 'Snap to edges, markers and the playhead', 'aria-pressed': String(snapOn), innerHTML: I.snap, on: { click: () => { snapOn = !snapOn; drawBar(); } } }),
+        H('button', { type: 'button', className: 'ct-snap' + (snapIsOn() ? ' on' : ''), title: snapIsOn() ? 'Snap is on: clips on the main track butt up together and everything snaps to edges, markers and the playhead. Click to place clips anywhere, with blank screen between them.' : 'Snap is off: put clips anywhere, the space between them is blank screen. Click to snap everything back together.', 'aria-pressed': String(snapIsOn()), on: { click: () => toggleSnap() } }, H('span', { innerHTML: I.snap }), H('b', { textContent: 'Snap' }), H('i', {})),
         H('span', { className: 'ct-gap' }),
         H('span', { className: 'ct-meter', title: 'Sound level while playing' }, H('i', {})),
         ic('fit', 'Fit the whole video in view', () => { fitted = false; build(); }), zoomIn);
@@ -6643,7 +6666,7 @@ const CutUI = (() => {
       const scv = H('canvas', { className: 'ct-strips' }); lane.append(scv); lane._cv = scv;
       const list = r.kind === 'main' ? V().layout(c, lk).map(x => ({ it: x.it, t0: x.t0, d: x.d, o: x })) : (r.T.items || []).map(it => ({ it, t0: +it.start || 0, d: V().lenOf(it, lk) }));
       list.forEach((p, idx) => { const el = clipEl(p, r); lane.append(el); });
-      if (r.kind === 'main') { const L = V().layout(c, lk); L.slice(0, -1).forEach(x => { const has = x.it.tr && x.it.tr.k && x.it.tr.k !== 'none', at = x.t0 + x.d - (has ? x.trOut / 2 : 0);
+      if (r.kind === 'main') { const L = V().layout(c, lk); L.slice(0, -1).forEach(x => { if (c.free && V().gapOf(c.items[x.i + 1])) return; const has = x.it.tr && x.it.tr.k && x.it.tr.k !== 'none', at = x.t0 + x.d - (has ? x.trOut / 2 : 0);
           const d = H('button', { type: 'button', className: 'ct-tr' + (has ? ' on' : ''), style: `left:${at * pps}px`, title: has ? (V().TRANS[x.it.tr.k] || 'Transition') + ', ' + x.trOut.toFixed(2) + ' s. Click to change.' : 'Add a transition here', 'aria-label': 'Transition', 'data-tr': x.it.id, on: { pointerdown: e => trDown(e, x, has, d), click: e => e.stopPropagation() } });
           if (has) { const sp = H('div', { className: 'ct-trs' + (o.ed.selected === 'T:' + x.it.id ? ' on' : ''), style: `left:${(x.t0 + x.d - x.trOut) * pps}px;width:${Math.max(4, x.trOut * pps)}px`, title: 'Drag the ends to make the transition longer or shorter' }, H('b', { className: 'hl' }), H('b', { className: 'hr' }));
             sp.addEventListener('pointerdown', e => trLenDown(e, x)); lane.append(sp); }
@@ -6653,7 +6676,7 @@ const CutUI = (() => {
     // Transitions: drag the diamond to another cut to move it there (Ctrl or Alt keeps a copy where it was); click to pick it
     function trDown(e, x, has, el) {
       if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const x0 = e.clientX, lane = el.parentNode; let moved = false, target = null;
-      const cuts = () => V().layout(cfg(), look()).slice(0, -1);
+      const cuts = () => { const c2 = cfg(); return V().layout(c2, look()).slice(0, -1).filter(q => !(c2.free && V().gapOf(c2.items[q.i + 1]))); };
       const mv = ev => { if (!has) return; if (!moved && Math.abs(ev.clientX - x0) < 4) return; moved = true; el.classList.add('dragging'); const t = laneT(ev.clientX);
         let best = null, bd = 1e9; cuts().forEach(q => { const d = Math.abs(q.t0 + q.d - t); if (d < bd) { bd = d; best = q; } }); target = best && bd * pps < 80 ? best : null;
         el.style.left = (t * pps) + 'px'; lane.querySelectorAll('.ct-tr').forEach(b => b.classList.toggle('drop', !!target && b.dataset.tr === target.it.id && b !== el)); };
@@ -6725,7 +6748,10 @@ const CutUI = (() => {
     let multi = new Set();
     // Snapping: clip edges on every track, markers, the playhead and the start
     function snapPoints(exceptIds) { const pts = [0, curT]; V().allPlaced(cfg(), look()).forEach(p => { if (exceptIds && exceptIds.has(p.it.id)) return; pts.push(p.t0, p.t0 + p.d); }); (cfg().markers || []).forEach(m => pts.push(m.t)); rowList.filter(r => r.kind === 'layer').forEach(r => r.tr.items.forEach(i => { if (!(exceptIds && exceptIds.has(i.id))) pts.push(i.start, i.end); })); return pts; }
-    function snapT(v, pts, show) { if (!snapOn) { snapLine.hidden = true; return v; } const tol = 9 / pps; let best = v, bd = tol, hit = null; pts.forEach(p => { const d = Math.abs(p - v); if (d < bd) { bd = d; best = p; hit = p; } }); if (show !== false) { if (hit != null) { snapLine.hidden = false; snapLine.style.left = (HEAD + hit * pps) + 'px'; snapLine.style.height = (ruler.offsetHeight + rows.offsetHeight) + 'px'; } else snapLine.hidden = true; } return best; }
+    // Snap: on, the main track is magnetic and drags snap to edges (Alt held while dragging skips it); off, clips go anywhere
+    const snapIsOn = () => !cfg().free;
+    function toggleSnap() { o.commit(); const c = cfg(); if (c.free) { delete c.free; V().closeGaps(c); o.say('Snap on: the clips on the main track are back together.'); } else { c.free = true; o.say('Snap off: drag clips anywhere. The space between them is blank screen.'); } changed(); build(); }
+    function snapT(v, pts, show) { if (!snapIsOn() || altKey) { snapLine.hidden = true; return v; } const tol = 9 / pps; let best = v, bd = tol, hit = null; pts.forEach(p => { const d = Math.abs(p - v); if (d < bd) { bd = d; best = p; hit = p; } }); if (show !== false) { if (hit != null) { snapLine.hidden = false; snapLine.style.left = (HEAD + hit * pps) + 'px'; snapLine.style.height = (ruler.offsetHeight + rows.offsetHeight) + 'px'; } else snapLine.hidden = true; } return best; }
     function scrubStart(e) { if (e.button > 0) return; e.preventDefault(); o.player.pause(); o.player.scrub(true); const go = ev => { let t = laneT(ev.clientX); if (!ev.altKey) t = snapT(t, snapPoints(), false); t = Math.min(t, dur); o.player.seek(t); setTime(t, true); }; go(e);
       const mv = ev => go(ev), up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); o.player.scrub(false); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
     play.addEventListener('pointerdown', scrubStart);
@@ -6752,7 +6778,7 @@ const CutUI = (() => {
       drag = { el, h, moved: false, committed: false };
       const begin = () => { if (!drag.committed) { o.commit(); drag.committed = true; } };
       const mv = ev => {
-        const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
+        altKey = ev.altKey; const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
         if (ctx.layer) return layerDrag(ev, ctx, h, dx, pts);
         if (h === 'm') return moveDrag(ev, ctx, el, tAt, pts, c, lk);
         const r = trimDrag(ev, ctx, h, dx, pts, c, lk, JSON.parse(snap)); paintSoon(); return r;
@@ -6779,6 +6805,12 @@ const CutUI = (() => {
           else if (target && target.kind === 'newaudio') { const T = { id: V().nid('t'), kind: 'audio', name: 'Audio ' + (V().tracksOf(cfg(), 'audio').length + 1), items: [it] }; cfg().tracks.push(T); }
           else { const T = target && target.T; if (T && !overlaps(T, it, s)) { T.items.push(it); T.items.sort((a, b) => a.start - b.start); } else V().placeFree(cfg(), isAudio ? 'audio' : 'video', it, T); }
           V().pruneTracks(cfg()); };
+      } else if (cfg().free) {
+        // Snap off: the clip lands where it is dropped; anything it would overlap moves along after it
+        let s = snapT(t, pts); const se = snapT(t + p.d, pts); if (s === t && se !== t + p.d) s = se - p.d; s = Math.max(0, s);
+        el.style.left = s * pps + 'px'; dropMark(rowList.find(r => r.kind === 'main'), s, p.d);
+        drag.finish = () => { const c2 = cfg(), f = V().findItem(c2, it.id); if (!f) return; const pairs = V().mainStarts(c2, lk).filter(q => q.it !== it); if (f.track !== 'main') f.list.splice(f.i, 1); delete it.start; delete it.gap;
+          pairs.push({ it, start: r3(s), k: -1 }); V().setMainStarts(c2, lk, pairs); V().pruneTracks(c2); };
       } else {
         // Into (or along) the main track: it goes in at the nearest cut
         const L = V().layout(c, lk).filter(x => x.it !== it); let i = L.findIndex(x => laneT(ev.clientX) < x.t0 + x.d / 2); if (i < 0) i = L.length;
@@ -6798,8 +6830,10 @@ const CutUI = (() => {
         else { if (it.rev) { it.src0 = r3(cl((+orig.src0 || 0) - dt * sp, 0, (orig.src1 == null ? full : +orig.src1) - 0.05)); } else it.src1 = r3(cl((orig.src1 == null ? full : +orig.src1) + dt * sp, (+orig.src0 || 0) + 0.05, full)); } }
       else if (it.kind === 'clip') { const [a0, e0, d0] = V().clipSpan(orig, lk);
         if (left) { it.inPt = r3(cl(a0 + dt * sp, 0, e0 - 0.2)); if (free) it.start = r3(Math.max(0, (+orig.start || 0) + (it.inPt - a0) / sp)); }
-        else { const want = (p.d + dt), natural = (e0 - a0) / sp; if (want <= natural + 1e-3) { it.outPt = r3(cl(a0 + want * sp, a0 + 0.2, d0)); it.hold = 0; } else { it.outPt = orig.outPt; if (orig.outPt == null) delete it.outPt; it.hold = r2(cl(want - natural, 0, 600)); } } }
+        else { const want = (p.d + dt), natural = (e0 - a0) / sp; if (want <= natural + 1e-3 || V().runsOn(it)) { it.outPt = r3(cl(a0 + want * sp, a0 + 0.2, d0)); it.hold = 0; } else { it.outPt = orig.outPt; if (orig.outPt == null) delete it.outPt; it.hold = r2(cl(want - natural, 0, 600)); } } }
       else { const d0 = +orig.dur || p.d; if (left) { const nd = cl(d0 - dt, 0.1, 3600); it.dur = r3(nd); if (free) it.start = r3(Math.max(0, (+orig.start || 0) + (d0 - nd))); } else it.dur = r3(cl(d0 + dt, 0.1, 3600)); }
+      if (!free && cfg().free) { if (!drag.starts) drag.starts = V().mainStarts(Object.assign({}, cfg(), { items: cfg().items.map(x => x === it ? orig : x) }), lk).map(q => ({ it: q.it === orig ? it : q.it, start: q.start, k: q.k }));
+        const me = drag.starts.find(q => q.it === it), origLen = V().lenOf(orig, lk), nl = V().lenOf(it, lk); V().setMainStarts(cfg(), lk, drag.starts.map(q => q.it === it ? { it, start: left ? Math.max(0, me.start + origLen - nl) : me.start, k: q.k } : q)); }
       o.changed(false); const np = V().allPlaced(cfg(), lk).find(q => q.it === it); if (np) { drag.el.style.left = np.t0 * pps + 'px'; drag.el.style.width = Math.max(4, np.d * pps) + 'px'; drag.el._p = np; }
       const seekT = np ? (left ? np.t0 + 0.01 : np.t0 + np.d - 0.02) : curT; o.player.seek(seekT); setTime(seekT, true);
     }
@@ -6832,7 +6866,10 @@ const CutUI = (() => {
     function del(ripple) { const s = sel(); if (!s) return; const ids = multi.size > 1 ? [...multi] : [s]; o.commit(); const c = cfg(), lk = look();
       ids.forEach(id => { if (String(id).startsWith('T:')) { const f = V().findItem(c, id.slice(2)); if (f) delete f.it.tr; return; } if (String(id).startsWith('K:')) { const tid = id.slice(2); if (tid !== 'main') { c.tracks = (c.tracks || []).filter(T => T.id !== tid); } return; }
         if (String(id).startsWith('L:')) { Layers.wrap(Video).editor.remove(c, id); return; }
-        const f = V().findItem(c, id); if (!f) return; const p = V().allPlaced(c, lk).find(q => q.it === f.it), len = p ? p.d : 0, at = p ? p.t0 : 0; f.list.splice(f.i, 1);
+        const f = V().findItem(c, id); if (!f) return; const p = V().allPlaced(c, lk).find(q => q.it === f.it), len = p ? p.d : 0, at = p ? p.t0 : 0;
+        if (f.track === 'main' && c.free && !ripple) { V().setMainStarts(c, lk, V().mainStarts(c, lk).filter(q => q.it !== f.it)); return; }
+        if (f.track === 'main' && ripple) { const nx = c.items[f.i + 1]; if (nx && f.it.gap && !nx.gap) nx.gap = f.it.gap; }
+        f.list.splice(f.i, 1);
         // Ripple on an overlay or audio track: later clips on that track slide back
         if (ripple && f.track !== 'main' && f.T) f.T.items.forEach(x => { if ((+x.start || 0) > at) x.start = r3(Math.max(at, (+x.start || 0) - len)); }); });
       V().pruneTracks(c); multi.clear(); o.ed.select(null); changed(); build(); }
@@ -7072,7 +7109,9 @@ const CutInspect = (() => {
       const d = V().natural(it, look()), [a, e] = V().clipSpan(it, look());
       body.append(sect('', UI.field('Name on the timeline', UI.txt(it.name || '', v => { it.name = v; ch(); }, V().NAMES[it.mod], 'Clip name')),
         H('p', { className: 'hint', textContent: (V().NAMES[it.mod] || 'Clip') + ', ' + d.toFixed(1) + ' s long on its own. Showing ' + a.toFixed(1) + ' s to ' + e.toFixed(1) + ' s' + (it.hold ? ', then holding the last frame for ' + (+it.hold).toFixed(1) + ' s' : '') + '. Drag its ends on the timeline to trim it or hold it longer.' }),
-        H('div', { className: 'btnrow' }, UI.btn('Edit this clip in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id), 'primary'))));
+        H('div', { className: 'btnrow' }, UI.btn('Edit this clip in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id), 'primary')),
+        H('p', { className: 'hint', textContent: 'This clip is its own copy, made when you added it, so changes in the ' + (V().NAMES[it.mod] || '') + ' tab since then are not in it. Edit it with the button above (double click it on the timeline does the same), or bring in what the tab has now.' }),
+        H('div', { className: 'btnrow' }, UI.btn('Use what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab now', () => { const src = o.tabCfg(it.mod); if (!src) return; cm(); it.cfg = JSON.parse(JSON.stringify(src)); if (!V().runsOn(it)) { const [a2, , d2] = V().clipSpan(it, look()); if (it.outPt != null && +it.outPt > d2) delete it.outPt; if (a2 >= d2 - 0.2) it.inPt = 0; } ch(true); o.rebuildInspector(); o.say('The clip now has what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab, keeping its place, trims and effects.'); }))));
     }
     function avatar(body, c, it, m, ch, cm) {
       body.append(sect('', UI.field('What you say here (preview only)', UI.area(it.text, v => { it.text = v; ch(false); }, 'Your line to camera', 3, 'Avatar line')),
@@ -10156,7 +10195,7 @@ const Repair = (() => {
       ['tracks', 'markers', 'bin'].forEach(k => { if (cfg[k] != null && !Array.isArray(cfg[k])) { cfg[k] = []; n++; } });
       // Editor clips: footage, sound, colour cards and adjustments, on the main track or on their own tracks
       const okItem = it => plain(it) && (it.kind === 'avatar' || (it.kind === 'clip' && typeof it.mod === 'string') || ((it.kind === 'media' || it.kind === 'audio') && typeof it.asset === 'string') || it.kind === 'colour' || it.kind === 'adjust');
-      const nums = it => { if (it.kind === 'colour' && typeof it.col === 'string') { it.fill = it.col; delete it.col; n++; } if (it.fill != null && typeof it.fill !== 'string') { delete it.fill; n++; } ['start', 'src0', 'src1', 'dur', 'speed', 'x', 'y', 's', 'rot', 'op', 'vol', 'fadeIn', 'fadeOut', 'inPt', 'outPt', 'still'].forEach(f => { if (it[f] != null && it[f] !== '' && !isFinite(+it[f])) { delete it[f]; n++; } }); if (it.start != null && +it.start < 0) { it.start = 0; n++; } if (it.start != null && +it.start > 36000) { it.start = 36000; n++; } if (Array.isArray(it.fx)) { const fx = it.fx.filter(f => plain(f) && typeof f.k === 'string'); if (fx.length !== it.fx.length) { it.fx = fx; n++; } } if (it.kf != null && !plain(it.kf)) { delete it.kf; n++; }
+      const nums = it => { if (it.kind === 'colour' && typeof it.col === 'string') { it.fill = it.col; delete it.col; n++; } if (it.fill != null && typeof it.fill !== 'string') { delete it.fill; n++; } ['start', 'gap', 'src0', 'src1', 'dur', 'speed', 'x', 'y', 's', 'rot', 'op', 'vol', 'fadeIn', 'fadeOut', 'inPt', 'outPt', 'still'].forEach(f => { if (it[f] != null && it[f] !== '' && !isFinite(+it[f])) { delete it[f]; n++; } }); if (it.start != null && +it.start < 0) { it.start = 0; n++; } if (it.start != null && +it.start > 36000) { it.start = 36000; n++; } if (Array.isArray(it.fx)) { const fx = it.fx.filter(f => plain(f) && typeof f.k === 'string'); if (fx.length !== it.fx.length) { it.fx = fx; n++; } } if (it.kf != null && !plain(it.kf)) { delete it.kf; n++; }
         if (plain(it.kf)) Object.keys(it.kf).forEach(k => { const L = it.kf[k]; if (!Array.isArray(L)) { delete it.kf[k]; n++; return; } const ok = L.filter(q => Array.isArray(q) && isFinite(+q[0]) && isFinite(+q[1])); if (ok.length !== L.length) { it.kf[k] = ok; n++; } if (!ok.length) { delete it.kf[k]; } });
         if (typeof it.id !== 'string' || !it.id) { it.id = 'r' + Math.random().toString(36).slice(2, 9); n++; } ['fx'].forEach(f => { if (it[f] != null && !Array.isArray(it[f])) { delete it[f]; n++; } }); ['col', 'key', 'mask', 'tr', 'anIn', 'anOut', 'anLoop'].forEach(f => { if (it[f] != null && !plain(it[f])) { delete it[f]; n++; } }); if (it.crop != null && !(Array.isArray(it.crop) && it.crop.length === 4 && it.crop.every(x => isFinite(+x)))) { delete it.crop; n++; } };
       if (Array.isArray(cfg.tracks)) { const tk = cfg.tracks.filter(T => plain(T) && (T.kind === 'video' || T.kind === 'audio')); if (tk.length !== cfg.tracks.length) { cfg.tracks = tk; n++; }
