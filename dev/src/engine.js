@@ -130,13 +130,14 @@ const E = (() => {
 
   // Renders one frame of a module at full size, with optional motion blur sub samples.
   function renderInto(ctx, mod, cfg, look, W, H, t, samples, fps, scratch) {
-    if (samples <= 1) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); mod.draw(ctx, t, cfg, look, W, H); return; }
+    // Keeps the transform it is handed (a Video export below or above 1080p draws through a scaled context)
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.restore();
+    if (samples <= 1) { mod.draw(ctx, t, cfg, look, W, H); return; }
     const sx = scratch.getContext('2d'), shutter = 0.5 / fps;
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
     for (let i = 0; i < samples; i++) {
       const ts = t - shutter / 2 + shutter * (i + 0.5) / samples;
-      sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, W, H); mod.draw(sx, ts, cfg, look, W, H);
-      ctx.globalAlpha = 1 / (i + 1); ctx.drawImage(scratch, 0, 0); ctx.globalAlpha = 1;
+      sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, scratch.width, scratch.height); mod.draw(sx, ts, cfg, look, W, H);
+      ctx.globalAlpha = 1 / (i + 1); ctx.drawImage(scratch, 0, 0, W, H); ctx.globalAlpha = 1;
     }
   }
 

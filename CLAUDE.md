@@ -189,18 +189,33 @@ Branded PatterSquid openers. He did not like a simple cartoon gag (too basic, ch
 studio idents with one dry, adult Glaswegian wink. Four styles (`cfg.style`), every word editable: `name` (the wordmark),
 `lines[style]` (each style keeps its own line; empty for none), `episode` and `kicker` (an episode title with a wee label,
 adds 1.6 s), `hold`, `logo`, `blow` (neon: which letter blows), `sound` { on, vol }.
-* `ink`: a drop of squid ink lands and blooms (soft blobs at half size, cut sharp with a smooth threshold, so arms and
-  splashes melt together); eight arms curl into spirals like tentacles and keep off the words; his disc rises in the
-  middle; the name soaks in from the left, knocking out paper coloured where it crosses ink; a drip runs off the last
+* **All four are real 3D** (he rejected the flat 2D versions as novice). `dev/src/g3.js` (`G3`) is our own WebGL2 renderer:
+  each scene is one raymarched fragment shader (signed distance fields) into a float target, then bloom, ACES tone, vignette,
+  grain and a touch of colour fringing. Typed words become distance field textures (`G3.textSdf`: canvas text, exact EDT,
+  R16F in world units, with `hw` half the stroke width) so they can be neon tubes along the middle of each letter
+  (`max(sd + hw, 0)`) or extruded, bevelled solid letters (`sdExtrude`). The 3D world is laid out from a fixed reference
+  frame (`REF`, 1280x720, one world unit is 200 design pixels) so the 2D timings and positions carry over; table top scenes
+  have the table at z = 0 with the camera above. Flat printed things (lines, tickets, the episode) are drawn by the 2D code
+  into a reference sized layer (`printLayer`) and printed onto the surface. Overlays (sparks, salt, steam, gold dust,
+  flare) are 2D, placed with `G3.camera(...).project`. Cameras are keyframed (`cam3`), pulled back for narrow frames.
+  Without WebGL2, or if a shader fails, each style falls back to its old 2D drawing (`try3D`). Software GL in headless
+  tests takes about a second a frame at 640x360; on his PC it is a few ms.
+* `ink`: a 3D drop of squid ink falls onto paper and blooms (the 2D mask, unthresholded, is a height field: glossy wet ink
+  with a meniscus, casting onto the paper); eight arms curl into spirals like tentacles and keep off the words; his disc rises out of the ink as a coin with the ink draining off it; the name
+  rises as extruded letters from the left, paper coloured where it crosses ink; a drip runs off the last
   letter and splats.
-* `battered`: his squid drops into a steel fryer (glossy oil, foam), comes out in puffy golden batter with the squid
-  pressed in, whips across to chip paper (made up newsprint) on a heap of chunky chips, salt and vinegar; name slapped
-  on like a chippy sign, the line on a red menu strip; the episode on a handwritten ticket.
-* `neon`: night on a red sandstone tenement (ashlar blocks); a light box with his logo flickers on, the name buzzes on
+* `battered`: his squid (a coin) drops into a steel fryer (dark amber oil with rings, bubbles, flying drops, a basket), comes out in puffy golden batter with the squid
+  pressed in, whips across to chip paper (made up newsprint) on a heap of chunky chips (a height map
+  drawn once, `heap()`), salt and vinegar; name slapped
+  on as a chunky 3D chippy sign (red on white), the line on a 3D red menu board; the episode on a handwritten ticket.
+* `neon`: night on a wet red sandstone tenement (ashlar, sodium street lamp, drainpipe); a 3D light box with his logo
+  flickers on, the name buzzes on
   in neon letter by letter (PATTER cold blue, SQUID red), a letter (the Q by default) blows in sparks; line in pink
   script neon; episode as a fly poster.
-* `epic`: gold god rays, clouds, lens flare, a gold serif name with a glint, choir and brass, until a tentacle reaches
-  in; the picture switches off like an old telly and the logo is slapped on squint, plain.
+* `epic`: a gold medallion with his squid embossed rises through cloud banks, god rays round it, gold extruded serif
+  name swinging up with a glint, choir and brass, until a tentacle reaches
+  in (3D, suckers); the picture switches off like an old telly and the logo is slapped on a dark wall squint, plain,
+  under one bulb.
 * Sound (`Intro.sound`) is made from the same moments, evened out across styles; in the Video tab an Intro clip
   (`clip` with `mod: 'intro'`) plays it through a built in media file `Intro.soundId(cfg)` (made by `ensureSound` when
   missing; the mixer takes a tab clip's sound time from its own in point and speed). The Intro tab's Export (and

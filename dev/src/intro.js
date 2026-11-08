@@ -51,11 +51,11 @@ const Intro = (() => {
     const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(70,50,30,0.32)'); g.fillStyle = vg; g.fillRect(0, 0, W, H); paperCache.key = key; paperCache.c = c; return c; }
   // The ink, worked out at half size as soft blobs and then cut sharp (so the tendrils and splashes melt into one another)
   const inkBuf = {};
-  function inkMask(t, L, cfg) {
+  function inkMask(t, L, cfg, o3) {
     const { u, cx, cy, W, H } = L, k = 0.5, w = Math.ceil(W * k), h = Math.ceil(H * k); let c = inkBuf.c; if (!c || c.width !== w || c.height !== h) { c = inkBuf.c = mk(w, h); inkBuf.out = mk(w, h); }
     const g = c.getContext('2d', { willReadFrequently: true }); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); g.setTransform(k, 0, 0, k, 0, 0); g.fillStyle = '#fff';
     const e = t - INK.hit, P = [cx, cy - 70 * u];
-    if (t >= INK.drop && e < 0) { const f = cl((t - INK.drop) / (INK.hit - INK.drop), 0, 1), y = lerp(-40 * u, P[1], f * f); g.beginPath(); g.ellipse(P[0], y, 9 * u, 9 * u * (1 + f * 1.4), 0, 0, Math.PI * 2); g.fill(); }
+    if (t >= INK.drop && e < 0 && !o3) { const f = cl((t - INK.drop) / (INK.hit - INK.drop), 0, 1), y = lerp(-40 * u, P[1], f * f); g.beginPath(); g.ellipse(P[0], y, 9 * u, 9 * u * (1 + f * 1.4), 0, 0, Math.PI * 2); g.fill(); }
     if (e >= 0) {
       // The body: a wobbling round blob growing out from where the drop hit
       const R = 205 * u * eo5(e / 1.1) + 14 * u, r = rng(31); g.beginPath(); for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2, wob = 1 + 0.06 * Math.sin(a * 5 + 1.3) + 0.04 * Math.sin(a * 9 + e * 0.6) + 0.03 * Math.sin(a * 13 + 2); const x = P[0] + Math.cos(a) * R * wob, y = P[1] + Math.sin(a) * R * wob; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); g.fill();
@@ -74,7 +74,7 @@ const Intro = (() => {
       if (D.splat > 0) { const rs = rng(77), sp = D.splat; g.beginPath(); g.ellipse(D.x, D.ly, 34 * u * eo5(sp / 0.5), 12 * u * eo5(sp / 0.5), 0, 0, Math.PI * 2); g.fill(); for (let i = 0; i < 18; i++) { const a = Math.PI + rs() * Math.PI, d = (40 + rs() * 120) * u * eo5(sp / 0.45), s2 = (2 + rs() * 6) * u; g.beginPath(); g.arc(D.x + Math.cos(a) * d, D.ly + Math.sin(a) * d * 0.35, s2, 0, Math.PI * 2); g.fill(); } } }
     // Soften, then cut sharp with a smooth edge
     const o = inkBuf.out, og = o.getContext('2d', { willReadFrequently: true }); og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, w, h); og.filter = 'blur(' + (5 * u * k * 2).toFixed(1) + 'px)'; og.drawImage(c, 0, 0); og.filter = 'none';
-    const im = og.getImageData(0, 0, w, h), d = im.data; for (let i = 3; i < d.length; i += 4) { const a = d[i] / 255, v = a <= 0.36 ? 0 : a >= 0.56 ? 1 : sm((a - 0.36) / 0.2); d[i] = v * 255; d[i - 1] = d[i - 2] = d[i - 3] = 255; } og.putImageData(im, 0, 0);
+    if (o3) return o; const im = og.getImageData(0, 0, w, h), d = im.data; for (let i = 3; i < d.length; i += 4) { const a = d[i] / 255, v = a <= 0.36 ? 0 : a >= 0.56 ? 1 : sm((a - 0.36) / 0.2); d[i] = v * 255; d[i - 1] = d[i - 2] = d[i - 3] = 255; } og.putImageData(im, 0, 0);
     return o;
   }
   // Where the name sits (the drip comes off its last letter)
@@ -391,7 +391,7 @@ void main(){
       S('uHasBox', cfg.logo === false ? 0 : 1); S('uBoxOn', boxOn); S('uBoxC', [0, N3.boxY, N3.boxZ]); S('uBoxR', N3.boxR);
       S('uLamp', [-4.6, 3.6, 2.0]); S('uLampCol', [1.15, 0.62, 0.26]); S('uFlash', [blowP[0], blowP[1], 0.3, flash]);
       const ptx = poster ? G3.imageTex('poster', poster) : null; G3.tex(3, ptx || nm.tex, P, 'uPoster'); S('uPosterOn', ptx ? pOn : 0); S('uPosterRect', [0.05, N3.posterY, pw / 2, pw / 2 * (n3Poster.aspect || 0.15)]);
-    }, { scale: cfg._g3scale || 1, t, bloom: 0.75, expo: 1.0, grain: 0.035, thresh: 0.6, vig: 0.85 });
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.75, expo: 1.0, grain: 0.035, thresh: 0.6, vig: 0.85 });
     if (!ok) return false;
     // Sparks and smoke from the blown letter, in the same 3D space
     if (bk >= 0 && b >= 0 && b < 2.6) { const C = G3.camera(cam.e, cam.a, cam.fov, W, H), u = L.u; g.save(); g.globalCompositeOperation = 'lighter'; const rs = rng(4242);
@@ -487,9 +487,354 @@ void main(){
     g.restore();
   }
 
+  /* ================= Ink, Battered and Epic in 3D (G3) =================
+     The 3D world is laid out from a fixed reference frame (1280x720): one world unit is 200 design pixels, so the 2D
+     timings, positions and words carry over. Table top scenes have the table at z = 0 and the camera above it. */
+  const REF = layout(1280, 720), RS = 200 * REF.u, VIEW = [REF.W / 2 / RS, REF.H / 2 / RS];
+  const toW = (p, z = 0) => [(p[0] - REF.cx) / RS, (REF.cy - p[1]) / RS, z];
+  const mixV = (A, B, f) => A.map((v, i) => lerp(v, B[i], f));
+  function camPath(t, keys) { if (t <= keys[0][0]) return [keys[0][1], keys[0][2]]; for (let i = 0; i < keys.length - 1; i++) { const [t0, e0, a0] = keys[i], [t1, e1, a1] = keys[i + 1]; if (t < t1) { const f = eio((t - t0) / (t1 - t0)); return [mixV(e0, e1, f), mixV(a0, a1, f)]; } } const k = keys[keys.length - 1]; return [k[1], k[2]]; }
+  function cam3(keys, t, W, H, shake) { let [e, a] = camPath(t, keys); const back = Math.max(1, 1.62 / (W / H)); e = a.map((v, i) => v + (e[i] - v) * back); if (shake) e = e.map((v, i) => v + (shake[i] || 0)); return { e, a, fov: 40 * Math.PI / 180 }; }
+  const g3ok = () => typeof G3 !== 'undefined' && G3.available();
+  function setCam(P, cam, t, fade) { G3.set(P, 'uEye', cam.e); G3.set(P, 'uTgt', cam.a); G3.set(P, 'uFov', cam.fov); G3.set(P, 'uT', t); G3.set(P, 'uFade', fade == null ? 1 : fade); G3.set(P, 'uView', VIEW); }
+  function logoTex(P, unit, name) { const lt = logo ? G3.imageTex('logo', logo) : null; G3.tex(unit, lt || G3.imageTex('blank', blankC()), P, name); G3.set(P, 'uLogoOK', lt ? 1 : 0); }
+  let blank = null; const blankC = () => blank || (blank = mk(2, 2));
+  // A transparent layer in the reference frame, for flat printed things (lines, tickets, posters) the 2D code draws
+  const printB = {}; function printLayer(k, fn) { const c = printB[k] || (printB[k] = mk(REF.W, REF.H)), g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.clearRect(0, 0, REF.W, REF.H); g.save(); fn(g); g.restore(); return c; }
+  const VS3 = `#version 300 es
+precision highp float; in vec2 vUv; out vec4 o;
+uniform vec2 uRes, uView; uniform vec3 uEye, uTgt; uniform float uFov, uT, uFade, uLogoOK;`;
+  const CAM3 = `vec3 f = normalize(uTgt - uEye), rr = normalize(cross(f, vec3(0., 1., 0.))), up = cross(rr, f);
+  vec2 sp = (gl_FragCoord.xy - .5 * uRes) / (.5 * uRes.y); vec3 rd = normalize(f / tan(uFov * .5) + rr * sp.x + up * sp.y), ro = uEye;`;
+  const NRM3 = `vec3 nrmO(vec3 p){ const vec2 e = vec2(.0012, -.0012); return normalize(e.xyy * mapD(p + e.xyy) + e.yyx * mapD(p + e.yyx) + e.yxy * mapD(p + e.yxy) + e.xxx * mapD(p + e.xxx)); }
+vec2 refUV(vec2 xy){ return vec2(xy.x / (2. * uView.x) + .5, .5 - xy.y / (2. * uView.y)); }
+vec3 logoAt(vec2 q, float R){ vec2 uv = vec2(q.x, -q.y) / (R * 2. / .976) + .5; return uLogoOK > .5 ? pow(texture(uLogo, uv).rgb, vec3(2.2)) : vec3(.02, .1, .35); }`;
+
+  /* ---------- Ink burst ---------- */
+  const INK3FS = () => `${VS3}
+uniform sampler2D uInk, uName, uLogo, uPrint;
+uniform vec4 uNameBox; uniform vec2 uNameOff; uniform float uSoak, uNameH;
+uniform vec4 uDrop; uniform float uDropS; uniform vec3 uCoin; uniform float uCoinR, uHasCoin, uDrain;
+${G3.COMMON}
+const vec3 KEY = vec3(-.42, .5, .76), INKC = vec3(.004, .006, .012), PAPER = vec3(.80, .74, .62);
+float inkA(vec2 xy){ vec2 uv = vec2(xy.x / (2. * uView.x) + .5, .5 - xy.y / (2. * uView.y)); if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 0.; return texture(uInk, uv).a; }
+float inkH(vec2 xy){ return .05 * smoothstep(.34, .9, inkA(xy)); }
+float letH(float x){ return uNameH * (1. - smoothstep(uSoak - .6, uSoak, x)); }
+float mapO(vec3 p, out float id){
+  float d2 = texSdf(uName, uNameBox, p.xy - uNameOff), lh = letH(p.x); float d = sdExtrude(d2, p.z, max(lh, .0004), .008); if (lh < .004) d = max(d, .03); id = 1.;
+  if (uHasCoin > .5){ float dc = sdCapCyl(p - vec3(uCoin.xy, uCoin.z - .1), uCoinR, .1, .03); if (dc < d){ d = dc; id = 2.; } }
+  if (uDrop.w > 0.){ vec3 q = p - uDrop.xyz; q.z /= uDropS; float dd = (length(q) - uDrop.w) * min(1., uDropS); if (dd < d){ d = dd; id = 3.; } }
+  return d; }
+float mapD(vec3 p){ float i; return mapO(p, i); }
+${NRM3}
+float zTop(){ return max(.4, uDrop.z + uDrop.w * uDropS + .05); }
+float softSh(vec3 p, vec3 l){ float r = 1., t = .012; for (int i = 0; i < 32; i++){ float d = mapD(p + l * t); r = min(r, 10. * d / t); t += clamp(d, .01, .3); if (r < .01 || p.z + l.z * t > zTop()) break; } return clamp(r, 0., 1.); }
+vec3 env(vec3 r){ vec3 c = vec3(.025, .027, .035) * (.4 + .6 * max(r.z, 0.)); vec3 k = normalize(KEY); vec2 q = r.xy / max(r.z, .05) - k.xy / k.z; float box = smoothstep(.6, .4, abs(q.x)) * smoothstep(.45, .28, abs(q.y)); return c + vec3(1.05, 1.02, 1.) * box * step(0., r.z) * 1.4; }
+void main(){
+  ${CAM3}
+  vec3 L = normalize(KEY); float tw = rd.z < -1e-4 ? -ro.z / rd.z : 1e4, t = rd.z < 0. ? max(0., (zTop() - ro.z) / rd.z) : 0., id = 0.; bool hit = false;
+  for (int i = 0; i < 120; i++){ if (t > tw) break; vec3 p = ro + rd * t; float d = mapO(p, id); if (d < .0006 * t){ hit = true; break; } t += d * .9; }
+  vec3 col, n, alb; float gloss, sh; vec3 p;
+  if (hit){ p = ro + rd * t; n = nrmO(p);
+    if (id < 1.5){ float m = smoothstep(.36, .56, inkA(p.xy)); alb = mix(INKC, PAPER, m); gloss = mix(1., .1, m); }
+    else if (id < 2.5){ vec3 q = p - uCoin; float rq = length(q.xy); if (n.z > .7 && rq < uCoinR * .9){ vec3 lg = logoAt(q.xy, uCoinR * .9); float cover = smoothstep(-.05, .05, uDrain * uCoinR * 1.3 - rq - .12 * vnoise(q.xy * 5. + 3.)); alb = mix(INKC, lg, cover); gloss = mix(1., .6, cover); } else { alb = PAPER * .92; gloss = .5; } }
+    else { alb = INKC; gloss = 1.; }
+  } else { p = ro + rd * tw; vec2 xy = p.xy; float a = inkA(xy), m = smoothstep(.36, .56, a); const float e = .01; float h0 = inkH(xy), hx = inkH(xy + vec2(e, 0.)), hy = inkH(xy + vec2(0., e));
+    n = normalize(vec3(-(hx - h0) / e, -(hy - h0) / e, 1.)); n = normalize(n + vec3(vnoise(xy * 45.) - .5, vnoise(xy * 45. + 7.) - .5, 0.) * .07 * (1. - m)); p.z = h0;
+    vec3 paper = PAPER * (.88 + .14 * fbm(xy * 22.)); paper *= 1. - .3 * smoothstep(.1, .36, a) * (1. - m); paper *= 1. - .4 * smoothstep(0., .04, inkH(xy + L.xy * .09)) * (1. - m);
+    vec4 pr = texture(uPrint, refUV(xy)); paper = mix(paper, pow(pr.rgb, vec3(2.2)), pr.a); alb = mix(paper, INKC, m); gloss = m; }
+  sh = softSh(p + n * .003, L); vec3 r = reflect(rd, n); float fr = .04 + .96 * pow(1. - max(dot(n, -rd), 0.), 5.);
+  float pool = .6 + .5 * exp(-dot(p.xy - vec2(-.6, .5), p.xy - vec2(-.6, .5)) * .08);
+  col = alb * (max(dot(n, L), 0.) * sh * vec3(1.05, 1., .93) * 1.35 * pool + vec3(.2, .21, .24)) + env(r) * fr * gloss * (.35 + .65 * sh) + vec3(1.) * pow(max(dot(r, L), 0.), 140.) * 4. * gloss * sh;
+  o = vec4(max(col, 0.) * uFade, 1.); }`;
+  function drawInk3D(g, t, L, cfg) {
+    if (!g3ok()) return false; const { W, H } = L, name = nameOf(cfg) || ' ';
+    const nm = G3.textSdf(name, HEAVY, { worldW: REF.W * 0.86 / RS, maxWorldH: 148 * REF.u / RS, weight: '900', spacing: 0, key: 'ink' }); if (!nm) return false;
+    const em = nm.capH / 0.72, nameY = -255 * REF.u / RS + 0.36 * em, M = inkMask(t, REF, cfg, true), e = t - INK.hit, P0 = toW([REF.cx, REF.cy - 70 * REF.u]);
+    // the line and the episode title are printed on the paper
+    const pr = printLayer('ink', pg => { const { u, cx, cy, W: W0 } = REF, line = lineOf(cfg); if (line && t > INK.line) { const f = eo((t - INK.line) / 0.6), y = cy + 330 * u; pg.fillStyle = '#b8161d'; const rw = 520 * u * f; pg.fillRect(cx - rw / 2, y - 46 * u, rw, 3 * u); fitFont(pg, line, '700', COND, 40 * u, W0 * 0.8); pg.globalAlpha = sm((t - INK.line - 0.15) / 0.4); pg.fillStyle = INKC; pg.textBaseline = 'alphabetic'; spaced(pg, line, cx, y + (1 - f) * 10 * u, 6 * u, 'center'); pg.globalAlpha = 1; } episode(pg, t, REF, cfg, BASE.ink - 0.6, 'ink'); });
+    const ep = !!epOf(cfg), end = duration(cfg);
+    const keys = [[0, [0.1, -0.7, 7.6], [0, 0.3, 0]], [0.6, [0.1, -1.0, 7.0], [0, 0.3, 0]], [1.6, [-0.9, -4.2, 4.8], [0, 0.0, 0]], [3.1, [1.1, -5.4, 3.4], [0.2, -0.6, 0.1]], [4.5, [0, -4.6, 6.3], [0, -0.55, 0]]];
+    if (ep) keys.push([Math.min(end, 6.2), [0, -5.0, 6.4], [0, -1.05, 0]]);
+    const sh = e > 0 && e < 0.35 ? [Math.sin(e * 80) * 0.05 * (1 - e / 0.35), Math.cos(e * 67) * 0.05 * (1 - e / 0.35), 0] : null, cam = cam3(keys, t, W, H, sh);
+    const df = cl((t - INK.drop) / (INK.hit - INK.drop), 0, 1), drop = t >= INK.drop && e < 0 ? [P0[0], P0[1], lerp(7, 0.08, df * df), 0.12] : [0, 0, 0, 0];
+    const rf = eo((t - INK.disc) / 0.7), wf = (t - INK.word) / 0.75, x0 = -nm.width / 2 - 0.3, x1 = nm.width / 2 + 0.5;
+    return G3.render('ink3', INK3FS(), g, W, H, P => { const S = (k, v) => G3.set(P, k, v); setCam(P, cam, t, sm(t / 0.25));
+      G3.tex(0, G3.imageTex('inkmask', M, true), P, 'uInk'); G3.tex(1, nm.tex, P, 'uName'); logoTex(P, 2, 'uLogo'); G3.tex(3, G3.imageTex('inkprint', pr, true), P, 'uPrint');
+      S('uNameBox', nm.box); S('uNameOff', [0, nameY]); S('uSoak', t < INK.word ? -99 : lerp(x0, x1, eio(wf))); S('uNameH', 0.085);
+      S('uDrop', drop); S('uDropS', 1 + 1.4 * df); S('uCoin', [P0[0], P0[1], lerp(-0.14, 0.13, rf)]); S('uCoinR', 168 * REF.u / RS); S('uHasCoin', cfg.logo !== false && t > INK.disc ? 1 : 0); S('uDrain', eo((t - INK.disc - 0.2) / 0.9));
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.35, expo: 1.05, grain: 0.03, thresh: 0.9, vig: 0.7 });
+  }
+
+  /* ---------- Battered ---------- */
+  const COIN3 = `float batter(vec2 q){ return .045 + .03 * vnoise(q * 6.) + .022 * vnoise(q * 15. + 3.) + .012 * vnoise(q * 33. + 9.); }`;
+  const FRY3FS = () => `${VS3}
+uniform sampler2D uLogo; uniform vec3 uCoin; uniform float uCoinR, uTilt, uBat, uHasCoin, uSpl, uLift, uFury;
+uniform vec4 uDr[24]; uniform int uND;
+${G3.COMMON}
+${COIN3}
+const vec2 FRY = vec2(5.4, 3.2); const vec3 KEY = vec3(.25, .5, .83);
+vec3 coinQ(vec3 p){ vec3 q = p - uCoin; q.yz = rot2(-uTilt) * q.yz; return q; }
+float mapO(vec3 p, out float id){
+  float d = max(sdRoundBox(p - vec3(0., 0., -.5), vec3(FRY + 5., 1.35), .02), -sdRoundBox(p - vec3(0., 0., -.2), vec3(FRY, 1.5), .1)); id = 1.;
+  if (uHasCoin > .5){ vec3 q = coinQ(p); float dc = sdCapCyl(q, uCoinR, .1, .04); if (dc < .4) dc -= uBat * batter(q.xy); if (dc < d){ d = dc * .8; id = 2.; } }
+  for (int i = 0; i < 24; i++){ if (i >= uND) break; float dd = length(p - uDr[i].xyz) - uDr[i].w; if (dd < d){ d = dd; id = 3.; } }
+  if (uLift > -1.){ vec2 q = rot2(.785) * p.xy; vec2 c = mod(q, .34) - .17; float dz = p.z - uLift; float dg = min(length(vec2(c.x, dz)), length(vec2(c.y, dz))) - .02; dg = max(dg, sdRoundBox(vec3(p.xy, 0.), vec3(FRY - .15, 1.), .1)); if (dg < d){ d = dg; id = 4.; } }
+  return d; }
+float mapD(vec3 p){ float i; return mapO(p, i); }
+${NRM3}
+float softSh(vec3 p, vec3 l){ float r = 1., t = .015; for (int i = 0; i < 28; i++){ float d = mapD(p + l * t); r = min(r, 9. * d / t); t += clamp(d, .01, .3); if (r < .01 || p.z + l.z * t > 1.8) break; } return clamp(r, 0., 1.); }
+vec3 envK(vec3 r){ float z = max(r.z, .08); vec3 c = vec3(.05, .045, .04) * (.4 + .6 * max(r.z, 0.)); vec2 q = r.xy / z; float s1 = smoothstep(.09, .0, abs(q.y - .6)) * smoothstep(1.6, 1.0, abs(q.x)); float s2 = smoothstep(.2, .0, length(q - vec2(-1., -.3)) - .1); float s3 = smoothstep(.2, .0, length(q - vec2(1.1, .1)) - .08);
+  return c + (vec3(1., .97, .9) * s1 * .9 + vec3(1., .62, .28) * (s2 + s3) * 1.2) * step(0., r.z); }
+float oilH(vec2 p){ float h = .0022 * sin(p.x * 2.1 + uT * 1.6 + sin(p.y * 1.3)) + .002 * sin(p.y * 2.6 - uT * 1.2) + .0012 * sin((p.x + p.y) * 5. + uT * 2.6);
+  if (uSpl > 0.){ float r = length(p - uCoin.xy), k = r - uCoinR - uSpl * 2.6; h += .05 * exp(-uSpl * 1.3) * sin(k * 11.) * exp(-k * k * 1.6) * smoothstep(uCoinR * .9, uCoinR * 1.1, r); }
+  return h; }
+vec4 bubbles(vec2 p, float dens, float sc){ p *= sc; vec2 gc = floor(p), fc = fract(p); float bd = 2.; vec2 off = vec2(0.);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 o2 = vec2(i, j), id = gc + o2; float h1 = hash12(id), h2 = hash12(id + 17.3); if (hash12(id + 5.1) > dens) continue; vec2 c = o2 + vec2(h1, h2) * .7 + .15 - fc; float life = .4 + h1 * .5, ph = fract(uT / life + h2 * 7.), r = (.12 + .2 * h2) * sin(3.1416 * ph); float d = length(c) / max(r, 1e-3); if (d < bd){ bd = d; off = -c / max(r, 1e-3); } }
+  if (bd >= 1.) return vec4(0.); return vec4(off, sqrt(1. - bd * bd), 1.); }
+vec3 objCol(float id, vec3 p, vec3 n, vec3 rd){ vec3 L = normalize(KEY), r = reflect(rd, n); float fr = .04 + .96 * pow(1. - max(dot(n, -rd), 0.), 5.), dif = max(dot(n, L), 0.);
+  if (id < 1.5){ vec3 rb = normalize(r + vec3(0., (vnoise(p.xy * vec2(2., 90.)) - .5) * .25, 0.)); return vec3(.03) + envK(rb) * (.5 + .4 * fr) + vec3(.05) * dif; }
+  if (id < 2.5){ vec3 q = coinQ(p); vec3 nq = n; nq.yz = rot2(-uTilt) * nq.yz; vec3 lg = logoAt(q.xy, uCoinR); float lum = dot(lg, vec3(.3, .5, .2));
+    vec3 bat = mix(vec3(.38, .14, .015), vec3(.85, .48, .1), fbm(q.xy * 9.)) * (.7 + .5 * smoothstep(.1, .5, lum)); vec3 a = mix(nq.z > .6 ? lg : vec3(.5, .5, .48), bat, smoothstep(.0, .6, uBat));
+    return a * (dif * vec3(1.1, .95, .75) + .12) + envK(r) * fr * mix(.6, .3, uBat) + vec3(1., .9, .7) * pow(max(dot(r, L), 0.), 40.) * .5 * uBat; }
+  if (id < 3.5) return vec3(.55, .27, .04) * (dif + .3) + envK(r) * (.1 + fr) * 1.5;
+  return vec3(.2) * (dif + .2) + envK(r) * .7; }
+void main(){
+  ${CAM3}
+  vec3 L = normalize(KEY); float t = rd.z < 0. ? max(0., (max(2., uCoin.z + .6) - ro.z) / rd.z) : 0., id = 0.; bool hit = false; float tOil = rd.z < -1e-4 ? -ro.z / rd.z : 1e4, tFar = tOil + 3.;
+  for (int i = 0; i < 120; i++){ if (t > tFar) break; vec3 p = ro + rd * t; float d = mapO(p, id); if (d < .0006 * t){ hit = true; break; } t += d * .9; }
+  vec3 po = ro + rd * tOil; bool inOil = tOil < 1e3 && abs(po.x) < FRY.x - .1 && abs(po.y) < FRY.y - .1 && (!hit || t > tOil);
+  vec3 col = vec3(.01);
+  if (inOil){ vec2 xy = po.xy; const float e = .01; float h0 = oilH(xy); vec3 n = normalize(vec3(-(oilH(xy + vec2(e, 0.)) - h0) / e, -(oilH(xy + vec2(0., e)) - h0) / e, 1.));
+    float near = uFury * exp(-pow(max(length(xy - uCoin.xy) - uCoinR, 0.) * 1.4, 2.)); vec4 b1 = bubbles(xy, .35, 5.), b2 = bubbles(xy + 11., near * .95, 8.); vec4 b = b1.w > 0. ? b1 : b2; if (b.w > 0.) n = normalize(mix(n, b.xyz, .9));
+    vec3 r = reflect(rd, n); float fr = .05 + .95 * pow(1. - max(dot(n, -rd), 0.), 5.);
+    vec3 deep = vec3(.16, .055, .006) * (.7 + .6 * fbm(xy * .6 + uT * .08)) + vec3(.35, .15, .02) * pow(fbm(xy * 1.4 - uT * .15), 3.) * .8;
+    vec3 tr = deep; if (hit){ vec3 p = ro + rd * t; vec3 nn = nrmO(p); tr = objCol(id, p, nn, rd) * vec3(1., .5, .12) * exp(-(t - tOil) * 2.) * 1.2 + deep * (1. - exp(-(t - tOil) * 2.)); }
+    col = tr * (1. - fr) + envK(r) * fr + vec3(1., .85, .6) * pow(max(dot(r, L), 0.), 300.) * 2.;
+    if (b.w > 0.) col += vec3(1., .85, .5) * .08;
+    col *= .55 + .45 * smoothstep(0., 1.2, min(FRY.x - abs(xy.x), FRY.y - abs(xy.y)));
+  } else if (hit){ vec3 p = ro + rd * t, n = nrmO(p); col = objCol(id, p, n, rd) * mix(.4, 1., softSh(p + n * .004, L)); }
+  // steam hanging over the fryer
+  float st = fbm(vec2(gl_FragCoord.x / uRes.y * 2., gl_FragCoord.y / uRes.y * 2. - uT * .35)); col += vec3(.5, .45, .4) * smoothstep(.55, .9, st) * .12;
+  o = vec4(max(col, 0.) * uFade, 1.); }`;
+  // The chip heap: a height map of chips drawn once (cheap to march, proper shadows)
+  const HEAP = { x0: -3.4, x1: 3.4, y0: -1.7, y1: 2.2, w: 640, h: 368 }; let heapC = null;
+  function heap() { if (heapC) return heapC; const { x0, x1, y0, y1, w, h } = HEAP, hm = new Float32Array(w * h), cc = mk(w, h), cg = cc.getContext('2d'), im = cg.createImageData(w, h), d = im.data, r = rng(55), chips = [];
+    for (let i = 3; i < d.length; i += 4) d[i] = 0;
+    for (let i = 0; i < 115; i++) { const a = r() * Math.PI * 2, dd = Math.sqrt(r()) * 1.8, x = Math.cos(a) * dd * 1.35, y = 0.2 + Math.sin(a) * dd * 0.62; if (y < -0.75) continue; chips.push({ x, y, zc: 0.06 + 0.4 * Math.exp(-dd * dd * 0.45) + r() * 0.07, yaw: r() * Math.PI, hl: 0.3 + r() * 0.2, hw: 0.1 + r() * 0.03, pitch: (r() - 0.5) * 0.35, tone: r(), s: i }); }
+    chips.sort((a, b) => a.zc - b.zc).forEach(c => { const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw), ext = c.hl + c.hw, rs = rng(900 + c.s), spots = Array.from({ length: 5 }, () => [(rs() * 2 - 1) * c.hl, (rs() * 2 - 1) * c.hw * 0.7, 0.012 + rs() * 0.02]);
+      const ix0 = Math.max(0, Math.floor((c.x - ext - x0) / (x1 - x0) * w)), ix1 = Math.min(w - 1, Math.ceil((c.x + ext - x0) / (x1 - x0) * w)), iy0 = Math.max(0, Math.floor((y1 - (c.y + ext)) / (y1 - y0) * h)), iy1 = Math.min(h - 1, Math.ceil((y1 - (c.y - ext)) / (y1 - y0) * h));
+      for (let iy = iy0; iy <= iy1; iy++) for (let ix = ix0; ix <= ix1; ix++) { const px = x0 + (ix + 0.5) / w * (x1 - x0), py = y1 - (iy + 0.5) / h * (y1 - y0), dx = px - c.x, dy = py - c.y, u = dx * cs + dy * sn, v = -dx * sn + dy * cs, ue = Math.max(0, Math.abs(u) - (c.hl - c.hw)), cr = c.hw * c.hw - v * v - ue * ue; if (cr <= 0) continue;
+        const z = c.zc + u * c.pitch + 0.85 * Math.sqrt(cr), k = iy * w + ix; if (z <= hm[k]) continue; hm[k] = z; const end = Math.abs(u) / c.hl, side = Math.abs(v) / c.hw; let R = 238 - 14 * c.tone, G = 196 - 26 * c.tone - 22 * side, B = 112 - 40 * c.tone - 25 * side;
+        const brown = sm((end - 0.75) / 0.25) * 0.6 + spots.reduce((s, q) => s + (Math.hypot(u - q[0], v - q[1]) < q[2] ? 0.55 : 0), 0); R = lerp(R, 168, brown); G = lerp(G, 104, brown); B = lerp(B, 36, brown); d[k * 4] = R; d[k * 4 + 1] = G; d[k * 4 + 2] = B; d[k * 4 + 3] = 255; } });
+    cg.putImageData(im, 0, 0); return (heapC = { hm, c: cc }); }
+  const CHIP3FS = () => `${VS3}
+uniform sampler2D uLogo, uPaper, uHeap, uHeapC, uName, uBoard, uPrint; uniform vec4 uHeapR;
+uniform vec3 uCoin; uniform float uCoinR, uSq, uHasCoin;
+uniform vec4 uNameBox; uniform vec3 uSign; uniform float uSignS, uSignA, uHasSign;
+uniform vec3 uBoardC; uniform vec2 uBoardH; uniform float uBoardA, uBoardS, uHasBoard;
+uniform vec4 uVin[26]; uniform int uNV;
+${G3.COMMON}
+${COIN3}
+const vec3 KEY = vec3(-.35, .45, .82);
+vec2 heapUV(vec2 xy){ return vec2((xy.x - uHeapR.x) / (uHeapR.y - uHeapR.x), (uHeapR.w - xy.y) / (uHeapR.w - uHeapR.z)); }
+float heapH(vec2 xy){ vec2 uv = heapUV(xy); if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 0.; return texture(uHeap, uv).r; }
+vec3 coinQ(vec3 p){ vec3 q = p - uCoin; q.xy /= uSq; q.z *= uSq; return q; }
+float signD(vec3 p, out float red){ vec3 q = p - uSign; q.xy = rot2(-uSignA) * q.xy; q.xy /= uSignS; q.z *= uSignS; float d2 = texSdf(uName, uNameBox, q.xy); float dw = sdExtrude(d2 - .075, q.z, .1, .015), dr = sdExtrude(d2, q.z - .09, .09, .012); red = dr < dw ? 1. : 0.; return min(dw, dr) * min(uSignS, 1. / uSignS); }
+vec3 boardQ(vec3 p){ vec3 q = p - uBoardC; q.xy = rot2(-uBoardA) * q.xy; q /= uBoardS; return q; }
+float mapO(vec3 p, out float id){ float d = (p.z - heapH(p.xy)) * .55; id = 1.;
+  if (uHasCoin > .5){ vec3 q = coinQ(p); float dc = sdCapCyl(q, uCoinR, .11, .05); if (dc < .4) dc -= batter(q.xy); dc *= .75 * min(uSq, 1. / uSq); if (dc < d){ d = dc; id = 2.; } }
+  if (uHasSign > .5){ float red; float ds = signD(p, red); if (ds < d){ d = ds; id = 3. + red * .25; } }
+  if (uHasBoard > .5){ vec3 q = boardQ(p); float db = sdRoundBox(q, vec3(uBoardH, .03), .02) * uBoardS; if (db < d){ d = db; id = 4.; } }
+  return d; }
+float mapD(vec3 p){ float i; return mapO(p, i); }
+${NRM3}
+float softSh(vec3 p, vec3 l){ float r = 1., t = .015; for (int i = 0; i < 30; i++){ float d = mapD(p + l * t); r = min(r, 9. * d / t); t += clamp(d, .01, .25); if (r < .01 || p.z + l.z * t > max(1.4, uCoin.z * uHasCoin + .4)) break; } return clamp(r, 0., 1.); }
+float vinegar(vec2 xy){ float w = 0.; for (int i = 0; i < 26; i++){ if (i >= uNV) break; w = max(w, uVin[i].w * smoothstep(uVin[i].z, uVin[i].z * .6, length(xy - uVin[i].xy))); } return w; }
+vec3 envW(vec3 r){ return vec3(.06, .055, .05) * (.4 + .6 * max(r.z, 0.)) + vec3(1., .95, .85) * smoothstep(.8, .95, dot(r, normalize(KEY))) * 2.; }
+void main(){
+  ${CAM3}
+  vec3 L = normalize(KEY); float t = rd.z < 0. ? max(0., (max(1.6, uCoin.z * uHasCoin + .5) - ro.z) / rd.z) : 0., tw = rd.z < -1e-4 ? -ro.z / rd.z + .01 : 1e4, id = 0.; bool hit = false;
+  for (int i = 0; i < 140; i++){ if (t > tw) break; vec3 p = ro + rd * t; float d = mapO(p, id); if (d < .0006 * t){ hit = true; break; } t += d; }
+  if (!hit){ t = tw; id = 1.; }
+  vec3 p = ro + rd * t, n = nrmO(p); if (!hit) n = vec3(0., 0., 1.); vec3 alb; float gloss = .05, wet = vinegar(p.xy);
+  if (id < 1.5){ float hh = heapH(p.xy); if (hh > .004){ alb = pow(texture(uHeapC, heapUV(p.xy)).rgb, vec3(2.2)); gloss = .3; } else { vec2 uv = refUV(p.xy); uv = abs(mod(uv + 1., 2.) - 1.); alb = pow(texture(uPaper, uv).rgb, vec3(2.2)) * .95; vec2 pu = refUV(p.xy); vec4 pr = pu.x > 0. && pu.y > 0. && pu.x < 1. && pu.y < 1. ? texture(uPrint, pu) : vec4(0.); alb = mix(alb, pow(pr.rgb, vec3(2.2)), pr.a); } }
+  else if (id < 2.5){ vec3 q = coinQ(p); vec3 lg = logoAt(q.xy, uCoinR); float lum = dot(lg, vec3(.3, .5, .2)); alb = mix(vec3(.4, .15, .02), vec3(.85, .5, .12), fbm(q.xy * 9.)) * (.7 + .5 * smoothstep(.1, .5, lum) * step(.5, n.z)); gloss = .3; }
+  else if (id < 3.1){ alb = vec3(.85, .84, .8); gloss = .25; }
+  else if (id < 3.5){ alb = vec3(.42, .004, .006); gloss = .15; vec3 q = p - uSign; q.xy = rot2(-uSignA) * q.xy; q.xy /= uSignS; if (texSdf(uName, uNameBox, q.xy) > -.022 && n.z > .5) alb = vec3(.02); }
+  else { vec3 q = boardQ(p); if (n.z > .5){ vec2 uv = vec2(q.x / uBoardH.x, -q.y / uBoardH.y) * .5 + .5; alb = pow(texture(uBoard, uv).rgb, vec3(2.2)); } else alb = vec3(.5, .02, .02); gloss = .5; }
+  alb *= 1. - wet * .4; gloss = mix(gloss, .9, wet);
+  float sh = softSh(p + n * .004, L), dif = max(dot(n, L), 0.) * sh; vec3 r = reflect(rd, n); float fr = .04 + .96 * pow(1. - max(dot(n, -rd), 0.), 5.);
+  float pool = .55 + .55 * exp(-dot(p.xy - vec2(0., .2), p.xy - vec2(0., .2)) * .06);
+  vec3 col = alb * (dif * vec3(1.15, 1.02, .85) * 1.4 * pool + vec3(.16, .17, .2) * (.6 + .4 * n.z)) + envW(r) * fr * gloss + vec3(1., .95, .85) * pow(max(dot(r, L), 0.), 60.) * gloss * sh * 1.5;
+  o = vec4(max(col, 0.) * uFade, 1.); }`;
+  const boardB = {}; function boardTex(line) { if (boardB.key === line) return boardB; const c = mk(1024, 160), g = c.getContext('2d'); g.fillStyle = '#c4141c'; g.fillRect(0, 0, 1024, 160); g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 4; g.strokeRect(10, 10, 1004, 140);
+    const size = fitFont(g, line, '800', COND, 92, 940); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(line, 512, 84); void size; boardB.key = line; boardB.c = c; return boardB; }
+  function drawBattered3D(g, t, L, cfg) {
+    if (!g3ok()) return false; const { W, H } = L;
+    if (t < BT.whip) return fryer3D(g, t, L, cfg);
+    const wk = t - BT.whip; if (wk >= 0.22) return chips3D(g, t, L, cfg);
+    // Whipped across: the fryer flies out left, the chip paper in from the right, smeared
+    const pan = (1 - eo(wk / 0.22)) * W, A = layerBuf('w3a', W, H), B = layerBuf('w3b', W, H);
+    if (!fryer3D(A.getContext('2d'), t, L, cfg) || !chips3D(B.getContext('2d'), t, L, cfg)) return false;
+    g.drawImage(A, pan - W, 0); g.drawImage(B, pan, 0); const S = layerBuf('w3s', W, H), sg = S.getContext('2d'); sg.setTransform(1, 0, 0, 1, 0, 0); sg.clearRect(0, 0, W, H); sg.drawImage(g.canvas, 0, 0);
+    g.save(); const a = 0.4 * (1 - wk / 0.22); for (let k = 1; k <= 5; k++) { g.globalAlpha = a / k; g.drawImage(S, k * 34 * L.u * (1 - wk / 0.22), 0); g.drawImage(S, -k * 34 * L.u * (1 - wk / 0.22), 0); } g.restore(); return true;
+  }
+  function fryer3D(g, t, L, cfg) { const { W, H } = L, R = 175 * REF.u / RS, c0 = [0, 0.1];
+    const f = cl((t - BT.drop) / (BT.splash - BT.drop), 0, 1), se = t - BT.splash; let z = t < BT.splash ? lerp(4.8, 0.02, ei(f)) : -0.03 * Math.exp(-se * 3) + 0.02 * Math.sin(se * 7) + 0.005, tilt = t < BT.splash ? (1 - f) * 0.5 : Math.sin(se * 4) * 0.05;
+    const drops = new Float32Array(96); let nd = 0; if (se > 0 && se < 1.2) { const r = rng(21); for (let i = 0; i < 24; i++) { const a = r() * Math.PI * 2, v = 1.2 + r() * 2.4, vz = 2 + r() * 3.2, k = se - r() * 0.05, x = c0[0] + Math.cos(a) * (R * 1.02 + v * k), y = c0[1] + Math.sin(a) * (R * 1.02 + v * k), zz = vz * k - 4.9 * k * k, rad = (0.03 + r() * 0.04); if (k < 0 || zz < -0.05) continue; drops.set([x, y, zz, rad], nd * 4); nd++; } }
+    const lift = t > BT.lift ? lerp(-0.4, 2.6, ei((t - BT.lift) / (BT.whip - BT.lift))) : -9;
+    const cam = cam3([[0, [0.3, -3.6, 7.6], [0, 0.25, 0]], [BT.splash, [0.2, -3.4, 6.6], [0, 0.15, 0]], [BT.whip, [-0.2, -3.0, 5.9], [0, 0.1, 0]]], t, W, H, se > 0 && se < 0.3 ? [Math.sin(se * 90) * 0.04, Math.cos(se * 70) * 0.04, 0] : null);
+    return G3.render('fry3', FRY3FS(), g, W, H, P => { const S = (k, v) => G3.set(P, k, v); setCam(P, cam, t, sm(t / 0.3)); logoTex(P, 0, 'uLogo');
+      S('uCoin', [c0[0], c0[1], z]); S('uCoinR', R); S('uTilt', tilt); S('uBat', cl(se / 0.8, 0, 1)); S('uHasCoin', cfg.logo !== false && t > BT.drop ? 1 : 0); S('uSpl', se > 0 ? se : -1); S('uLift', lift); S('uFury', se > 0 ? Math.exp(-se * 0.5) : 0);
+      G3.setv(P, 'uDr', drops, 4); const gl = G3.ctx(); if (P.U.uND != null) gl.uniform1i(P.U.uND, nd);
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.55, expo: 1.1, grain: 0.03, thresh: 0.8, vig: 0.8 }); }
+  function chips3D(g, t, L, cfg) { const { W, H } = L, R = 165 * REF.u / RS, hp = heap(), name = nameOf(cfg) || ' ', line = lineOf(cfg), ep = !!epOf(cfg);
+    const nm = G3.textSdf(name, HEAVY, { worldW: REF.W * 0.8 / RS, maxWorldH: 140 * REF.u / RS, weight: '900', spacing: 0.02, key: 'bat' }); if (!nm) return false;
+    const lk = t - BT.land, cz = lk < 0 ? lerp(4.5, 0.55, ei((lk + 0.25) / 0.25)) : 0.55, sq = 1 + spring(lk, 0.12, 22, 7);
+    const wk2 = t - BT.word, sz = wk2 < 0 ? 9 : wk2 < 0.14 ? lerp(2.8, 0, ei(wk2 / 0.14)) : 0, ss = 1 + spring(wk2 - 0.14, 0.12, 26, 9);
+    const lk2 = t - BT.line, bz = lk2 < 0 ? 9 : lk2 < 0.12 ? lerp(2.5, 0, ei(lk2 / 0.12)) : 0, bs = 1 + spring(lk2 - 0.12, 0.1, 28, 10), bt = line ? boardTex(line) : null;
+    const vin = new Float32Array(104); let nv = 0; const vk = t - BT.vin; if (vk > 0) { const rv = rng(919); for (let i = 0; i < 26; i++) { const st = rv() * 0.3, k = vk - st, x = (rv() - 0.3) * 420 * REF.u / RS, y = 0.6 - rv() * 240 * REF.u / RS, s2 = (6 + rv() * 22) * REF.u / RS * 1.6; rv(); if (k < 0) continue; vin.set([x, y, s2 * eo(k / 0.25), 0.9], nv * 4); nv++; } }
+    const pr = printLayer('bat', pg => { pg.translate(0, 0.2 * RS); episode(pg, t, REF, cfg, BASE.battered - 0.6, 'battered'); });
+    const keys = [[BT.whip, [0.5, -2.4, 5.6], [0, 0.3, 0.3]], [BT.salt, [0.3, -2.9, 5.2], [0, 0.2, 0.3]], [BT.word + 0.1, [0, -4.6, 6.0], [0, -0.6, 0.2]], [BT.line + 0.7, [0, -5.2, 6.4], [0, -0.95, 0.1]]];
+    if (ep) keys.push([Math.min(duration(cfg), BASE.battered + 0.4), [0, -5.7, 6.3], [0, -1.5, 0]]);
+    const cam = cam3(keys, t, W, H, wk2 > 0.14 && wk2 < 0.4 ? [0, Math.sin(wk2 * 70) * 0.03 * (1 - (wk2 - 0.14) / 0.26), 0] : null);
+    const ok = G3.render('chip3', CHIP3FS(), g, W, H, P => { const S = (k, v) => G3.set(P, k, v); setCam(P, cam, t, 1); logoTex(P, 0, 'uLogo');
+      G3.tex(1, G3.imageTex('chippaper', chipPaperOf(REF.W, REF.H, REF.u)), P, 'uPaper'); G3.tex(2, G3.floatTex('heaph', hp.hm, HEAP.w, HEAP.h), P, 'uHeap'); G3.tex(3, G3.imageTex('heapc', hp.c), P, 'uHeapC'); S('uHeapR', [HEAP.x0, HEAP.x1, HEAP.y0, HEAP.y1]);
+      G3.tex(4, nm.tex, P, 'uName'); G3.tex(5, bt ? G3.imageTex('board', bt.c, true) : nm.tex, P, 'uBoard'); G3.tex(6, G3.imageTex('batprint', pr, true), P, 'uPrint');
+      S('uCoin', [0, 0.2, cz]); S('uCoinR', R); S('uSq', sq); S('uHasCoin', cfg.logo !== false && lk > -0.25 ? 1 : 0);
+      S('uNameBox', nm.box); S('uSign', [0, -1.32 + 0.3 * nm.capH / 0.72, sz]); S('uSignS', ss); S('uSignA', -0.035); S('uHasSign', wk2 > 0 ? 1 : 0);
+      const bw = 0.5 + (line ? Math.min(3.4, line.length * 0.13) : 1); S('uBoardC', [0.3, -1.8, bz + 0.035]); S('uBoardH', [bw / 2 + 0.15, (bw / 2 + 0.15) / 6.4]); S('uBoardA', 0.02); S('uBoardS', bs); S('uHasBoard', line && lk2 > 0 ? 1 : 0);
+      G3.setv(P, 'uVin', vin, 4); const gl = G3.ctx(); if (P.U.uNV != null) gl.uniform1i(P.U.uNV, nv);
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.35, expo: 1.05, grain: 0.03, thresh: 0.9, vig: 0.75 });
+    if (!ok) return false;
+    // salt falling through the light, and steam off the top
+    const C = G3.camera(cam.e, cam.a, cam.fov, W, H), sk = t - BT.salt; g.save();
+    if (sk > 0) { const rs = rng(808); g.fillStyle = '#fff'; for (let i = 0; i < 300; i++) { const st = rs() * 0.45, k = sk - st, x = (rs() - 0.5) * 3.9, y = 0.2 + (rs() - 0.5) * 2.2, zl = 0.35 + rs() * 0.3; if (k < 0) continue; const zz = Math.max(zl, 3.2 - 12 * k * k); if (zz <= zl && k > 0.8) continue; const p = C.project([x, y, zz]); if (!p) continue; const s2 = Math.max(1, 0.022 * H / 2 / p[2] * 2); g.globalAlpha = zz <= zl ? 0.75 : 0.95; g.fillRect(p[0], p[1], s2, s2 * (zz > zl ? 2.4 : 1)); } }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'screen'; const r2 = rng(6); for (let i = 0; i < 7; i++) { const zz = 0.7 + ((t * (0.35 + r2() * 0.3) + r2() * 2) % 2.2), p = C.project([(r2() - 0.5) * 1.6, 0.2 + (r2() - 0.5) * 0.8, zz]); if (!p) continue; const R2 = (0.45 + zz * 0.25) * H / 2 / p[2], a = 0.13 * Math.sin(Math.PI * Math.min(1, (zz - 0.7) / 2.2)); const sg = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], R2); sg.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); sg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sg; g.fillRect(p[0] - R2, p[1] - R2, R2 * 2, R2 * 2); }
+    g.restore(); return true; }
+
+  /* ---------- Epic, cut short ---------- */
+  const TENT3 = `uniform vec4 uTP[24]; uniform int uTN; uniform vec4 uSK[12]; uniform int uSN;
+float tentD(vec3 p){ float d = 1e9; for (int i = 0; i < 23; i++){ if (i + 1 >= uTN) break; vec3 a = uTP[i].xyz, b = uTP[i + 1].xyz, pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); d = smin(d, length(pa - ba * h) - mix(uTP[i].w, uTP[i + 1].w, h), .03); }
+  for (int i = 0; i < 12; i++){ if (i >= uSN) break; d = smin(d, length(p - uSK[i].xyz) - uSK[i].w, .02); } return d; }
+float suckerAt(vec3 p){ float s = 0.; for (int i = 0; i < 12; i++){ if (i >= uSN) break; float k = length(p - uSK[i].xyz) / uSK[i].w; s = max(s, smoothstep(1.25, .9, k) * (k < .5 ? 2. : 1.)); } return s; }
+vec3 tentCol(vec3 p, vec3 n, vec3 rd, vec3 L, vec3 lc, vec3 amb){ float s = suckerAt(p); vec3 a = mix(vec3(.85, .82, .78), s > 1.5 ? vec3(.35, .3, .28) : vec3(.72, .62, .6), min(s, 1.)); vec3 r = reflect(rd, n); float fr = .04 + .96 * pow(1. - max(dot(n, -rd), 0.), 5.); float wrap = max((dot(n, L) + .35) / 1.35, 0.);
+  return a * (wrap * lc + amb) + lc * pow(max(dot(r, L), 0.), 50.) * .6 + fr * amb * .8 + vec3(.9, .5, .45) * pow(1. - max(dot(n, -rd), 0.), 2.) * .12; }`;
+  const HEAV3FS = () => `${VS3}
+uniform sampler2D uLogo, uName; uniform vec3 uMed; uniform float uMedR, uHasMed;
+uniform vec4 uNameBox; uniform vec3 uNameP; uniform float uSwing, uNameS, uHasName, uGlint;
+${G3.COMMON}
+${TENT3}
+vec3 logoAt(vec2 q, float R);
+const vec3 SUNC = vec3(1., .82, .5);
+vec3 sunDir(vec3 ro){ return normalize(vec3(0., 1.2, -40.) - ro); }
+float medD(vec3 p){ vec3 q = p - uMed; float d = sdCapCyl(q, uMedR, .1, .03); if (d < .05 && q.z > .05){ float lum = dot(logoAt(q.xy, uMedR * .86), vec3(.3, .5, .2)); d -= .025 * smoothstep(.15, .6, lum) * step(length(q.xy), uMedR * .86); } return d; }
+vec3 nameQ(vec3 p){ vec3 q = p - uNameP; q.yz = rot2(-uSwing) * q.yz; return q / uNameS; }
+float nameD(vec3 p){ vec3 q = nameQ(p); float d2 = texSdf(uName, uNameBox, q.xy); return sdExtrude(d2 + .012, q.z + .09, .18, .03) * uNameS; }
+float mapO(vec3 p, out float id){ float d = 1e9; id = 0.;
+  if (uHasMed > .5){ d = medD(p); id = 1.; }
+  if (uHasName > .5){ float dn = nameD(p); if (dn < d){ d = dn; id = 2.; } }
+  if (uTN > 1){ float dt = tentD(p); if (dt < d){ d = dt; id = 3.; } }
+  return d; }
+float mapD(vec3 p){ float i; return mapO(p, i); }
+${NRM3}
+vec3 sky(vec3 rd, vec3 ro){ vec3 s = sunDir(ro); float y = rd.y, sd = max(dot(rd, s), 0.);
+  vec3 c = mix(vec3(.38, .19, .05), vec3(.04, .018, .008), smoothstep(-.05, .5, y)); c = mix(c, vec3(.6, .36, .13), smoothstep(.05, -.45, y));
+  c += SUNC * (pow(sd, 6.) * .35 + pow(sd, 50.) * .9 + pow(sd, 700.) * 9.);
+  // cloud banks, dark bodies with gold edges where the sun is behind them
+  for (int k = 2; k >= 0; k--){ float zc = -3. - float(k) * 5.; if (rd.z >= -1e-3) continue; float tt = (zc - ro.z) / rd.z; vec2 q = (ro + rd * tt).xy; float fb = fbm(q * vec2(.2, .45) + vec2(uT * .04 * float(k + 1), float(k) * 7.)); float dn = smoothstep(.5, .66, fb + .25 * smoothstep(-.3, -2.8, q.y) - .2 * smoothstep(.5, 2.5, q.y));
+    float rim = smoothstep(.68, .52, fb + .25 * smoothstep(-.3, -2.8, q.y)) * dn; vec3 body = mix(vec3(.12, .06, .025), vec3(.32, .18, .07), fbm(q * 1.4)) * (.5 + .9 * pow(sd, 3.)); c = mix(c, body + SUNC * rim * (.35 + 2.2 * pow(sd, 8.)), dn * .95); }
+  return c; }
+float discHit(vec3 ro, vec3 rd){ if (uHasMed < .5 || rd.z > -1e-4) return 0.; float t = (uMed.z - ro.z) / rd.z; vec2 q = (ro + rd * t).xy - uMed.xy; return step(length(q), uMedR * 1.05); }
+void main(){
+  ${CAM3}
+  float t = 0., id = 0.; bool hit = false;
+  for (int i = 0; i < 110; i++){ vec3 p = ro + rd * t; float d = mapO(p, id); if (d < .0005 * t){ hit = true; break; } t += d * .9; if (t > 40.) break; }
+  vec3 col; vec3 s = sunDir(ro);
+  if (hit){ vec3 p = ro + rd * t, n = nrmO(p), r = reflect(rd, n); vec3 key = normalize(vec3(-.3, .6, .75)), gl = normalize(vec3(uGlint, .3, .9)); float fr = .2 + .8 * pow(1. - max(dot(n, -rd), 0.), 5.);
+    if (id < 2.5){ vec3 gold = vec3(1., .72, .3); float polish = 1.; if (id < 1.5){ vec3 q = p - uMed; if (n.z > .8 && length(q.xy) < uMedR * .86){ float lum = dot(logoAt(q.xy, uMedR * .86), vec3(.3, .5, .2)); gold *= mix(.55, 1.05, smoothstep(.15, .6, lum)); polish = mix(.6, 1., lum); } }
+      col = gold * (sky(r, ro) * (.7 + .5 * fr) * polish + vec3(1., .9, .7) * max(dot(n, key), 0.) * .35 + vec3(.04, .03, .02)) + vec3(1., .95, .8) * pow(max(dot(r, gl), 0.), 300.) * 14. + SUNC * pow(1. - max(dot(n, -rd), 0.), 3.) * .6; }
+    else col = tentCol(p, n, rd, normalize(vec3(.4, .7, .6)), vec3(1.4, 1.15, .85), vec3(.55, .45, .32));
+  } else { col = sky(rd, ro);
+    // god rays from behind the medallion: walk towards the sun and count where the disc isn't in the way
+    float acc = 0.; for (int k = 1; k <= 12; k++){ float f = float(k) / 12.; vec3 dd = normalize(mix(rd, s, f)); acc += (1. - discHit(ro, dd)) * (1. - f); }
+    vec2 da = (rd - s).xy; float ang = atan(da.y, da.x), streak = .55 + .45 * smoothstep(.3, .7, vnoise(vec2(ang * 7. + uT * .15, 1.)));
+    col += SUNC * acc / 6.5 * streak * pow(max(dot(rd, s), 0.), 5.) * (1. - discHit(ro, rd)) * .5; }
+  o = vec4(max(col, 0.) * uFade, 1.); }`;
+  const ROOM3FS = () => `${VS3}
+uniform sampler2D uLogo, uName, uPrint; uniform vec3 uMed; uniform float uMedR, uMedA, uMedS, uHasMed;
+uniform vec4 uNameBox; uniform vec3 uNameP; uniform float uNameA, uNameS, uHasName;
+${G3.COMMON}
+${TENT3}
+const vec3 BULB = vec3(.6, 3.4, 3.2);
+vec3 medQ(vec3 p){ vec3 q = p - uMed; q.xy = rot2(-uMedA) * q.xy; return q / uMedS; }
+float mapO(vec3 p, out float id){ float d = 1e9; id = 0.;
+  if (uHasMed > .5){ d = sdCapCyl(medQ(p), uMedR, .07, .02) * uMedS; id = 1.; }
+  if (uHasName > .5){ vec3 q = p - uNameP; q.xy = rot2(-uNameA) * q.xy; q /= uNameS; float dn = sdExtrude(texSdf(uName, uNameBox, q.xy), q.z, .045, .006) * uNameS; if (dn < d){ d = dn; id = 2.; } }
+  if (uTN > 1){ float dt = tentD(p); if (dt < d){ d = dt; id = 3.; } }
+  return d; }
+float mapD(vec3 p){ float i; return mapO(p, i); }
+${NRM3}
+float softSh(vec3 p, vec3 l, float tm){ float r = 1., t = .015; for (int i = 0; i < 26; i++){ float d = mapD(p + l * t); r = min(r, 8. * d / t); t += clamp(d, .01, .3); if (r < .01 || t > tm || p.z + l.z * t > 1.6) break; } return clamp(r, 0., 1.); }
+void main(){
+  ${CAM3}
+  float tw = rd.z < -1e-4 ? -ro.z / rd.z : 1e4, t = rd.z < 0. ? max(0., (1.6 - ro.z) / rd.z) : 0., id = 0.; bool hit = false;
+  for (int i = 0; i < 100; i++){ if (t > tw) break; vec3 p = ro + rd * t; float d = mapO(p, id); if (d < .0006 * t){ hit = true; break; } t += d * .9; }
+  vec3 p, n, alb; float gloss = .05; if (hit){ p = ro + rd * t; n = nrmO(p); } else { p = ro + rd * tw; p.z = 0.; n = normalize(vec3((vnoise(p.xy * 30.) - .5) * .06, (vnoise(p.xy * 30. + 5.) - .5) * .06, 1.)); }
+  if (!hit){ alb = vec3(.16, .17, .2) * (.8 + .3 * fbm(p.xy * 1.6)) * (1. - .3 * smoothstep(.55, .85, fbm(p.xy * vec2(.8, .2) + 3.))); vec4 pr = texture(uPrint, refUV(p.xy)); alb = mix(alb, pow(pr.rgb, vec3(2.2)), pr.a); }
+  else if (id < 1.5){ vec3 q = medQ(p); vec3 nq = n; nq.xy = rot2(-uMedA) * nq.xy; alb = nq.z > .7 && length(q.xy) < uMedR * .97 ? logoAt(q.xy, uMedR * .97) : vec3(.6, .6, .58); gloss = .35; }
+  else if (id < 2.5){ alb = vec3(.86); gloss = .1; }
+  vec3 Lv = BULB - p; float dl = length(Lv); vec3 L = Lv / dl; float sh = softSh(p + n * .004, L, dl); vec3 lc = vec3(1., .86, .62) * 9. / (1. + dl * dl);
+  vec3 col; if (id > 2.5 && hit) col = tentCol(p, n, rd, L, lc * sh, vec3(.05, .06, .08)); else { vec3 r = reflect(rd, n); col = alb * (max(dot(n, L), 0.) * sh * lc + vec3(.025, .03, .04)) + lc * sh * pow(max(dot(r, L), 0.), 50.) * gloss; }
+  o = vec4(max(col, 0.) * uFade, 1.); }`;
+  // The tentacle, from the 2D path (worked out in the reference frame) as a chain of balls and its suckers
+  function tentU(P, pts2, w0, zBase) { const n = pts2.length, step = Math.max(1, Math.ceil(n / 23)), TP = new Float32Array(96), SK = new Float32Array(48); let tn = 0, sn = 0; const wAt = i => (w0 * Math.max(0.06, 1 - Math.pow(i / n, 1.4) * 0.94)) / RS;
+    for (let i = 0; i < n && tn < 24; i += step) { const w = toW(pts2[i]); TP.set([w[0], w[1], zBase + wAt(i) * 0.9, wAt(i)], tn * 4); tn++; }
+    if ((n - 1) % step && tn < 24) { const w = toW(pts2[n - 1]); TP.set([w[0], w[1], zBase + wAt(n - 1) * 0.9, wAt(n - 1)], tn * 4); tn++; }
+    for (let i = 3; i < n - 3 && sn < 12; i += Math.max(2, Math.floor(n / 13))) { const a = pts2[i - 1], b = pts2[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nn = [-dy / l, dx / l], w = wAt(i) * RS, p = [pts2[i][0] - nn[0] * w * 0.55, pts2[i][1] - nn[1] * w * 0.55], pw = toW(p); SK.set([pw[0], pw[1], zBase + wAt(i) * 0.9 + wAt(i) * 0.55, wAt(i) * 0.32], sn * 4); sn++; }
+    G3.setv(P, 'uTP', TP, 4); G3.setv(P, 'uSK', SK, 4); const gl = G3.ctx(); if (P.U.uTN != null) gl.uniform1i(P.U.uTN, tn); if (P.U.uSN != null) gl.uniform1i(P.U.uSN, sn); }
+  function heaven3D(g, t, L, cfg) { const { W, H } = L, { u, cx, cy } = REF, name = nameOf(cfg) || ' ';
+    const nm = G3.textSdf(name, SERIF, { worldW: REF.W * 0.86 / RS, maxWorldH: 150 * REF.u / RS, weight: '900', spacing: 0.02, key: 'epic' }); if (!nm) return false;
+    const rf = eo((t - EPC.rise) / 1.6), R = 160 * u * (0.7 + 0.3 * rf) / RS, my = (110 * u - lerp(REF.H * 0.3, 0, rf)) / RS * 1 + 0, wk = t - EPC.word, f = eo(wk / 1.0), rk = t - EPC.reach;
+    const cam = cam3([[0, [0, -1.6, 6.2], [0, -0.6, 0]], [EPC.word, [0, -0.6, 7.4], [0, 0.0, 0]], [EPC.cut, [0.3, -0.35, 6.8], [0.05, 0.05, 0]]], t, W, H, rk > 0.2 ? [Math.sin(rk * 90) * 0.04, Math.cos(rk * 77) * 0.04, 0] : null);
+    const ok = G3.render('heav3', HEAV3FS(), g, W, H, P => { const S = (k, v) => G3.set(P, k, v); setCam(P, cam, t, sm(t / 0.35)); logoTex(P, 0, 'uLogo'); G3.tex(1, nm.tex, P, 'uName');
+      S('uMed', [0, my, 0]); S('uMedR', R); S('uHasMed', cfg.logo !== false ? 1 : 0);
+      S('uNameBox', nm.box); S('uNameP', [0, -230 * u / RS + 0.3 * nm.capH / 0.72 - 0.25, 0.25]); S('uSwing', lerp(1.35, 0, f)); S('uNameS', lerp(1.5, 1, f)); S('uHasName', wk > 0 ? 1 : 0); S('uGlint', lerp(-1.2, 1.2, ((wk - 0.6) % 1.4 + 1.4) % 1.4 / 1.4));
+      if (rk > 0) tentU(P, tentaclePts(REF, eio(rk / 0.25), 0.6 + rk * 2.5, [cx + 30 * u, cy - 40 * u]), 105 * u, 0.55); else { const gl = G3.ctx(); if (P.U.uTN != null) gl.uniform1i(P.U.uTN, 0); if (P.U.uSN != null) gl.uniform1i(P.U.uSN, 0); }
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.7, expo: 0.85, grain: 0.03, thresh: 0.9, vig: 0.85 });
+    if (!ok) return false;
+    // gold dust in the light, and the flare off the top of the medallion
+    const C = G3.camera(cam.e, cam.a, cam.fov, W, H), rd = rng(17); g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = '#fff3c4';
+    for (let i = 0; i < 90; i++) { const p = C.project([(rd() - 0.5) * 9, ((rd() * 6 + t * (0.15 + rd() * 0.3)) % 6) - 3, (rd() - 0.3) * 3]); if (!p) continue; g.globalAlpha = 0.2 + 0.5 * rd(); g.beginPath(); g.arc(p[0], p[1], Math.max(0.6, 0.012 * H / 2 / p[2] * 2), 0, Math.PI * 2); g.fill(); }
+    g.restore(); const fp = C.project([0.15, my + R * 0.75, 0.15]); if (fp) flare(g, fp[0], fp[1], L, 0.5 + 0.5 * sm((t - 1.0) / 1.2)); return true; }
+  function room3D(g, t, L, cfg) { const { W, H } = L, { u, cx, cy, W: W0 } = REF, name = nameOf(cfg) || ' ';
+    const nm = G3.textSdf(name, HEAVY, { worldW: W0 * 0.82 / RS, maxWorldH: 112 * u / RS, weight: '900', spacing: 0, key: 'room' }); if (!nm) return false;
+    const sk = t - EPC.slap, inF = sk < 0 ? eio((sk + 0.25) / 0.25) : 1, mx = lerp((REF.W + 200 * u - cx) / RS, -10 * u / RS, inF), my = 120 * u / RS, ms = 1 + spring(sk, 0.08, 30, 9), away = sk > 0.12 ? eio((sk - 0.12) / 0.35) : 0;
+    const wk = t - EPC.wslap, ns = wk > 0 ? 1 + spring(wk, 0.18, 30, 10) : 1;
+    const pr = printLayer('room', pg => { const line = lineOf(cfg), lk = t - EPC.line; if (line && lk > 0) { fitFont(pg, line, '600', COND, 40 * u, W0 * 0.7); pg.textBaseline = 'alphabetic'; pg.fillStyle = 'rgba(220,226,236,' + sm(lk / 0.25).toFixed(3) + ')'; spaced(pg, line, cx - 6 * u, cy + 255 * u, 4 * u, 'center'); } episode(pg, t, REF, cfg, BASE.epic - 0.6, 'epic'); });
+    const cam = cam3([[EPC.cut, [0, -0.2, 7.2], [0, -0.1, 0]], [duration(cfg), [0, -0.35, 6.9], [0, -0.2, 0]]], t, W, H);
+    return G3.render('room3', ROOM3FS(), g, W, H, P => { const S = (k, v) => G3.set(P, k, v); setCam(P, cam, t, 1); logoTex(P, 0, 'uLogo'); G3.tex(1, nm.tex, P, 'uName'); G3.tex(2, G3.imageTex('roomprint', pr, true), P, 'uPrint');
+      S('uMed', [mx, my, 0.07]); S('uMedR', 140 * u / RS); S('uMedA', -0.13); S('uMedS', ms); S('uHasMed', cfg.logo !== false && sk > -0.25 ? 1 : 0);
+      S('uNameBox', nm.box); S('uNameP', [14 * u / RS, -170 * u / RS + 0.3 * nm.capH / 0.72, 0]); S('uNameA', 0.04); S('uNameS', ns); S('uHasName', wk > 0 ? 1 : 0);
+      if (cfg.logo !== false && sk > -0.25 && away < 1) { const px = cx + mx * RS, py = cy - my * RS; tentU(P, tentaclePts(REF, 1 - away * 0.95, 0.5, [px + 40 * u + away * 300 * u, py + 30 * u]), 95 * u, 0.25); } else { const gl = G3.ctx(); if (P.U.uTN != null) gl.uniform1i(P.U.uTN, 0); if (P.U.uSN != null) gl.uniform1i(P.U.uSN, 0); }
+    }, { scale: 1, adaptive: q3live, t, bloom: 0.3, expo: 1.0, grain: 0.04, thresh: 0.9, vig: 0.9 }); }
+  function drawEpic3D(g, t, L, cfg) { if (!g3ok()) return false; const { W, H, cx, cy, u } = L;
+    if (t < EPC.cut) return heaven3D(g, t, L, cfg);
+    const ck = t - EPC.cut; if (ck >= 0.32) return room3D(g, t, L, cfg);
+    // Cut. The glory switches off like an old telly.
+    g.fillStyle = '#05070c'; g.fillRect(0, 0, W, H); const TB = layerBuf('tv3', W, H), tg = TB.getContext('2d'); tg.setTransform(1, 0, 0, 1, 0, 0); tg.clearRect(0, 0, W, H); if (!heaven3D(tg, EPC.cut - 0.001, L, Object.assign({}, cfg, { episode: '' }))) return false;
+    const sy = ck < 0.12 ? Math.max(0.006, 1 - eo(ck / 0.12)) : 0.006, sx = ck < 0.12 ? 1 : Math.max(0.004, 1 - eo((ck - 0.12) / 0.14)); g.save(); g.translate(cx, cy); g.scale(sx, sy); g.filter = 'brightness(' + (1 + ck * 8).toFixed(2) + ')'; g.drawImage(TB, -W / 2, -H / 2); g.restore();
+    if (ck > 0.1) { const a = ck < 0.26 ? 1 : 1 - (ck - 0.26) / 0.06, R0 = 18 * u; g.save(); g.globalCompositeOperation = 'lighter'; const dg = g.createRadialGradient(cx, cy, 0, cx, cy, R0 * 3); dg.addColorStop(0, `rgba(255,255,255,${cl(a, 0, 1)})`); dg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = dg; g.fillRect(cx - R0 * 3, cy - R0 * 3, R0 * 6, R0 * 6); g.restore(); }
+    return true; }
+  // Run a 3D version, falling back to the flat one if WebGL2 is missing or anything goes wrong
+  const warned3 = {}; function try3D(fn, k, g, t, L, cfg) { try { return fn(g, t, L, cfg); } catch (e) { if (!warned3[k]) { warned3[k] = 1; console.warn('3D ' + k, e); } return false; } }
+
+  let q3live = false;
   function draw(g, t, cfg, look, W, H) {
+    q3live = !(look && (look.exporting || (look.cutEnv && !look.preview)));
     t = cl(t, 0, duration(cfg)); const L = layout(W, H), st = styleOf(cfg), tm = Math.min(t, mainLen(cfg)) + Math.max(0, t - mainLen(cfg)) * 0;
-    g.save(); try { if (st === 'battered') drawBattered(g, t, L, cfg); else if (st === 'neon') { let ok = false; try { ok = drawNeon3D(g, t, L, cfg); } catch (e) { if (!drawNeon3D.warned) { drawNeon3D.warned = 1; console.warn('3D neon', e); } } if (!ok) drawNeon(g, t, L, cfg); } else if (st === 'epic') drawEpic(g, t, L, cfg); else drawInk(g, t, L, cfg); } finally { g.restore(); }
+    g.save(); try { if (st === 'battered') { if (!try3D(drawBattered3D, 'battered', g, t, L, cfg)) drawBattered(g, t, L, cfg); } else if (st === 'neon') { let ok = false; try { ok = drawNeon3D(g, t, L, cfg); } catch (e) { if (!drawNeon3D.warned) { drawNeon3D.warned = 1; console.warn('3D neon', e); } } if (!ok) drawNeon(g, t, L, cfg); } else if (st === 'epic') { if (!try3D(drawEpic3D, 'epic', g, t, L, cfg)) drawEpic(g, t, L, cfg); } else { if (!try3D(drawInk3D, 'ink', g, t, L, cfg)) drawInk(g, t, L, cfg); } } finally { g.restore(); }
     void tm; void look;
   }
 

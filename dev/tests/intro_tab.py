@@ -17,7 +17,7 @@ async def main():
     out={}
     for style in ['ink','battered','neon','epic']:
       r=await pg.evaluate(f"""async()=>{{ const c=JSON.parse(JSON.stringify(Video.hooks.tabCfg('intro'))); c.style='{style}'; if('{style}'!=='neon') {{ c.episode=''; c.kicker=''; }} await Intro.ready(); await Intro.ensureSound(c);
-        const v={{v:2,items:[{{id:'x',kind:'clip',mod:'intro',cfg:c,inPt:0,hold:0}}],tracks:[]}}; const res=await CutExport.run(v,{{scheme:'saltire',format:'16:9',texture:true}},{{fps:30,res:'1080',quality:'high'}}); window['__'+'{style}']=res.blob; return [res.frames, CutAudio.sources(v,{{format:'16:9'}}).length]; }}""")
+        const v={{v:2,items:[{{id:'x',kind:'clip',mod:'intro',cfg:c,inPt:0,hold:0}}],tracks:[]}}; const res=await CutExport.run(v,{{scheme:'saltire',format:'16:9',texture:true}},{{fps:30,res:'720',quality:'high'}}); window['__'+'{style}']=res.blob; return [res.frames, CutAudio.sources(v,{{format:'16:9'}}).length]; }}""")
       out[style]=r
       s=await pg.evaluate(f"async()=>{{ const u=new Uint8Array(await window.__{style}.arrayBuffer()); let s=''; for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768)); return btoa(s); }}")
       open(f'/tmp/claude-0/chk/intro_{style}.mp4','wb').write(base64.b64decode(s))

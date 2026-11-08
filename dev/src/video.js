@@ -15,7 +15,7 @@ const Video = (() => {
   const modOf = k => { const m = raw(k); return m ? (typeof Layers !== 'undefined' ? Layers.wrap(m) : m) : null; };
   const hooks = {};
   const nid = p => p + Math.random().toString(36).slice(2, 9);
-  const lookFor = (it, look) => { const L = Object.assign({}, look, it.look || {}); if (it.mod === 'story' || it.mod === 'broll') L.scheme = 'chalk'; delete L.cutEnv; return L; };
+  const lookFor = (it, look) => { const L = Object.assign({}, look, it.look || {}); if (it.mod === 'story' || it.mod === 'broll') L.scheme = 'chalk'; L.exporting = !!(look && look.cutEnv && !look.preview); delete L.cutEnv; return L; };
   const WPS = 2.6;
   const fitWords = s => r2(cl(String(s || '').trim().split(/\s+/).filter(Boolean).length / WPS + 0.6, 1.2, 120));
   const M = id => typeof CutMedia !== 'undefined' ? CutMedia.info(id) : null;

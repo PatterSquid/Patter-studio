@@ -26,7 +26,7 @@ const G3 = (() => {
     return (progs[name] = { p, U });
   }
   function set(P, name, v) { const g = gl, L = P.U[name]; if (L == null) return; if (typeof v === 'number') g.uniform1f(L, v); else if (v.length === 2) g.uniform2fv(L, v); else if (v.length === 3) g.uniform3fv(L, v); else if (v.length === 4) g.uniform4fv(L, v); else g.uniform1fv(L, v); }
-  function setv(P, name, arr, n) { const L = P.U[name]; if (L == null) return; if (n === 3) gl.uniform3fv(L, arr); else if (n === 2) gl.uniform2fv(L, arr); else gl.uniform1fv(L, arr); }
+  function setv(P, name, arr, n) { const L = P.U[name]; if (L == null) return; if (n === 4) gl.uniform4fv(L, arr); else if (n === 3) gl.uniform3fv(L, arr); else if (n === 2) gl.uniform2fv(L, arr); else gl.uniform1fv(L, arr); }
   function tex(unit, t, P, name) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); if (P.U[name] != null) gl.uniform1i(P.U[name], unit); }
   // A render target (float when the card allows, for proper glow)
   function target(k, w, h) { let f = fbs[k]; if (f && f.w === w && f.h === h) return f; const g = gl; if (f) { g.deleteTexture(f.t); g.deleteFramebuffer(f.fb); }
@@ -34,11 +34,17 @@ const G3 = (() => {
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
     const fb = g.createFramebuffer(); g.bindFramebuffer(g.FRAMEBUFFER, fb); g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, t, 0); return (fbs[k] = { t, fb, w, h }); }
   // Pictures (the logo, a poster drawn on a canvas) as textures, kept while the same object comes in
-  function imageTex(key, src) { const g = ctx(); if (!g || !src) return null; let e = texCache.get(key); if (e && e.src === src) return e.t; if (e) g.deleteTexture(e.t);
+  function imageTex(key, src, dirty) { const g = ctx(); if (!g || !src) return null; let e = texCache.get(key); if (e && e.src === src && !dirty) return e.t;
+    if (e && e.src === src && dirty) { g.activeTexture(g.TEXTURE7); g.bindTexture(g.TEXTURE_2D, e.t); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, src); g.generateMipmap(g.TEXTURE_2D); return e.t; }
+    if (e) g.deleteTexture(e.t);
     g.activeTexture(g.TEXTURE7); const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t); g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL, false); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, src); g.generateMipmap(g.TEXTURE_2D);
     g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE); texCache.set(key, { t, src }); trim(); return t; }
-  function trim() { if (texCache.size <= 24) return; const k = texCache.keys().next().value, e = texCache.get(k); gl.deleteTexture(e.t); texCache.delete(k); }
+  function trim() { if (texCache.size <= 48) return; const k = texCache.keys().next().value, e = texCache.get(k); gl.deleteTexture(e.t); texCache.delete(k); }
 
+  // A single channel float texture (height maps), kept under a key
+  function floatTex(key, data, w, h) { const g = ctx(); if (!g) return null; const e = texCache.get(key); if (e && e.src === data) return e.t; if (e) g.deleteTexture(e.t);
+    g.activeTexture(g.TEXTURE7); const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t); g.texImage2D(g.TEXTURE_2D, 0, g.R16F, w, h, 0, g.RED, g.FLOAT, data);
+    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE); texCache.set(key, { t, src: data }); return t; }
   /* ---------- Text as a distance field ---------- */
   // Felzenszwalb's exact distance transform (squared), one line at a time
   function edt1(f, n, d, v, z) { let k = 0; v[0] = 0; z[0] = -1e20; z[1] = 1e20; for (let q = 1; q < n; q++) { let s; for (;;) { const r = v[k]; s = ((f[q] + q * q) - (f[r] + r * r)) / (2 * q - 2 * r); if (s <= z[k]) { k--; if (k < 0) { k = 0; break; } } else break; } k++; v[k] = q; z[k] = s; z[k + 1] = 1e20; }
@@ -81,6 +87,9 @@ float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * v
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
 float sdRoundBox(vec3 p, vec3 b, float r){ vec3 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,max(q.y,q.z)),0.) - r; }
 float sdCapCyl(vec3 p, float R, float h, float r){ vec2 d = vec2(length(p.xy) - R + r, abs(p.z) - h + r); return min(max(d.x,d.y),0.) + length(max(d,0.)) - r; }
+float sdExtrude(float d2, float z, float h, float r){ vec2 w = vec2(d2 + r, abs(z - h * .5) - h * .5 + r); return min(max(w.x, w.y), 0.) + length(max(w, 0.)) - r; }
+mat2 rot2(float a){ float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+float smin(float a, float b, float k){ float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
 float texSdf(sampler2D t, vec4 box, vec2 p){ vec2 uv = (p - box.xy) / (box.zw - box.xy); vec2 q = clamp(p, box.xy, box.zw); float o = length(p - q);
   float d = texture(t, vec2(clamp(uv.x, 0.002, .998), 1. - clamp(uv.y, 0.002, .998))).r; return o > 0. ? max(d, 0.) + o : d; }
 `;
@@ -112,15 +121,18 @@ void main(){ vec2 c = vUv - .5; float ca = .0018 * dot(c, c) * 4.; vec3 s = vec3
   /* Render a scene: fs is the scene shader (writes linear colour), uniforms set by setU(P). The finished picture is drawn
      into the 2D context at (0, 0, W, H). scale < 1 renders smaller for a quicker preview. */
   function render(name, fs, ctx2d, W, H, setU, o = {}) {
-    const g = ctx(); if (!g) return false; const k = o.scale || 1, w = Math.max(16, Math.round(W * k)), h = Math.max(16, Math.round(H * k));
+    const g = ctx(); if (!g) return false; const t0 = performance.now(), k = o.adaptive ? live.k : (o.scale || 1), w = Math.max(16, Math.round(W * k)), h = Math.max(16, Math.round(H * k));
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     const P = program(name, fs); if (!P) return false; const S = target('scene', w, h);
     g.bindVertexArray(quad); g.useProgram(P.p); g.bindFramebuffer(g.FRAMEBUFFER, S.fb); g.viewport(0, 0, w, h); set(P, 'uRes', [w, h]); setU(P); g.drawArrays(g.TRIANGLES, 0, 3);
-    post(S.t, w, h, o); ctx2d.save(); ctx2d.imageSmoothingQuality = 'high'; ctx2d.drawImage(cv, 0, 0, W, H); ctx2d.restore(); return true;
+    post(S.t, w, h, o); ctx2d.save(); ctx2d.imageSmoothingQuality = 'high'; ctx2d.drawImage(cv, 0, 0, W, H); ctx2d.restore();
+    if (o.adaptive) { const ms = performance.now() - t0; live.k = ms > 40 ? Math.max(0.3, live.k * 0.8) : ms < 16 ? Math.min(1, live.k * 1.1) : live.k; } return true;
   }
+  // While previewing, the picture is drawn smaller when frames get slow (exports are always full size)
+  const live = { k: 1 };
   // The camera both the shader and the 2D overlays (sparks) use
   function camera(eye, at, fov, W, H) { const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); }, cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     const f = nrm(sub(at, eye)), r = nrm(cross(f, [0, 1, 0])), u = cross(r, f), fl = 1 / Math.tan(fov / 2);
     return { eye, at, fov, project: p => { const d = sub(p, eye), z = dot(d, f); if (z <= 0.01) return null; const x = dot(d, r) / z * fl, y = dot(d, u) / z * fl; return [W / 2 + x * H / 2, H / 2 - y * H / 2, z]; } }; }
-  return { available, ctx, program, set, setv, tex, target, imageTex, textSdf, render, camera, COMMON, get floatOK() { return floatOK; } };
+  return { available, ctx, program, set, setv, tex, target, imageTex, floatTex, textSdf, render, camera, COMMON, get floatOK() { return floatOK; } };
 })();
