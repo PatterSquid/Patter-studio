@@ -10,7 +10,11 @@
 const Squid = (() => {
   const IW = 302, IH = 401, FX = 151, FY = 396, BOX = [-240, -200, 542, 620], EYES = [[105, 135, 23], [193, 135, 23]];
   let gl = null, cv = null, P = null, tex = null, nIdx = 0, img = null, readyP = null, failed = false;
-  function ready() { return readyP || (readyP = (async () => { if (typeof STUDIO_SQUID === 'undefined') return null; img = await createImageBitmap(await (await fetch(STUDIO_SQUID)).blob()); return img; })().catch(() => null)); }
+  function ready() { return readyP || (readyP = (async () => { if (typeof STUDIO_SQUID === 'undefined') return null; const raw = await createImageBitmap(await (await fetch(STUDIO_SQUID)).blob());
+    // the outer right tentacle is taken off the picture and drawn as a bendy arm in the same style, so he can hold things
+    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(IW, IH) : Object.assign(document.createElement('canvas'), { width: IW, height: IH }), x = c.getContext('2d'); x.drawImage(raw, 0, 0);
+    const im = x.getImageData(0, 0, IW, IH), d = im.data; for (let yy = 215; yy < 300; yy++) for (let xx = 212; xx < IW; xx++) if (yy < 250 + (xx - 212) * 0.55) d[(yy * IW + xx) * 4 + 3] = 0; x.putImageData(im, 0, 0);
+    img = c; return img; })().catch(() => null)); }
   const VS = `#version 300 es
 in vec2 aP; out vec2 vUv; out vec2 vP;
 uniform vec4 uBox; uniform float uT, uSq, uLean, uWave, uWaveF, uSplay, uDroop, uArmL, uArmR, uEye;
@@ -59,8 +63,20 @@ void main(){ vec4 c = texture(uTex, vUv); if (c.a < .004) discard;
     rot(88, 252, q.armL * ss(100, 60, ox) * ss(222, 248, oy) * ss(335, 305, oy)); rot(220, 246, -q.armR * ss(205, 245, ox) * ss(222, 245, oy) * ss(305, 280, oy));
     [[105, 135], [193, 135]].forEach(([cx, cy]) => { const f = ss(46, 20, Math.hypot(ox - cx, oy - cy)), m = 1 + (q.eye - 1) * f; x = cx + (x - cx) * m; y = cy + (y - cy) * m; });
     rot(151, 215, q.lean * ss(225, 130, oy)); x = 151 + (x - 151) / Math.sqrt(q.sq); y = 396 + (y - 396) * q.sq; return [x, y]; }
-  const PTS = { top: [151, 8], crown: [151, 30], eyeL: [105, 135], eyeR: [193, 135], mouth: [151, 205], armL: [16, 292], armR: [292, 262], belly: [151, 230] };
-  function point(name, x, y, h, pose = {}) { const q = Object.assign({}, D, pose), k = h / IH, p = deform(...(PTS[name] || PTS.top), q); let dx = (p[0] - FX) * k * (pose.flip ? -1 : 1), dy = (p[1] - FY) * k; const r = pose.rot || 0; return [x + dx * Math.cos(r) - dy * Math.sin(r), y + dx * Math.sin(r) + dy * Math.cos(r)]; }
+  // The bendy arm: from its root on the body, a tapered curve set by an angle, a length and a curl
+  const ARM0 = [214, 241];
+  function armPts(q) { const r = deform(ARM0[0], ARM0[1], q), n = 18, L = q.armLen || 112, pts = [r]; let a = q.armA == null ? 0.42 : q.armA, x = r[0], y = r[1];
+    for (let i = 1; i <= n; i++) { const u = i / n; a += (q.armCurl == null ? 1.1 : q.armCurl) / n * (0.4 + 1.2 * u) + Math.sin(q.t * 2.1 + u * 4) * 0.012 * (q.wave || 0); x += Math.cos(a) * L / n; y += Math.sin(a) * L / n; pts.push([x, y]); } return pts; }
+  function drawArm(g, q) { const P = armPts(q), n = P.length, Lf = [], Rt = [];
+    for (let i = 0; i < n; i++) { const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, w = 12 * (1 - 0.72 * Math.pow(i / (n - 1), 1.2)); Lf.push([P[i][0] - dy / l * w, P[i][1] + dx / l * w]); Rt.push([P[i][0] + dy / l * w, P[i][1] - dx / l * w]); }
+    const path = () => { g.beginPath(); g.moveTo(Lf[0][0], Lf[0][1]); for (let i = 1; i < n; i++) g.lineTo(Lf[i][0], Lf[i][1]); const tp = P[n - 1]; g.quadraticCurveTo(tp[0] + (tp[0] - P[n - 2][0]) * 0.8, tp[1] + (tp[1] - P[n - 2][1]) * 0.8, Rt[n - 1][0], Rt[n - 1][1]); for (let i = n - 1; i >= 0; i--) g.lineTo(Rt[i][0], Rt[i][1]); g.closePath(); };
+    const amb = q.amb || [1, 1, 1], tint = (r, gg, b) => `rgb(${Math.round(r * amb[0])},${Math.round(gg * amb[1])},${Math.round(b * amb[2])})`;
+    path(); g.fillStyle = tint(232, 226, 215); g.fill(); g.save(); path(); g.clip(); g.fillStyle = tint(198, 191, 180); g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 0; i < n; i++) g.lineTo(P[i][0], P[i][1]); for (let i = n - 1; i >= 0; i--) g.lineTo(Rt[i][0], Rt[i][1]); g.closePath(); g.fill();
+    // a highlight along the top and two suckers near the tip, like the picture
+    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 2; g.beginPath(); for (let i = 2; i < n - 4; i++) { const p = Lf[i], c = P[i]; const xx = c[0] + (p[0] - c[0]) * 0.6, yy = c[1] + (p[1] - c[1]) * 0.6; i === 2 ? g.moveTo(xx, yy) : g.lineTo(xx, yy); } g.stroke(); g.restore();
+    [0.62, 0.8].forEach(f => { const i = Math.round(f * (n - 1)), c = P[i], rp = Rt[i], sx = c[0] + (rp[0] - c[0]) * 0.55, sy = c[1] + (rp[1] - c[1]) * 0.55; g.fillStyle = tint(90, 86, 92); g.beginPath(); g.arc(sx, sy, 3.2, 0, Math.PI * 2); g.fill(); g.fillStyle = tint(238, 232, 222); g.beginPath(); g.arc(sx - 0.6, sy - 0.6, 1.4, 0, Math.PI * 2); g.fill(); }); if (q.armInk !== false) { path(); g.lineWidth = 2.6; g.strokeStyle = 'rgba(21,18,26,0.9)'; g.lineJoin = 'round'; g.stroke(); } }
+  const PTS = { hand: null, top: [151, 8], crown: [151, 30], eyeL: [105, 135], eyeR: [193, 135], mouth: [151, 205], armL: [16, 292], armR: [292, 262], belly: [151, 230] };
+  function point(name, x, y, h, pose = {}) { const q = Object.assign({}, D, pose), k = h / IH, p = name === 'hand' ? armPts(q).slice(-3)[0] : deform(...(PTS[name] || PTS.top), q); let dx = (p[0] - FX) * k * (pose.flip ? -1 : 1), dy = (p[1] - FY) * k; const r = pose.rot || 0; return [x + dx * Math.cos(r) - dy * Math.sin(r), y + dx * Math.sin(r) + dy * Math.cos(r)]; }
   // Head angle (for hats): from the crown towards the top
   function headAngle(pose = {}) { const q = Object.assign({}, D, pose), a = deform(151, 120, q), b = deform(151, 8, q); return Math.atan2(b[0] - a[0], -(b[1] - a[1])) * (pose.flip ? -1 : 1) + (pose.rot || 0); }
   function draw(g, x, y, h, pose = {}) {
@@ -71,6 +87,7 @@ void main(){ vec4 c = texture(uTex, vUv); if (c.a < .004) discard;
     gl.uniform4f(U.uBox, BOX[0], BOX[1], BOX[2], BOX[3]); ['uT:t', 'uSq:sq', 'uLean:lean', 'uWave:wave', 'uWaveF:waveF', 'uSplay:splay', 'uDroop:droop', 'uArmL:armL', 'uArmR:armR', 'uEye:eye', 'uLidL:lidL', 'uLidR:lidR', 'uRimAmt:rimAmt', 'uWet:wet'].forEach(s => { const [u, n] = s.split(':'); f1(u, q[n]); });
     gl.uniform3fv(U.uAmb, q.amb); gl.uniform3fv(U.uRim, q.rim); gl.uniform2fv(U.uRimDir, q.rimDir); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uTex, 0);
     gl.drawElements(gl.TRIANGLES, nIdx, gl.UNSIGNED_SHORT, 0);
-    g.save(); g.translate(x, y); if (q.rot) g.rotate(q.rot); if (q.flip) g.scale(-1, 1); g.drawImage(cv, (BOX[0] - FX) * k, (BOX[1] - FY) * k, bw * k, bh * k); g.restore(); return true; }
-  return { ready, draw, point, headAngle, IW, IH };
+    g.save(); g.translate(x, y); if (q.rot) g.rotate(q.rot); if (q.flip) g.scale(-1, 1); g.drawImage(cv, (BOX[0] - FX) * k, (BOX[1] - FY) * k, bw * k, bh * k); g.scale(k, k); g.translate(-FX, -FY); if (pose.preArm) pose.preArm(g); drawArm(g, q); if (pose.postArm) pose.postArm(g); g.restore(); return true; }
+  function hand(pose = {}) { const q = Object.assign({}, D, pose), P = armPts(q), a = P[P.length - 3], b = P[P.length - 1]; return { x: a[0], y: a[1], a: Math.atan2(b[1] - a[1], b[0] - a[0]) }; }
+  return { ready, draw, point, headAngle, hand, IW, IH };
 })();
