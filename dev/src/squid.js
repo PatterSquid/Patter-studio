@@ -60,6 +60,15 @@ const Squid = (() => {
       g.fillStyle = '#fff'; g.beginPath(); g.arc(ex - rx * 0.35 + lk[0] * rx * 0.25, ey - ry * 0.4 + lk[1] * ry * 0.2, rx * 0.26, 0, Math.PI * 2); g.fill(); g.beginPath(); g.arc(ex + rx * 0.3, ey + ry * 0.35, rx * 0.1, 0, Math.PI * 2); g.fill();
       if (lid > 0.01 || brow < -0.01) { const tilt = -brow * 0.35 * sd * -1, top = ey - ry * 1.1, edge = ey - ry + 2 * ry * Math.min(1, lid); g.fillStyle = WHITE; g.beginPath(); g.moveTo(ex - rx * 1.3, top); g.lineTo(ex + rx * 1.3, top); g.lineTo(ex + rx * 1.3, edge + tilt * rx); g.lineTo(ex - rx * 1.3, edge - tilt * rx); g.closePath(); g.fill(); g.strokeStyle = LINE; g.lineWidth = lw / S * 1.2; g.beginPath(); g.moveTo(ex - rx * 1.3, edge - tilt * rx); g.lineTo(ex + rx * 1.3, edge + tilt * rx); g.stroke(); }
       g.restore(); });
+    // hats: a bunnet (flat cap) or a traffic cone, sat on the crown
+    if (pose.hat === 'bunnet') { g.save(); g.translate(0, -1.16); g.rotate(pose.hatTilt || -0.12); g.lineWidth = lw / S; g.strokeStyle = LINE;
+      g.fillStyle = '#5b5348'; g.beginPath(); g.moveTo(-0.46, 0.1); g.bezierCurveTo(-0.5, -0.16, -0.2, -0.24, 0.12, -0.2); g.bezierCurveTo(0.42, -0.16, 0.56, -0.02, 0.62, 0.08); g.bezierCurveTo(0.3, 0.14, -0.2, 0.16, -0.46, 0.1); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#463f36'; g.beginPath(); g.moveTo(0.28, 0.06); g.bezierCurveTo(0.5, 0.04, 0.72, 0.08, 0.78, 0.14); g.bezierCurveTo(0.6, 0.18, 0.4, 0.16, 0.24, 0.13); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.12)'; for (let k = -3; k <= 3; k++) { g.beginPath(); g.moveTo(-0.4 + k * 0.02, 0.05 + k * 0.01); g.lineTo(0.5, -0.1 + k * 0.03); g.stroke(); } g.restore(); }
+    if (pose.hat === 'cone') { g.save(); g.translate(0, -1.2); g.rotate(pose.hatTilt || 0.18); g.lineWidth = lw / S; g.strokeStyle = LINE;
+      g.fillStyle = '#e8661c'; g.beginPath(); g.moveTo(-0.3, 0.05); g.lineTo(-0.05, -0.95); g.lineTo(0.05, -0.95); g.lineTo(0.3, 0.05); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#f2f2ee'; [[-0.24, -0.18, 0.2], [-0.15, -0.53, 0.13]].forEach(([x0, y0, w]) => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(-x0, y0); g.lineTo(-x0 - w * 0.25, y0 - 0.12); g.lineTo(x0 + w * 0.25, y0 - 0.12); g.closePath(); g.fill(); });
+      g.fillStyle = '#c94f12'; g.beginPath(); g.roundRect(-0.42, 0.02, 0.84, 0.1, 0.03); g.fill(); g.stroke(); g.restore(); }
     if (pose.mouth > 0.02) { const m = pose.mouth; g.fillStyle = '#3a1c24'; g.beginPath(); g.ellipse(0, -0.08, 0.05 + 0.04 * m, 0.03 + 0.07 * m, 0, 0, Math.PI * 2); g.fill(); }
     g.restore(); g.restore();
   }
