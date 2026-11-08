@@ -11,9 +11,9 @@
    Like every tab it is a pure function of time. Its sound is made here from the same moments (Intro.sound), saved
    as a WAV, and played under the clip when it is used in the Video tab. */
 const Intro = (() => {
-  const STYLES = [['ink', 'Ink burst'], ['battered', 'Battered'], ['neon', 'Neon tenement'], ['epic', 'Epic, cut short']];
-  const LINES = { ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
-  const BASE = { ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
+  const STYLES = [['shutit', 'Shut it!']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
+  const LINES = { shutit: 'Sorry, Senga.', ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
+  const BASE = { shutit: 5.6, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, f) => a + (b - a) * f, sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const eo = x => 1 - Math.pow(1 - cl(x, 0, 1), 3), eo5 = x => 1 - Math.pow(1 - cl(x, 0, 1), 5), ei = x => Math.pow(cl(x, 0, 1), 2), eio = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const spring = (k, amp, w, d) => k < 0 ? 0 : amp * Math.exp(-k * d) * Math.cos(k * w);
@@ -22,17 +22,17 @@ const Intro = (() => {
   const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); };
   const HEAVY = '"Arial Black", "Segoe UI Black", Impact, "Helvetica Neue", Arial, sans-serif', COND = 'Bahnschrift, "Arial Narrow", "Segoe UI", Arial, sans-serif', SERIF = 'Georgia, Cambria, "Times New Roman", serif', SCRIPT = '"Segoe Script", "Brush Script MT", "Comic Sans MS", cursive', MARK = '"Segoe Print", "Comic Sans MS", "Segoe Script", cursive';
 
-  function defaults() { return { style: 'ink', name: 'PATTERSQUID', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', sound: { on: true, vol: 0.9 } }; }
+  function defaults() { return { style: 'shutit', name: 'PatterSquid', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', sound: { on: true, vol: 0.9 } }; }
   const lineOf = cfg => { const L = cfg.lines && typeof cfg.lines === 'object' ? cfg.lines[styleOf(cfg)] : null; return L == null ? LINES[styleOf(cfg)] : String(L); };
-  const styleOf = cfg => STYLES.some(s => s[0] === cfg.style) ? cfg.style : 'ink';
-  const nameOf = cfg => String(cfg.name == null ? 'PATTERSQUID' : cfg.name).slice(0, 24);
+  const styleOf = cfg => STYLES.some(s => s[0] === cfg.style) ? cfg.style : 'shutit';
+  const nameOf = cfg => String(cfg.name == null || cfg.name === 'PATTERSQUID' ? 'PatterSquid' : cfg.name).slice(0, 24);
   const epOf = cfg => String(cfg.episode || '').trim().slice(0, 80);
   const mainLen = cfg => BASE[styleOf(cfg)] + (epOf(cfg) ? EP : 0);
   function duration(cfg) { return mainLen(cfg) + cl(+cfg.hold || 0, 0, 10); }
 
   // His logo
   let logo = null, readyP = null;
-  function ready() { if (readyP) return readyP; readyP = (async () => { if (typeof STUDIO_LOGO === 'undefined') return null; try { logo = await createImageBitmap(await (await fetch(STUDIO_LOGO)).blob()); } catch (e) { logo = null; } return logo; })(); return readyP; }
+  function ready() { if (readyP) return readyP; readyP = (async () => { if (typeof IntroScenes !== 'undefined') await IntroScenes.ready(); if (typeof STUDIO_LOGO === 'undefined') return null; try { logo = await createImageBitmap(await (await fetch(STUDIO_LOGO)).blob()); } catch (e) { logo = null; } return logo; })(); return readyP; }
   if (typeof window !== 'undefined' || typeof self !== 'undefined') setTimeout(ready, 0);
   // The disc on its own, round (the logo fills its picture; its circle is about 250 of 256 across)
   function discAt(g, x, y, R, o = {}) { if (!logo) { ready(); g.fillStyle = '#0b2f66'; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill(); return; } g.save(); g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.clip(); g.drawImage(logo, x - R * 1.03, y - R * 1.03, R * 2.06, R * 2.06); g.restore();
@@ -834,6 +834,7 @@ void main(){
   function draw(g, t, cfg, look, W, H) {
     q3live = !(look && (look.exporting || (look.cutEnv && !look.preview)));
     t = cl(t, 0, duration(cfg)); const L = layout(W, H), st = styleOf(cfg), tm = Math.min(t, mainLen(cfg)) + Math.max(0, t - mainLen(cfg)) * 0;
+    if (st === 'shutit') { g.save(); let ok = false; try { ok = typeof IntroScenes !== 'undefined' && IntroScenes.shutIt(g, t, W, H, { name: nameOf(cfg), line: lineOf(cfg), episode: epOf(cfg), kicker: String(cfg.kicker || '').trim().slice(0, 40) }); } catch (e) { console.warn('intro', e); } if (!ok) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0d18'; g.fillRect(0, 0, W, H); } g.restore(); return; }
     g.save(); try { if (st === 'battered') { if (!try3D(drawBattered3D, 'battered', g, t, L, cfg)) drawBattered(g, t, L, cfg); } else if (st === 'neon') { let ok = false; try { ok = drawNeon3D(g, t, L, cfg); } catch (e) { if (!drawNeon3D.warned) { drawNeon3D.warned = 1; console.warn('3D neon', e); } } if (!ok) drawNeon(g, t, L, cfg); } else if (st === 'epic') { if (!try3D(drawEpic3D, 'epic', g, t, L, cfg)) drawEpic(g, t, L, cfg); } else { if (!try3D(drawInk3D, 'ink', g, t, L, cfg)) drawInk(g, t, L, cfg); } } finally { g.restore(); }
     void tm; void look;
   }
@@ -847,7 +848,34 @@ void main(){
     const swish = (t0, len, f0, f1, amp, pan) => { let a = 0, b = 0; add(t0, len, pan == null ? 0.5 : pan, x => { const p = x / len, f = f0 * Math.pow(f1 / f0, p), q = 2 * Math.sin(Math.PI * Math.min(0.45, f / sr)); a += q * (nz() - a - b * 0.25); b += q * a; return b * amp * Math.sin(Math.PI * p); }); };
     const click = (t0, f, amp, pan) => { let lp = 0; add(t0, 0.06, pan == null ? 0.5 : pan, x => { lp += 0.35 * (nz() - lp); return (Math.sin(TAU * f * x) * 0.6 + lp * 0.6) * amp * Math.exp(-x * 70) * Math.min(1, x / 0.0015); }); };
     const pad = (t0, len, freqs, amp, att) => add(t0, len, 0.5, x => { const env = Math.min(1, x / att) * Math.min(1, (len - x) / 0.6); let v = 0; freqs.forEach((f, i) => { const ph = TAU * f * x + i; v += Math.sin(ph) + 0.35 * Math.sin(2 * ph + 0.3) + 0.15 * Math.sin(3 * ph); }); return v * amp * env / freqs.length; });
-    if (st === 'ink') {
+    if (st === 'shutit') { const S = IntroScenes.S;
+      // a quiet street: wind, a dog somewhere
+      { let a = 0, b = 0; add(0, D, 0.5, x => { a += 0.015 * (nz() - a); b += 0.0015 * (nz() - b); return (a * 0.6 + b * 2) * 0.4 * Math.min(1, x / 0.4); }); }
+      const woof = (t0, pan, amp) => add(t0, 0.16, pan, x => (Math.sin(TAU * (520 - 900 * x) * x) * 0.6 + nz() * 0.3) * amp * Math.sin(Math.PI * x / 0.16));
+      woof(0.35, 0.15, 0.06); woof(0.55, 0.15, 0.05);
+      // him puffing up proud
+      add(0.7, 0.22, 0.5, x => Math.sin(TAU * (300 + 900 * x * x / 0.05) * x) * 0.12 * Math.sin(Math.PI * x / 0.22));
+      // the letters whistling down, then the SLAM
+      add(S.drop - 0.25, S.slam - S.drop + 0.25, 0.5, x => { const p = x / (S.slam - S.drop + 0.25); return Math.sin(TAU * (2400 - 1500 * p) * x) * 0.09 * p; });
+      boom(S.slam, 120, 34, 1.6, 1.0); { let a = 0; add(S.slam, 0.9, 0.5, x => { a += 0.4 * (nz() - a); return a * 0.9 * Math.exp(-x * 6); }); }
+      for (let k = 0; k < 10; k++) add(S.slam + 0.08 + r() * 0.5, 0.05, 0.3 + r() * 0.4, x => Math.sin(TAU * (2500 + r() * 3000) * x) * 0.08 * Math.exp(-x * 60));
+      // the motor's alarm: two tone, until the slipper lands
+      add(S.slam + 0.1, S.alarmOff - S.slam - 0.1, 0.78, x => { const ph = (x * 2.4) % 1, f = ph < 0.5 ? 900 + 700 * (ph * 2) : 1600 - 700 * ((ph - 0.5) * 2); return (Math.sin(TAU * f * x) > 0 ? 1 : -1) * 0.05 + Math.sin(TAU * f * x) * 0.05; });
+      // light on, sash up with a bang
+      click(S.win, 2400, 0.3, 0.2); add(S.open, 0.35, 0.2, x => (Math.sin(TAU * 140 * x) * 0.7 + nz() * 0.5) * Math.exp(-x * 18) + Math.sin(TAU * 3200 * x) * 0.05 * Math.exp(-x * 9));
+      // SHUT IT!: a stab
+      add(S.shout, 0.5, 0.25, x => { let v = 0; [220, 277, 330, 440].forEach(f => { v += Math.sign(Math.sin(TAU * f * x)) * 0.3; }); return v * 0.08 * Math.exp(-x * 6) * Math.min(1, x / 0.01); });
+      // the slipper spinning through the air, then BONK and a boing
+      add(S.throw, S.bonk - S.throw, 0.35, x => { const p = x / (S.bonk - S.throw); return nz() * 0.25 * (0.4 + 0.6 * Math.abs(Math.sin(x * 50))) * Math.sin(Math.PI * p); });
+      add(S.bonk, 0.25, 0.5, x => (Math.sin(TAU * (520 - 300 * x) * x) * 0.9 + nz() * 0.3 * Math.exp(-x * 60)) * Math.exp(-x * 14));
+      add(S.bonk + 0.04, 0.7, 0.5, x => Math.sin(TAU * (230 + 90 * Math.sin(TAU * 14 * x) * Math.exp(-x * 4)) * x) * 0.28 * Math.exp(-x * 4));
+      // silence where the alarm was; birdies round his heid; the letter keels over; the window slams
+      for (let k = 0; k < 6; k++) add(S.bonk + 0.25 + k * 0.22, 0.12, 0.5 + (k % 2 ? 0.15 : -0.15), x => Math.sin(TAU * (3200 + 900 * Math.sin(TAU * 25 * x)) * x) * 0.05 * Math.sin(Math.PI * x / 0.12));
+      add(S.fall + 0.42, 0.4, 0.55, x => (Math.sin(TAU * 95 * x) * 0.6 + nz() * 0.3) * Math.exp(-x * 12));
+      add(S.shut, 0.3, 0.2, x => (Math.sin(TAU * 120 * x) * 0.6 + nz() * 0.6) * Math.exp(-x * 20) + Math.sin(TAU * 4100 * x) * 0.04 * Math.exp(-x * 7));
+      if (lineOf(cfg)) click(S.line, 900, 0.2, 0.3);
+      if (epOf(cfg)) add(S.end - 0.4, 0.3, 0.7, x => (Math.sin(TAU * 600 * x) * 0.4 + Math.sin(TAU * 1500 * x) * 0.2) * Math.exp(-x * 12));
+    } else if (st === 'ink') {
       add(INK.drop, INK.hit - INK.drop, 0.5, x => Math.sin(TAU * (900 + 1600 * x) * x) * 0.06 * Math.sin(Math.PI * x / (INK.hit - INK.drop)));
       boom(INK.hit, 110, 38, 2.2, 0.9); swish(INK.hit, 1.1, 300, 2400, 0.35); swish(INK.hit + 0.05, 1.4, 120, 700, 0.3, 0.35);
       { let a = 0; add(INK.hit, 0.6, 0.5, x => { a += 0.35 * (nz() - a); return a * 0.6 * Math.exp(-x * 7); }); }
