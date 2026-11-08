@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.08.1",
+  "version": "2026.11.08.2",
   "file": "app/patter-studio.html",
-  "notes": "PatterSquid intro (in the Video tab under Patter), speed curves for any clip, and seasonal decorations for your studio (Halloween, Bonfire Night, St Andrew's, Christmas, Hogmanay, Burns Night, Valentine's, Easter, match day, or by the date)"
+  "notes": "The four intros are now proper 3D: Ink burst, Battered, Neon tenement and Epic, cut short. Also fixes Video exports at 720p and 4K drawing tab clips at the wrong size."
 }
