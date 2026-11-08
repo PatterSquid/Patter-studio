@@ -14,11 +14,15 @@ os.makedirs(DIST, exist_ok=True)
 
 # His studio, built in: the room picture and what is marked in it
 open(os.path.join(SRC, 'studio_room.js'), 'w').write('const STUDIO_ROOM = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-room.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_LOGO = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'pattersquid.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_PLATE = ' + repr('data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-plate.jpg'), 'rb').read()).decode()) + ';\nconst STUDIO_SQUID = ' + repr('data:image/png;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'studio-squid.png'), 'rb').read()).decode()) + ';\nconst STUDIO_MARKS = ' + open(os.path.join(ROOT, 'assets', 'studio-marks.json')).read() + ';\n')
+# Open licence display fonts (SIL OFL, licences in assets/fonts), loaded with FontFace so titles look the same everywhere
+def _font(f): return 'data:font/ttf;base64,' + base64.b64encode(open(os.path.join(ROOT, 'assets', 'fonts', f), 'rb').read()).decode()
+open(os.path.join(SRC, 'fonts.js'), 'w').write('const PATTER_FONTS = ' + repr({'Bricolage Grotesque|700': _font('BricolageGrotesque-Bold.ttf'), 'Bricolage Grotesque|400': _font('BricolageGrotesque-Regular.ttf'), 'Boldonse|400': _font('Boldonse-Regular.ttf')}) + ';\n'
+  + 'const PatterFonts = (() => { let p = null; return { ready() { return p || (p = Promise.all(Object.entries(PATTER_FONTS).map(([k, u]) => { const [fam, w] = k.split("|"); try { const f = new FontFace(fam, "url(" + u + ")", { weight: w }); (typeof document !== "undefined" ? document.fonts : self.fonts).add(f); return f.load().catch(() => null); } catch (e) { return null; } })).catch(() => null)); } }; })();\n')
 order = open(os.path.join(ROOT, 'story', 'ORDER')).read().split()
 open(os.path.join(SRC, 'story.js'), 'w').write(''.join(open(os.path.join(ROOT, 'story', f)).read() for f in order))
 
-FILES = ['mp4mux.js', 'engine.js', 'ui.js', 'charts.js', 'timeline.js', 'picto.js', 'geodata.js', 'globegl.js', 'globe.js', 'routes.js',
-         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'cut_mp4.js', 'cut_media.js', 'cut_gl.js', 'cut_audio.js', 'cut_intro.js', 'video.js', 'cut_export.js', 'cut_ui.js', 'cut_insp.js', 'studio_room.js', 'studio_events.js', 'studio_decor.js', 'studio.js', 'g3.js', 'intro.js', 'layers.js', 'editor.js', 'render.js', 'repair.js', 'app.js']
+FILES = ['fonts.js', 'mp4mux.js', 'engine.js', 'ui.js', 'charts.js', 'timeline.js', 'picto.js', 'geodata.js', 'globegl.js', 'globe.js', 'routes.js',
+         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'cut_mp4.js', 'cut_media.js', 'cut_gl.js', 'cut_audio.js', 'cut_intro.js', 'video.js', 'cut_export.js', 'cut_ui.js', 'cut_insp.js', 'studio_room.js', 'studio_events.js', 'studio_decor.js', 'studio.js', 'g3.js', 'squid.js', 'coat.js', 'coat_scenes.js', 'street3d.js', 'intro.js', 'layers.js', 'editor.js', 'render.js', 'repair.js', 'app.js']
 VERSION = open(os.path.join(ROOT, 'VERSION')).read().strip()
 html = open(os.path.join(SRC, 'index.html')).read()
 css = open(os.path.join(SRC, 'style.css')).read()

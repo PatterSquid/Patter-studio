@@ -4,3 +4,4 @@ dev/fakehome/
 __pycache__/
 dev/src/studio_room.js
 dev/tmp_*
+dev/src/fonts.js
