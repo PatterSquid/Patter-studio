@@ -36,43 +36,87 @@ const IntroScenes = (() => {
     g.restore(); body(); g.lineWidth = 6; g.strokeStyle = INK; g.stroke(); g.fillStyle = '#c9a43a'; g.fillRect(cx - 14, 2, 28, 14); g.strokeRect(cx - 14, 2, 28, 14);
     return (BOT = c); }
   /* ---------- the neds on their bikes ---------- */
-  // one ned on a BMX, side on, facing right, ground at y = 0, about 260 tall; o = { finger (0..1), wheelie (radians), col, cap, t }
-  function ned(g, o) { const t = o.t, O = INK, L = w => { g.lineWidth = w; g.strokeStyle = O; g.lineJoin = 'round'; g.lineCap = 'round'; };
-    g.save(); if (o.wheelie) { g.translate(-62, 0); g.rotate(-o.wheelie); g.translate(62, 0); }
-    const R = 34, BW = [-62, -R], FW = [62, -R], BB = [0, -40], SEAT = [-26, -88], HEAD = [46, -92], BAR = [40, -122], spin = t * 22;
-    // wheels: fat tyres, spokes going round
-    [BW, FW].forEach(([wx, wy]) => { g.beginPath(); g.arc(wx, wy, R, 0, Math.PI * 2); g.fillStyle = '#1d1c22'; g.fill(); L(5); g.stroke(); g.beginPath(); g.arc(wx, wy, R - 9, 0, Math.PI * 2); g.strokeStyle = '#b9bcc4'; g.lineWidth = 3; g.stroke();
-      g.strokeStyle = 'rgba(200,205,215,0.8)'; g.lineWidth = 1.5; for (let k = 0; k < 8; k++) { const a = spin + k * Math.PI / 4; g.beginPath(); g.moveTo(wx, wy); g.lineTo(wx + Math.cos(a) * (R - 9), wy + Math.sin(a) * (R - 9)); g.stroke(); } g.beginPath(); g.arc(wx, wy, 5, 0, Math.PI * 2); g.fillStyle = '#ddd'; g.fill(); });
-    // the frame
-    const tube = (pts, col) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); L(11); g.stroke(); g.lineWidth = 6; g.strokeStyle = col; g.stroke(); };
-    tube([BW, SEAT, HEAD, BB, BW], o.bike || '#d42a2a'); tube([HEAD, FW], '#c9ccd2'); tube([HEAD, BAR], '#c9ccd2'); L(5); g.beginPath(); g.moveTo(BAR[0] - 14, BAR[1] + 2); g.lineTo(BAR[0] + 14, BAR[1] - 2); g.lineWidth = 8; g.stroke();
-    g.beginPath(); g.ellipse(SEAT[0], SEAT[1] - 4, 16, 6, 0, 0, Math.PI * 2); g.fillStyle = '#222'; g.fill(); L(4); g.stroke();
-    // legs to the pedals going round (knees worked out so the shins stay the same length)
-    const hip = [-20, -112], leg = (ph, back) => { const f = [BB[0] + Math.cos(spin * 0.5 + ph) * 18, BB[1] + Math.sin(spin * 0.5 + ph) * 18], dx = f[0] - hip[0], dy = f[1] - hip[1], d = Math.min(Math.hypot(dx, dy), 92), a = Math.atan2(dy, dx), k = Math.acos(Math.min(1, d / 92)), kn = [hip[0] + Math.cos(a - k) * 46, hip[1] + Math.sin(a - k) * 46];
-      g.beginPath(); g.moveTo(hip[0], hip[1]); g.lineTo(kn[0], kn[1]); g.lineTo(f[0], f[1]); L(22); g.stroke(); g.lineWidth = 15; g.strokeStyle = back ? shade(o.col || '#30343f') : (o.col || '#30343f'); g.stroke(); g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 2; g.stroke();
-      g.beginPath(); g.ellipse(f[0] + 6, f[1] + 2, 15, 8, 0, 0, Math.PI * 2); g.fillStyle = '#f4f4f0'; g.fill(); L(4); g.stroke(); };
-    leg(Math.PI, true);
-    // body: trackie top hunched over the bars, a gold chain
-    const sh = [8, -176]; g.beginPath(); g.moveTo(hip[0] - 16, hip[1] + 6); g.quadraticCurveTo(-34, -160, sh[0] - 10, sh[1] - 8); g.lineTo(sh[0] + 22, sh[1] + 2); g.quadraticCurveTo(18, -130, hip[0] + 18, hip[1] + 4); g.closePath(); g.fillStyle = o.top || '#1d2b5c'; g.fill(); L(5); g.stroke();
-    g.strokeStyle = '#e9c24a'; g.lineWidth = 3; g.beginPath(); g.arc(sh[0] + 8, sh[1] + 4, 12, 0.2, 2.6); g.stroke();
-    leg(0, false);
-    // arm to the handlebars
-    const arm = (from, to, col) => { g.beginPath(); g.moveTo(from[0], from[1]); g.quadraticCurveTo((from[0] + to[0]) / 2 + 6, (from[1] + to[1]) / 2 + 14, to[0], to[1]); L(19); g.stroke(); g.lineWidth = 12; g.strokeStyle = col; g.stroke(); g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; g.stroke(); };
-    arm([sh[0] + 6, sh[1] + 6], BAR, o.top || '#1d2b5c'); g.beginPath(); g.arc(BAR[0], BAR[1], 7, 0, Math.PI * 2); g.fillStyle = '#f0c7a6'; g.fill(); L(3); g.stroke();
-    // the other arm: up, giving it the finger
-    if (o.finger > 0) { const f = o.finger, hand = [lerp(sh[0] + 20, -118, f), lerp(sh[1] + 30, -246, f)]; arm([sh[0] - 4, sh[1] + 4], hand, o.top || '#1d2b5c');
-      g.save(); g.translate(hand[0], hand[1]); g.rotate(-0.25 - 0.5 * f); g.fillStyle = '#f0c7a6'; L(3); g.beginPath(); g.roundRect(-9, -6, 18, 16, 5); g.fill(); g.stroke(); g.beginPath(); g.roundRect(-3.5, -26, 7, 22, 3.5); g.fill(); g.stroke(); g.restore(); }
-    // heid: wee pointy face, a sneer, the cap perched on top
-    const hd = [26, -204]; if (o.finger > 0.4) { g.translate(hd[0] * 2, 0); g.scale(-1, 1); } g.beginPath(); g.ellipse(hd[0], hd[1], 21, 25, 0.1, 0, Math.PI * 2); g.fillStyle = '#f0c7a6'; g.fill(); L(4); g.stroke();
-    g.beginPath(); g.moveTo(hd[0] + 18, hd[1] - 2); g.lineTo(hd[0] + 30, hd[1] + 6); g.lineTo(hd[0] + 17, hd[1] + 9); g.fillStyle = '#f0c7a6'; g.fill(); L(3); g.stroke();
-    g.fillStyle = O; g.beginPath(); g.arc(hd[0] + 10, hd[1] - 6, 2.8, 0, Math.PI * 2); g.fill(); L(3); g.beginPath(); g.moveTo(hd[0] + 4, hd[1] - 13); g.lineTo(hd[0] + 15, hd[1] - 10); g.stroke();
-    g.beginPath(); g.moveTo(hd[0] + 4, hd[1] + 13); g.quadraticCurveTo(hd[0] + 12, hd[1] + 10, hd[0] + 18, hd[1] + 15); g.stroke();
-    g.beginPath(); g.moveTo(hd[0] - 22, hd[1] - 10); g.quadraticCurveTo(hd[0] - 4, hd[1] - 46, hd[0] + 18, hd[1] - 26); g.lineTo(hd[0] - 20, hd[1] - 14); g.closePath(); g.fillStyle = o.cap || '#f2f2ee'; g.fill(); L(4); g.stroke();
-    g.beginPath(); g.moveTo(hd[0] + 10, hd[1] - 26); g.quadraticCurveTo(hd[0] + 32, hd[1] - 38, hd[0] + 40, hd[1] - 30); g.lineTo(hd[0] + 16, hd[1] - 20); g.closePath(); g.fillStyle = o.cap || '#f2f2ee'; g.fill(); g.stroke();
+  // One ned on a BMX, drawn side on facing right in units (ground y = 0, cap about 300 up), cel shaded with the picture's
+  // ink outline, then graded into the night street. o = { x (distance ridden, turns the wheels), finger 0..1, look 0..1
+  // (head turned back), shout 0..1, wheelie (radians), lk: colours }.
+  const SK = '#f0c4a2', SKD = '#c98d74';
+  function nedDraw(g, o) { const c = o.lk, O = INK, R = 40, J = 'round';
+    const ink = (w) => { g.lineWidth = w; g.strokeStyle = O; g.lineJoin = J; g.lineCap = J; };
+    const poly = pts => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); };
+    // a limb or tube: ink, shadow side, lit side shifted towards the lamp, a glint
+    const limb = (pts, w, base, dark, glint = 'rgba(255,236,210,0.55)') => { poly(pts); ink(w + 7); g.stroke(); g.strokeStyle = dark; g.lineWidth = w; g.stroke();
+      g.save(); g.translate(-w * 0.16, -w * 0.2); poly(pts); g.strokeStyle = base; g.lineWidth = w * 0.62; g.stroke(); g.translate(-w * 0.12, -w * 0.12); poly(pts); g.strokeStyle = glint; g.lineWidth = Math.max(1.2, w * 0.12); g.stroke(); g.restore(); };
+    // a filled shape the same way: shadow, the lit part shifted, a rim of lamp light, the outline
+    const shape = (path, base, dark, rim = 'rgba(255,214,160,0.7)', d = 5) => { const P = new Path2D(); path(P); g.fillStyle = dark; g.fill(P); g.save(); g.clip(P); g.translate(-d, -d * 0.8); g.fillStyle = base; g.fill(P); g.translate(d * 1.5, d * 1.2); g.strokeStyle = rim; g.lineWidth = 3; g.stroke(P); g.restore(); ink(4.5); g.stroke(P); };
+    const ik = (a, b, l1, l2, bend) => { const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.min(Math.hypot(dx, dy), l1 + l2 - 0.01), an = Math.atan2(dy, dx), k = Math.acos(cl((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1)); return [a[0] + Math.cos(an + bend * k) * l1, a[1] + Math.sin(an + bend * k) * l1]; };
+    g.save(); if (o.wheelie) { g.translate(-70, 0); g.rotate(-o.wheelie); g.translate(70, 0); }
+    const RA = [-70, -R], FA = [74, -R], BB = [-6, -44], ST = [-34, -98], HT = [54, -106], HB = [60, -84], wr = o.x / R, cr = wr / 2.3;
+    const bob = 2 * Math.sin(cr * 2) * (1 - o.finger), hip = [-38, -116 + bob], sh = [6 + 4 * o.finger, -196 + bob - 4 * o.finger], hc = [24 + 2 * o.finger, -232 + bob - 6 * o.finger];
+    const G = [40, -150], pedal = ph => [BB[0] + Math.cos(cr + ph) * 21, BB[1] + Math.sin(cr + ph) * 21];
+    // far leg and far arm first, in shadow
+    const legOf = (ph, far) => { const f = pedal(ph), foot = [f[0] + 4, f[1] - 9], kn = ik(hip, foot, 64, 62, -1), sock = [lerp(kn[0], foot[0], 0.72), lerp(kn[1], foot[1], 0.72)];
+      limb([hip, kn, sock], 23, far ? shade(c.legs, 0.7) : c.legs, shade(c.legs, far ? 0.5 : 0.72)); if (!far) { g.save(); poly([[lerp(hip[0], kn[0], 0.25), lerp(hip[1], kn[1], 0.25)], kn, sock]); g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 7; g.stroke(); g.strokeStyle = c.legs; g.lineWidth = 3; g.stroke(); g.restore(); }
+      limb([sock, foot], 16, far ? '#bdbdb6' : '#f6f4ee', far ? '#8d8d88' : '#c9c8c0');
+      // the trainer: chunky, white, a sole
+      g.save(); g.translate(foot[0], foot[1] + 7); g.rotate(0.06 * Math.sin(cr + ph)); shape(P => { P.moveTo(-14, 6); P.lineTo(-14, -6); P.quadraticCurveTo(-8, -12, 4, -9); P.quadraticCurveTo(22, -6, 24, 2); P.quadraticCurveTo(25, 8, 18, 8); P.closePath(); }, far ? '#c7c7c2' : '#fbfbf8', far ? '#8f8f8a' : '#cfcfc8', undefined, 3);
+      ink(3); g.beginPath(); g.moveTo(-13, 3); g.lineTo(22, 3); g.stroke(); g.restore(); };
+    const handAt = (p, an) => { g.save(); g.translate(p[0], p[1]); g.rotate(an); shape(P => P.roundRect(-9, -8, 17, 16, 6), SK, SKD, undefined, 3); g.restore(); };
+    legOf(Math.PI, true);
+    { const el = ik(sh, G, 44, 46, 1); limb([[sh[0] - 2, sh[1] + 4], el, G], 15, shade(c.top, 0.7), shade(c.top, 0.5)); handAt([G[0] + 2, G[1] + 2], 0); }
+    // the bike: rear wheel, front wheel, frame, chain, bars, seat
+    const wheel = (A) => { g.save(); g.translate(A[0], A[1]); g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.fillStyle = '#1b1a20'; g.fill(); ink(4); g.stroke();
+      g.strokeStyle = 'rgba(255,220,180,0.45)'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, R - 3, 3.4, 4.6); g.stroke();
+      g.beginPath(); g.arc(0, 0, R - 10, 0, Math.PI * 2); g.strokeStyle = '#9da2ab'; g.lineWidth = 4; g.stroke(); g.fillStyle = 'rgba(150,155,165,0.16)'; g.fill();
+      g.strokeStyle = 'rgba(205,210,220,0.55)'; g.lineWidth = 1.4; for (let k = 0; k < 12; k++) { const an = wr + k * Math.PI / 6; g.beginPath(); g.moveTo(Math.cos(an) * 5, Math.sin(an) * 5); g.lineTo(Math.cos(an + 0.3) * (R - 11), Math.sin(an + 0.3) * (R - 11)); g.stroke(); }
+      g.fillStyle = '#d9dce2'; g.beginPath(); g.arc(0, 0, 6, 0, Math.PI * 2); g.fill(); ink(2.5); g.stroke(); g.fillStyle = '#c3c6cc'; g.fillRect(4, -4, 16, 8); g.strokeRect(4, -4, 16, 8); g.restore(); };
+    wheel(RA); wheel(FA);
+    limb([HB, FA], 7, '#cfd2d8', '#7d828c'); // fork
+    const fr = shade(c.bike, 0.6); limb([RA, ST], 8, c.bike, fr); limb([RA, BB, HB], 9, c.bike, fr); limb([ST, HT], 10, c.bike, fr); limb([ST, [ST[0] + 2, ST[1] + 16], BB], 9, c.bike, fr);
+    // chain and the big chainring
+    g.strokeStyle = '#55575d'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(RA[0], RA[1] - 8); g.lineTo(BB[0], BB[1] - 15); g.moveTo(RA[0], RA[1] + 8); g.lineTo(BB[0], BB[1] + 15); g.stroke();
+    g.beginPath(); g.arc(BB[0], BB[1], 15, 0, Math.PI * 2); g.fillStyle = '#8b8f97'; g.fill(); ink(3); g.stroke(); g.fillStyle = '#2b2c31'; g.beginPath(); g.arc(BB[0], BB[1], 7, 0, Math.PI * 2); g.fill();
+    limb([HT, [HT[0] - 2, HT[1] - 16], [G[0] - 2, G[1] + 2]], 6, '#d7dae0', '#80858f'); limb([[HT[0] - 8, -128], [HT[0] + 8, -128]], 4, '#d7dae0', '#80858f');
+    g.save(); g.translate(ST[0] - 4, ST[1] - 6); g.rotate(-0.06); shape(P => P.ellipse(0, 0, 21, 7, 0, 0, Math.PI * 2), '#2a2a30', '#141418', undefined, 2); g.restore();
+    // body: trackie top hunched over the bars, hood bunched at the neck, a gold chain
+    shape(P => { P.moveTo(hip[0] - 14, hip[1] + 8); P.bezierCurveTo(hip[0] - 22, hip[1] - 30, sh[0] - 46, sh[1] + 30, sh[0] - 22, sh[1] - 4); P.quadraticCurveTo(sh[0] - 4, sh[1] - 14, sh[0] + 16, sh[1] - 2); P.bezierCurveTo(sh[0] + 30, sh[1] + 18, sh[0] + 18, sh[1] + 54, hip[0] + 30, hip[1] + 2); P.quadraticCurveTo(hip[0] + 8, hip[1] + 12, hip[0] - 14, hip[1] + 8); P.closePath(); }, c.top, shade(c.top, 0.62));
+    g.save(); g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 2; g.beginPath(); g.moveTo(sh[0] + 12, sh[1] + 2); g.quadraticCurveTo(sh[0] + 22, sh[1] + 30, hip[0] + 30, hip[1]); g.stroke(); g.restore();
+    shape(P => P.ellipse(sh[0] - 18, sh[1] - 4, 17, 10, -0.5, 0, Math.PI * 2), shade(c.top, 1.12), shade(c.top, 0.6), undefined, 3);
+    // neck and heid; turned back (mirrored about his face) when he looks at the squid
+    limb([[sh[0] + 4, sh[1] - 2], [hc[0] - 4, hc[1] + 16]], 13, SK, SKD);
+    g.strokeStyle = '#e8c04a'; g.lineWidth = 3; g.beginPath(); g.moveTo(sh[0] - 4, sh[1] - 6); g.quadraticCurveTo(sh[0] + 8, sh[1] + 12, sh[0] + 16, sh[1] - 1); g.stroke();
+    g.save(); g.translate(hc[0], hc[1]); if (o.look > 0.5) g.scale(-1, 1); g.rotate(o.look > 0.5 ? -0.12 : 0.05);
+    shape(P => { P.moveTo(-20, -14); P.bezierCurveTo(-26, 12, -14, 28, 2, 30); P.quadraticCurveTo(14, 31, 18, 22); P.lineTo(20, 14); P.quadraticCurveTo(26, 12, 25, 9); P.lineTo(33, 5); P.quadraticCurveTo(26, -2, 21, -3); P.quadraticCurveTo(24, -24, 0, -27); P.quadraticCurveTo(-16, -27, -20, -14); P.closePath(); }, SK, SKD, 'rgba(255,220,180,0.8)', 4);
+    g.beginPath(); g.ellipse(-7, 4, 4.5, 6.5, 0.2, 0, Math.PI * 2); g.fillStyle = SKD; g.fill(); ink(2.4); g.stroke(); g.beginPath(); g.arc(-6, 4, 2.6, -1.2, 1.6); g.lineWidth = 1.6; g.stroke(); // ear
+    g.fillStyle = O; g.beginPath(); g.ellipse(11, -5, 2.6, 3, 0, 0, Math.PI * 2); g.fill(); ink(3.2); g.beginPath(); g.moveTo(3, -13); g.lineTo(19, -8); g.stroke(); // wee eye, angry brow
+    if (o.shout > 0) { g.beginPath(); g.moveTo(8, 13); g.quadraticCurveTo(14, 12 + 2 * o.shout, 21, 13); g.quadraticCurveTo(18, 22 + 6 * o.shout, 9, 20 + 4 * o.shout); g.closePath(); g.fillStyle = '#5a1b22'; g.fill(); ink(2.5); g.stroke(); g.fillStyle = '#fff'; g.fillRect(12, 13, 6, 2.5); }
+    else { ink(2.6); g.beginPath(); g.moveTo(8, 16); g.quadraticCurveTo(14, 13, 20, 17); g.stroke(); }
+    // the cap, perched high and squint
+    g.rotate(-0.16); shape(P => { P.moveTo(-22, -16); P.bezierCurveTo(-22, -46, 18, -48, 20, -20); P.closePath(); }, c.cap, shade(c.cap, 0.72), undefined, 4);
+    shape(P => { P.moveTo(12, -24); P.quadraticCurveTo(36, -30, 44, -21); P.quadraticCurveTo(30, -15, 14, -17); P.closePath(); }, c.cap, shade(c.cap, 0.6), undefined, 2);
+    g.restore();
+    // the near leg over the top, then the near arm: on the bars, or up behind him giving it the finger
+    legOf(0, false);
+    if (o.finger > 0) { const f = sm(o.finger), hd = [lerp(G[0], -52, f), lerp(G[1], -292, f)], el = ik(sh, hd, 46, 46, f > 0.5 ? -1 : 1); limb([sh, el, hd], 16, c.top, shade(c.top, 0.62));
+      g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; poly([sh, el, hd]); g.stroke(); g.restore();
+      g.save(); g.translate(hd[0], hd[1]); g.rotate(lerp(0, -0.35, f)); g.scale(1.35, 1.35); shape(P => P.roundRect(-10, -6, 20, 17, 6), SK, SKD, undefined, 2); shape(P => P.roundRect(-3.6, -27, 7.6, 24, 3.8), SK, SKD, undefined, 1.5);
+      ink(2); g.beginPath(); g.moveTo(-6, -3); g.lineTo(-6, 4); g.moveTo(6, -3); g.lineTo(6, 4); g.stroke(); g.restore(); }
+    else { const el = ik(sh, G, 44, 46, 1); limb([sh, el, G], 16, c.top, shade(c.top, 0.62)); g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; poly([sh, el, G]); g.stroke(); g.restore(); handAt(G, 0); }
     g.restore(); }
-  const shade = c => { const n = parseInt(c.slice(1), 16); return `rgb(${(n >> 16) * 0.7 | 0},${((n >> 8) & 255) * 0.7 | 0},${(n & 255) * 0.7 | 0})`; };
-  // where a ned is: coming up the street out of the distance, past him, and out the bottom of the picture
-  function nedAt(t, delay) { const u = (t - B.neds - delay) / 1.3; if (u <= 0 || u >= 1) return null; const e = Math.pow(u, 1.7); return { x: lerp(1075, 1330, e), y: lerp(612, 1060, e), s: lerp(0.16, 1.5, Math.pow(u, 1.9)), u }; }
+  const shade = (c, f) => { const n = parseInt(c.slice(1), 16), m = v => Math.min(255, v * f | 0); return `rgb(${m(n >> 16)},${m((n >> 8) & 255)},${m(n & 255)})`; };
+  // the ned drawn into its own layer, graded into the night (a cold wash, warm lamp light from the left), a touch of
+  // motion blur behind him, then put in the picture at (x, y) plate coords, s units per plate pixel, k screen px per plate px
+  const NB = []; function ned(g, i, x, y, s, k, o, speed) { const res = Math.min(3, s * k), w = Math.ceil(360 * res), h = Math.ceil(380 * res); let c = NB[i]; if (!c || c.width < w || c.height < h) c = NB[i] = mk(w, h);
+    const a = c.getContext('2d'); a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, c.width, c.height); a.setTransform(res, 0, 0, res, 180 * res, 350 * res); nedDraw(a, o);
+    a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-atop'; a.fillStyle = 'rgba(28,22,60,0.3)'; a.fillRect(0, 0, w, h); const gl = a.createLinearGradient(0, 0, w, 0); gl.addColorStop(0, 'rgba(255,160,80,0.2)'); gl.addColorStop(1, 'rgba(255,160,80,0)'); a.fillStyle = gl; a.fillRect(0, 0, w, h); a.globalCompositeOperation = 'source-over';
+    // shadow on the road
+    const sg = g.createRadialGradient(x, y + 2, 0, x, y + 2, 120 * s); sg.addColorStop(0, 'rgba(5,3,10,0.55)'); sg.addColorStop(1, 'rgba(5,3,10,0)'); g.save(); g.translate(0, y); g.scale(1, 0.12); g.translate(0, -y); g.fillStyle = sg; g.fillRect(x - 130 * s, y - 120 * s, 260 * s, 240 * s); g.restore();
+    const dw = w / res * s, dh = h / res * s, ox = x - 180 * s, oy = y - 350 * s, bl = cl(speed / 1500) * 26 * s;
+    if (bl > 0.5) { g.save(); for (let m = 6; m >= 1; m--) { g.globalAlpha = 0.07 + 0.02 * (6 - m); g.drawImage(c, 0, 0, w, h, ox - bl * m / 3, oy, dw, dh); } g.restore(); }
+    g.drawImage(c, 0, 0, w, h, ox, oy, dw, dh); }
+  // where the neds are (plate x along the street behind him, at y = 806): flying in from the left, the first one slows past
+  // him to turn round and give him the finger, then pedals off; his pal comes through on a wheelie
+  const NEDY = 806, NEDS = 0.8;
+  const nedX = (t, i) => i === 0 ? key(t, [[B.neds - 0.25, 200], [B.finger - 0.12, 1140], [B.finger + 0.55, 1270], [B.finger + 1.15, 1900]], f => f) : key(t, [[B.neds - 0.55, 200], [B.finger - 0.35, 1250], [B.finger + 0.15, 1900]], f => f);
   function bubble(g, x, y, w, h, text, k, tail) { if (k <= 0) return; const s = eb(k / 0.16); g.save(); g.translate(x, y); g.scale(s, s); g.rotate(-0.05);
     g.beginPath(); g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); g.fillStyle = '#fff8e2'; g.fill(); g.lineWidth = 5; g.strokeStyle = INK; g.stroke(); g.beginPath(); g.moveTo(tail[0] * 0.15, h * 0.35); g.lineTo(tail[0], tail[1]); g.lineTo(tail[0] * 0.15 + 22, h * 0.4); g.closePath(); g.fill(); g.stroke(); g.beginPath(); g.ellipse(0, 0, w / 2 - 3, h / 2 - 3, 0, 0, Math.PI * 2); g.fill();
     let fs = h * 0.36; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(text).width > w * 0.8) { fs -= 1; g.font = `400 ${fs}px ${TITLE}`; } g.fillStyle = INK; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 0, 2); g.restore(); }
@@ -137,12 +181,13 @@ const IntroScenes = (() => {
     // his shadow, then him (the bottle is drawn in his tentacle, inside his outline)
     g.save(); g.fillStyle = 'rgba(6,4,12,0.6)'; g.beginPath(); g.ellipse(Wh.x + 12, HOME.y + 4, h * 0.36 * (1 - 0.3 * (HOME.y - Wh.y) / 30), h * 0.06, 0, 0, Math.PI * 2); g.fill(); g.restore();
     const holding = t < B.drop; P.postArm = holding ? (gg) => { const hd = Squid.hand(P); gg.save(); gg.translate(hd.x, hd.y); const ba = key(t, [[0, 0.1], [B.lift, 0.1], [B.glug, -2.25], [B.down - 0.15, -2.45], [B.ahh + 0.1, 0.15], [B.finger, 0.15], [B.toast, 0.5], [B.toast + 0.3, 0.3], [B.drop, 0.3]]); gg.rotate(ba); gg.drawImage(bottle(), -27, -92, 54, 150); gg.restore(); } : null;
-    const neds = [[0, { col: '#2f3340', top: '#1d2b5c', cap: '#f2f2ee', bike: '#d42a2a' }], [0.32, { col: '#151517', top: '#7a1f2b', cap: '#1d1d22', bike: '#2a7ad4' }]].map(([d, look], i) => { const n = nedAt(t, d); return n ? Object.assign(n, { i, look }) : null; }).filter(Boolean);
-    const drawNed = n => { g.save(); g.translate(n.x, n.y); g.scale(n.s, n.s); g.rotate(0.08); const fk = n.i === 0 ? sm((t - B.finger + 0.25) / 0.15) * (1 - sm((t - B.finger - 0.45) / 0.2)) : 0; ned(g, Object.assign({ t, finger: fk, wheelie: n.i === 1 ? 0.32 + 0.05 * Math.sin(t * 6) : 0 }, n.look)); g.restore(); };
-    neds.filter(n => n.y < Wh.y).forEach(drawNed);
+    const LK = [{ top: '#202128', legs: '#8a8c92', cap: '#f2f1ec', bike: '#d4262b' }, { top: '#24345e', legs: '#1e1f24', cap: '#1d1d22', bike: '#2b8ad8' }];
+    const neds = [0, 1].map(i => { const x = nedX(t, i); if (x <= 210 || x >= 1890) return null; const v = (nedX(t + 0.02, i) - nedX(t - 0.02, i)) / 0.04;
+      const fk = i === 0 ? sm((t - B.finger + 0.2) / 0.18) * (1 - sm((t - B.finger - 0.5) / 0.2)) : 0, lk = i === 0 ? sm((t - B.finger + 0.25) / 0.12) * (1 - sm((t - B.finger - 0.55) / 0.12)) : 0;
+      return { i, x, v, o: { x, finger: fk, look: lk, shout: i === 0 ? bump(t - B.finger + 0.05, 0.5) : 0, wheelie: i === 1 ? 0.38 + 0.06 * Math.sin(t * 5) : 0, lk: LK[i] } }; }).filter(Boolean);
+    neds.forEach(n => ned(g, n.i, n.x, NEDY - (n.i ? 6 : 0), NEDS, k, n.o, n.v));
     if (t < B.splat + 0.1) squidComic(g, Wh.x, Wh.y, h, P, k);
-    neds.filter(n => n.y >= Wh.y).forEach(drawNed);
-    { const n = nedAt(t, 0); if (n && t > B.finger - 0.2 && t < B.finger + 0.7) bubble(g, n.x - 60 * n.s, n.y - 360 * n.s, Math.min(340 * n.s, 330), Math.min(120 * n.s, 116), 'Haw! Ya mingin squid!', t - B.finger + 0.2, [40, 60]); }
+    { const x = nedX(t, 0); if (t > B.finger - 0.1 && t < B.finger + 0.75) bubble(g, x - 150, NEDY - 330, 320, 108, 'Haw! Ya mingin squid!', t - B.finger + 0.1, [70, 72]); }
     let mouthS = null; if (t > B.spew) { const m = Squid.point('mouth', Wh.x, Wh.y, h, P), M = g.getTransform(); mouthS = [M.a * m[0] + M.e, M.d * m[1] + M.f]; }
     g.restore();
     // finish: vignette, grain

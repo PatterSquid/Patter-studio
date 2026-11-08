@@ -861,7 +861,7 @@ void main(){
       // the stagger: squelchy wee steps
       for (let k = 0; k < 7; k++) add(S.walk + 0.1 + k * 0.17, 0.09, 0.35 + (k % 2) * 0.3, x => (nz() * 0.4 + Math.sin(TAU * 160 * x) * 0.5) * Math.exp(-x * 40) * 0.5);
       // the neds: freewheels ticking closer, a ding ding, "HAW!", whoosh past
-      [0, 0.32].forEach(d => { const L = 1.3; add(S.neds + d, L, 0.6, x => { const u = x / L, near = Math.pow(u, 2.2), tick = Math.pow(Math.max(0, Math.sin(TAU * (14 + 10 * u) * x)), 40); return (tick * Math.sin(TAU * 3200 * x) * 0.5 + nz() * 0.05 * tick) * near * 0.6 * Math.min(1, (1 - u) * 6); }); add(S.neds + d + 0.9, 0.4, 0.85, x => { return nz() * 0.25 * Math.sin(Math.PI * x / 0.4) ** 2; }); });
+      [-0.25, -0.55].forEach(d => { const L = 1.3; add(S.neds + d, L, 0.6, x => { const u = x / L, near = Math.pow(u, 2.2), tick = Math.pow(Math.max(0, Math.sin(TAU * (14 + 10 * u) * x)), 40); return (tick * Math.sin(TAU * 3200 * x) * 0.5 + nz() * 0.05 * tick) * near * 0.6 * Math.min(1, (1 - u) * 6); }); add(S.neds + d + 0.9, 0.4, 0.85, x => { return nz() * 0.25 * Math.sin(Math.PI * x / 0.4) ** 2; }); });
       [0, 0.18].forEach(d => add(S.neds + 0.25 + d, 0.6, 0.65, x => (Math.sin(TAU * 2400 * x) * 0.5 + Math.sin(TAU * 3570 * x) * 0.3 + Math.sin(TAU * 5900 * x) * 0.15) * Math.exp(-x * 7) * 0.35));
       add(S.finger - 0.15, 0.32, 0.7, x => { const f = 230 - 90 * x; let v = 0; [1, 2, 3, 4, 5].forEach(h => { v += Math.sin(TAU * f * h * x) * (h === 3 ? 1.2 : 1) / h; }); return (v * 0.35 + nz() * 0.18) * Math.min(1, x / 0.02) * Math.exp(-x * 4); });
       // the bottle goes: clink, then a roll along the road
