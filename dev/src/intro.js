@@ -13,7 +13,7 @@
 const Intro = (() => {
   const STYLES = [['swally', 'A wee swally']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
   const LINES = { swally: '', ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
-  const BASE = { swally: 6.8, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
+  const BASE = { swally: 7.7, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, f) => a + (b - a) * f, sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const eo = x => 1 - Math.pow(1 - cl(x, 0, 1), 3), eo5 = x => 1 - Math.pow(1 - cl(x, 0, 1), 5), ei = x => Math.pow(cl(x, 0, 1), 2), eio = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const spring = (k, amp, w, d) => k < 0 ? 0 : amp * Math.exp(-k * d) * Math.cos(k * w);
@@ -860,6 +860,10 @@ void main(){
       add(S.hic, 0.14, 0.5, x => (Math.sin(TAU * (500 + 900 * x) * x) * 0.6 + nz() * 0.2) * Math.exp(-x * 25));
       // the stagger: squelchy wee steps
       for (let k = 0; k < 7; k++) add(S.walk + 0.1 + k * 0.17, 0.09, 0.35 + (k % 2) * 0.3, x => (nz() * 0.4 + Math.sin(TAU * 160 * x) * 0.5) * Math.exp(-x * 40) * 0.5);
+      // the neds: freewheels ticking closer, a ding ding, "HAW!", whoosh past
+      [0, 0.32].forEach(d => { const L = 1.3; add(S.neds + d, L, 0.6, x => { const u = x / L, near = Math.pow(u, 2.2), tick = Math.pow(Math.max(0, Math.sin(TAU * (14 + 10 * u) * x)), 40); return (tick * Math.sin(TAU * 3200 * x) * 0.5 + nz() * 0.05 * tick) * near * 0.6 * Math.min(1, (1 - u) * 6); }); add(S.neds + d + 0.9, 0.4, 0.85, x => { return nz() * 0.25 * Math.sin(Math.PI * x / 0.4) ** 2; }); });
+      [0, 0.18].forEach(d => add(S.neds + 0.25 + d, 0.6, 0.65, x => (Math.sin(TAU * 2400 * x) * 0.5 + Math.sin(TAU * 3570 * x) * 0.3 + Math.sin(TAU * 5900 * x) * 0.15) * Math.exp(-x * 7) * 0.35));
+      add(S.finger - 0.15, 0.32, 0.7, x => { const f = 230 - 90 * x; let v = 0; [1, 2, 3, 4, 5].forEach(h => { v += Math.sin(TAU * f * h * x) * (h === 3 ? 1.2 : 1) / h; }); return (v * 0.35 + nz() * 0.18) * Math.min(1, x / 0.02) * Math.exp(-x * 4); });
       // the bottle goes: clink, then a roll along the road
       add(S.drop + 0.3, 0.25, 0.65, x => (Math.sin(TAU * 2900 * x) * 0.5 + Math.sin(TAU * 4100 * x) * 0.3) * Math.exp(-x * 18)); add(S.drop + 0.35, 1.0, 0.7, x => (Math.sin(TAU * 900 * x) * 0.2 + nz() * 0.3) * 0.12 * (0.5 + 0.5 * Math.sin(TAU * 9 * x)) * Math.exp(-x * 2.5));
       // the belly rumbles, hurk, hurk
