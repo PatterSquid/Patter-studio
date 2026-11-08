@@ -2,7 +2,7 @@
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
   const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio' };
   const KEY = 'patter-studio-v1';
@@ -223,7 +223,9 @@
       commit, tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem: id => openItem(id), rebuildInspector: () => buildInspector(), fileBase: () => fileBase(),
       setLook: (k, v) => { state.look[k] = v; if (k === 'format') layoutPreview(); syncLook(); save(); ed.build(); buildInspector(); },
       onExport: on => { player.pause(); player.freeze(on); if (SP) SP.hold(on); } };
-    cutUI = CutUI.create(cutO); cutO.ui = cutUI; cutInsp = CutInspect.create(cutO, cutUI); window.PatterCut = { ui: cutUI, insp: cutInsp, player, select: id => ed.select(id) };   // the tests drive the editor through this
+    cutUI = CutUI.create(cutO); cutO.ui = cutUI; cutInsp = CutInspect.create(cutO, cutUI); window.PatterCut = { ui: cutUI, insp: cutInsp, player, select: id => ed.select(id) };
+    if (typeof Intro !== 'undefined') Intro.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Intro.ready(); await Intro.ensureSound(copy); } catch (e) { }
+      cutInsp.exportDialog({ v: 2, items: [{ id: 'introx', kind: 'clip', mod: 'intro', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };   // the tests drive the editor through this
     Object.assign(Video.hooks, { inspect: (...a) => cutInsp.inspect(...a), scene: (...a) => cutInsp.scene(...a), time: () => player.t, cfg: () => state.cfg.video });
     const gBuild = ed.build; ed.build = () => { gBuild(); if (cutUI.active) cutUI.build(); };
     const gSel = ed.select; ed.select = (id, q) => { gSel(id, q); if (cutUI.active) cutUI.markSel(); };
@@ -262,7 +264,7 @@
     const ae = document.activeElement, typing = /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !(ae.type === 'checkbox' || ae.type === 'range'), ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (document.querySelector('dialog[open]')) return;
     if (ctrl && k === 's') { e.preventDefault(); autosave('version').then(() => say('Saved, with a version kept in History.')); return; }
-    if (ctrl && k === 'e') { e.preventDefault(); if (state.module === 'video' && cutInsp) cutInsp.exportDialog(); else $('exportBtn').click(); return; }
+    if (ctrl && k === 'e') { e.preventDefault(); if (state.module === 'video' && cutInsp) cutInsp.exportDialog(); else if (state.module === 'intro' && cutInsp && typeof Intro !== 'undefined') Intro.exportWithSound(cfg()); else $('exportBtn').click(); return; }
     if (typing) return;
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -430,6 +432,7 @@
   exportBtn.addEventListener('click', async () => {
     if (exportBtn.disabled) return;
     if (state.module === 'video' && cutInsp) { cutInsp.exportDialog(); return; }
+    if (state.module === 'intro' && cutInsp && typeof Intro !== 'undefined') { Intro.exportWithSound(cfg()); return; }
     const fps = +$('fps').value, blur = ['smart', 'off', 'full'].includes($('blur').value) ? $('blur').value : 'smart', look = JSON.parse(JSON.stringify(state.look)), c = JSON.parse(JSON.stringify(cfg())), m = mod(), range = $('rangeOn').checked ? getRange() : null;
     abort = new AbortController(); exportBtn.disabled = true; cancelBtn.hidden = false; fill.style.width = '0%';
     player.pause(); player.freeze(true); if (SP) SP.hold(true); const t0 = performance.now(); say('Getting ready to render…');

@@ -109,11 +109,8 @@ standard and as easy to use.
   slowmo; m is a 0.1 to 10 multiplier along the source from a to b, pinned when set so trims and splits keep the shape)
   map timeline time to source time through `curveMap` (adds up the time each bit of source takes). The Speed panel has
   Normal and Curve, with presets and a graph to drag. Footage with a curve plays its picture only (no sound).
-* **PatterSquid intro** (`dev/src/cut_intro.js`, `PatterIntro`, main track kind `intro`): five seconds; his squid disc
-  drops in, a traffic cone bonks it (eyes spin), PATTERSQUID slams in, a cream label is stamped "GET IT UP YE." (`it.text`,
-  editable, or none), a seagull nicks the cone (`it.gull: false` to leave it out). Its sound is made in code and kept as a
-  built in media file `PatterIntro.SOUND_ID` (hidden from the library, made again if missing); `it.asset` points at it, so
-  the preview and export play it like footage. First in the Patter section of the library.
+* The old cone and seagull intro (`dev/src/cut_intro.js`, main track kind `intro`) is kept only so videos that used it
+  still play. He found it too basic and cheesy; the Intro tab replaced it.
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
@@ -185,6 +182,30 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
 * Event layers are drawn a little smaller than full size and enlarged on the way in (that is their softness; no blur
   filter), all the light thrown into the room is one pass, and `cfg.vfocus` (auto, you, window, middle) sets where a 9:16
   frame looks (auto: you, else the window when events are on, else the middle).
+
+## The Intro tab (dev/src/intro.js, `Intro`)
+
+Branded PatterSquid openers. He did not like a simple cartoon gag (too basic, cheesy): these are meant to look like proper
+studio idents with one dry, adult Glaswegian wink. Four styles (`cfg.style`), every word editable: `name` (the wordmark),
+`lines[style]` (each style keeps its own line; empty for none), `episode` and `kicker` (an episode title with a wee label,
+adds 1.6 s), `hold`, `logo`, `blow` (neon: which letter blows), `sound` { on, vol }.
+* `ink`: a drop of squid ink lands and blooms (soft blobs at half size, cut sharp with a smooth threshold, so arms and
+  splashes melt together); eight arms curl into spirals like tentacles and keep off the words; his disc rises in the
+  middle; the name soaks in from the left, knocking out paper coloured where it crosses ink; a drip runs off the last
+  letter and splats.
+* `battered`: his squid drops into a steel fryer (glossy oil, foam), comes out in puffy golden batter with the squid
+  pressed in, whips across to chip paper (made up newsprint) on a heap of chunky chips, salt and vinegar; name slapped
+  on like a chippy sign, the line on a red menu strip; the episode on a handwritten ticket.
+* `neon`: night on a red sandstone tenement (ashlar blocks); a light box with his logo flickers on, the name buzzes on
+  in neon letter by letter (PATTER cold blue, SQUID red), a letter (the Q by default) blows in sparks; line in pink
+  script neon; episode as a fly poster.
+* `epic`: gold god rays, clouds, lens flare, a gold serif name with a glint, choir and brass, until a tentacle reaches
+  in; the picture switches off like an old telly and the logo is slapped on squint, plain.
+* Sound (`Intro.sound`) is made from the same moments, evened out across styles; in the Video tab an Intro clip
+  (`clip` with `mod: 'intro'`) plays it through a built in media file `Intro.soundId(cfg)` (made by `ensureSound` when
+  missing; the mixer takes a tab clip's sound time from its own in point and speed). The Intro tab's Export (and
+  Ctrl+E) goes through the editor's export window as a one clip video, so it comes out with its sound; the panel also has
+  Listen and Save WAV. "Your intro" at the top of the Patter library puts it at the start of a video.
 
 ## Packs (data only, no code)
 

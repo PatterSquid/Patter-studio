@@ -13,11 +13,11 @@ const CutAudio = (() => {
   // Every clip that makes sound: footage on the main and overlay tracks (unless muted), and clips on audio tracks
   function sources(cfg, look) {
     const out = [], tracks = cfg.tracks || [], anySolo = tracks.some(T => T.solo) || !!cfg.mainSolo;
-    const add = (it, t0, d, T, main) => { if (!it || !it.asset || it.mute) return; const m = M(it.asset); if (!m || m.kind === 'image' || m.hasAudio === false || it.still != null || (it.kind === 'media' && V().hasCurve(it))) return;   // a speed curve plays the picture only
+    const add = (it, t0, d, T, main, A) => { A = A || it.asset; if (!it || !A || it.mute) return; const m = M(A); if (!m || m.kind === 'image' || m.hasAudio === false || it.still != null || (it.kind === 'media' && V().hasCurve(it))) return;   // a speed curve plays the picture only
       if (main ? cfg.mainMute : T && T.mute) return; if (anySolo && !(main ? cfg.mainSolo : T && T.solo)) return;
-      out.push({ it, t0, d, T, main, asset: it.asset, speed: V().speedOf(it), keep: it.pitch !== false, talk: main ? cfg.mainTalk !== false : !!(T && T.talk), duck: !main && !!(T && T.duck), trackDb: main ? (+cfg.mainVol || 0) : (+(T && T.vol) || 0) }); };
-    V().layout(cfg, look).forEach(o => { if (o.it.kind === 'media' || o.it.kind === 'intro') { add(o.it, o.t0, o.d, null, true); const s = out[out.length - 1]; if (s && s.it === o.it) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; if (o.it.kind === 'intro') s.talk = false; } } });   // the intro brings its own sound
-    tracks.forEach(T => (T.items || []).forEach(it => { if (it.kind === 'media' || it.kind === 'audio') add(it, +it.start || 0, V().lenOf(it, look), T, false); }));
+      out.push({ it, t0, d, T, main, asset: A, speed: V().speedOf(it), keep: it.pitch !== false, talk: main ? cfg.mainTalk !== false : !!(T && T.talk), duck: !main && !!(T && T.duck), trackDb: main ? (+cfg.mainVol || 0) : (+(T && T.vol) || 0) }); };
+    V().layout(cfg, look).forEach(o => { if (o.it.kind === 'clip' && o.it.mod === 'intro' && typeof Intro !== 'undefined' && o.it.cfg) { add(o.it, o.t0, o.d, null, true, Intro.soundId(o.it.cfg)); const s = out[out.length - 1]; if (s && s.it === o.it) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; s.talk = false; } return; } if (o.it.kind === 'media' || o.it.kind === 'intro') { add(o.it, o.t0, o.d, null, true); const s = out[out.length - 1]; if (s && s.it === o.it) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; if (o.it.kind === 'intro') s.talk = false; } } });   // the intro brings its own sound
+    tracks.forEach(T => (T.items || []).forEach(it => { if (it.kind === 'media' || it.kind === 'audio') add(it, +it.start || 0, V().lenOf(it, look), T, false); else if (it.kind === 'clip' && it.mod === 'intro' && typeof Intro !== 'undefined' && it.cfg) add(it, +it.start || 0, V().lenOf(it, look), T, false, Intro.soundId(it.cfg)); }));
     return out;
   }
   // A clip's own gain at a moment (seconds into the clip): volume, its keyframes, fades, and the track's volume

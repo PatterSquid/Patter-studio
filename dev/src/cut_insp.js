@@ -259,8 +259,8 @@ const CutInspect = (() => {
 
     /* ---------- Export window ---------- */
     let exporting = null;
-    function exportDialog() {
-      if (exporting) return; const c = o.getCfg(), lk = look(), dlg = document.getElementById('dlg'), r = o.getRange && o.getRange();
+    function exportDialog(only) {
+      if (exporting) return; const c = only || o.getCfg(), lk = look(), dlg = document.getElementById('dlg'), r = o.getRange && o.getRange();
       const st = Object.assign({ res: '1080', fps: 30, quality: 'high', kind: 'mp4', audio: true, wav: false, range: false, blur: 'smart' }, o.exportPrefs || {});
       const name = H('input', { type: 'text', value: o.fileBase(), 'aria-label': 'File name' });
       const row = (l, ctrl) => H('label', { className: 'field' }, H('span', { className: 'lab', textContent: l }), ctrl);

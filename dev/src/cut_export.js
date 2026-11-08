@@ -22,6 +22,7 @@ const CutExport = (() => {
   async function run(cfg, look, o = {}) {
     if (document.fonts) await document.fonts.ready;
     if (typeof PatterIntro !== 'undefined' && (cfg.items || []).some(it => it && it.kind === 'intro')) { await PatterIntro.ready(); await PatterIntro.ensureSound().catch(() => null); }
+    if (typeof Intro !== 'undefined') { const tabIntros = [...(cfg.items || []), ...(cfg.tracks || []).flatMap(T => (T && T.items) || [])].filter(it => it && it.kind === 'clip' && it.mod === 'intro' && it.cfg); if (tabIntros.length) { await Intro.ready(); for (const it of tabIntros) await Intro.ensureSound(it.cfg).catch(() => null); } }
     const Vw = Layers.wrap(Video), base = E.dims(look.format), fps = o.fps || 30, scale = (RES[o.res] || base.H) / (look.format === '9:16' ? base.W : base.H);
     const W = Math.round(base.W * scale / 2) * 2, H = Math.round(base.H * scale / 2) * 2, dur = Vw.duration(cfg, look);
     const t0 = o.range ? cl(o.range[0], 0, dur) : 0, t1 = o.range ? cl(o.range[1], t0 + 1 / fps, dur) : dur, n = Math.max(1, Math.round((t1 - t0) * fps));

@@ -112,8 +112,8 @@ const CutUI = (() => {
       });
     }
     function drawPatter() {
-      if (typeof PatterIntro !== 'undefined') { const cv = H('canvas', { width: 320, height: 180 }); PatterIntro.ready().then(() => { const g = cv.getContext('2d'); PatterIntro.draw(g, 4.2, 320, 180, {}); });
-        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Your intro' }), H('div', { className: 'cl-intro' }, drag0(H('button', { type: 'button', className: 'cl-tile cl-introbtn', title: 'Add the PatterSquid intro (five seconds, with its own sound) at the start of the video', on: { click: () => addIntro() } }, cv, H('span', { textContent: 'PatterSquid intro' })), { type: 'intro' }))); }
+      if (typeof Intro !== 'undefined') { const cv = H('canvas', { width: 320, height: 180 }), ic = o.tabCfg('intro'); Intro.ready().then(() => { try { Intro.draw(cv.getContext('2d'), Math.max(0, Intro.mainLen(ic) - 0.7), ic, {}, 320, 180); } catch (e) { } });
+        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Your intro' }), H('div', { className: 'cl-intro' }, drag0(H('button', { type: 'button', className: 'cl-tile cl-introbtn', title: 'Put the intro from the Intro tab at the start of the video, with its sound', on: { click: () => addIntro() } }, cv, H('span', { textContent: 'Intro: ' + (Intro.STYLES.find(q => q[0] === Intro.styleOf(ic)) || ['', ''])[1] + ' (make it in the Intro tab)' })), { type: 'intro' }))); }
       libBody.append(H('p', { className: 'hint', textContent: 'Clips from the other tabs: each starts as a copy of what is on that tab now, and Edit opens it there. Drag onto the main track or above it.' }));
       const g = H('div', { className: 'cl-grid' });
       Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a copy of what is in the ' + l + ' tab now', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
@@ -170,9 +170,12 @@ const CutUI = (() => {
     function addPatter(k, row, t) { o.commit(); const src = o.tabCfg(k), it = { id: V().nid('i'), kind: 'clip', mod: k, name: '', cfg: JSON.parse(JSON.stringify(src)), inPt: 0, hold: 0 }; const c = cfg(); t = t == null ? o.player.t : t;
       if (row && row.kind === 'video') { it.start = r3(t); V().placeFree(c, 'video', it, row.T); } else insertMain(c, it, t); changed(); build(); select('C:' + it.id); }
     // The intro goes on the main track (at the very start unless dropped somewhere else), with its sound made the first time
-    async function addIntro(t) { const D = PatterIntro.DUR; try { await PatterIntro.ensureSound(); } catch (e) { o.say('The intro sound could not be made: ' + (e.message || e)); }
-      o.commit(); const c = cfg(), it = { id: V().nid('i'), kind: 'intro', asset: PatterIntro.SOUND_ID, dur: D }; if (t == null) { c.items = c.items || []; delete it.gap; c.items.unshift(it); } else insertMain(c, it, t);
-      changed(); build(); select('C:' + it.id); o.player.seek(V().allPlaced(c, look()).find(q => q.it === it).t0); o.say('PatterSquid intro added. Change the line on the stamp on the right.'); }
+    // The intro from the Intro tab goes at the very start (or where it is dropped), with its sound made the first time
+    async function addIntro(t) { const src = JSON.parse(JSON.stringify(o.tabCfg('intro'))); try { await Intro.ensureSound(src); } catch (e) { o.say('The intro sound could not be made: ' + (e.message || e)); }
+      o.commit(); const c = cfg(), it = { id: V().nid('i'), kind: 'clip', mod: 'intro', name: '', cfg: src, inPt: 0, hold: 0 }; if (t == null) { c.items = c.items || []; c.items.unshift(it); } else insertMain(c, it, t);
+      changed(); build(); select('C:' + it.id); o.player.seek(V().allPlaced(c, look()).find(q => q.it === it).t0); o.say('Intro added. Change its words in the Intro tab, then press "Use what\u2019s in the Intro tab now".'); }
+    // Intro clips bring their own sound: make it if this computer has not got it yet
+    function introSounds() { if (typeof Intro === 'undefined') return; V().allPlaced(cfg(), look()).forEach(p => { const it = p.it; if (it.kind === 'clip' && it.mod === 'intro' && it.cfg && !CutMedia.info(Intro.soundId(it.cfg))) Intro.ensureSound(it.cfg).catch(() => { }); }); }
     function addBlock(k, row, t) { o.commit(); const c = cfg(); t = t == null ? o.player.t : t; let it;
       if (k === 'avatar') it = { id: V().nid('i'), kind: 'avatar', text: '', dur: 3 }; else if (k === 'colour') it = { id: V().nid('i'), kind: 'colour', fill: '#000000', dur: 3 }; else it = { id: V().nid('i'), kind: 'adjust', dur: 5, col: {} };
       if (k === 'adjust' || (row && row.kind === 'video' && k !== 'avatar')) { it.start = r3(t); V().placeFree(c, 'video', it, row && row.kind === 'video' ? row.T : null); } else insertMain(c, it, t);
@@ -254,7 +257,7 @@ const CutUI = (() => {
       return out;
     }
     function build() {
-      if (!active) return; const c = cfg(), lk = look(); dur = Math.max(1, Layers.wrap(Video).duration(c, lk));
+      if (!active) return; const c = cfg(), lk = look(); dur = Math.max(1, Layers.wrap(Video).duration(c, lk)); introSounds();
       const avail = Math.max(200, scroll.clientWidth - HEAD - 30); if (!fitted) { pps = cl(avail / (dur + 1), 4, 800); zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); }
       const Wd = Math.max(avail, (dur + 8) * pps); inner.style.width = (HEAD + Wd) + 'px';
       drawBar(); drawRuler(Wd);
@@ -569,6 +572,7 @@ const CutUI = (() => {
     let placed = false;
     function activate(on) {
       active = !!on; document.body.classList.toggle('cut', active);
+      if (active) introSounds();
       if (active && typeof PatterIntro !== 'undefined' && (cfg().items || []).some(it => it && it.kind === 'intro') && !CutMedia.info(PatterIntro.SOUND_ID)) PatterIntro.ensureSound().then(() => { build(); }).catch(() => { });
       if (active && !placed) { const main = document.querySelector('main'); main.prepend(lib); main.append(tl); placed = true;
         // Drag the top edge of the timeline to make it taller or shorter (remembered on this computer)
