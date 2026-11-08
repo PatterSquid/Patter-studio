@@ -10,7 +10,7 @@ const Video = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
   const NAMES = { charts: 'Chart', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', studio: 'Studio' };
-  const COLS = { charts: '#3b7dd8', timeline: '#2f9a8a', map: '#3c8f4a', flights: '#4f6fd0', flyover: '#2d7a6a', picto: '#b0703a', news: '#8a8a8a', story: '#7d6420', broll: '#6d4f9a', studio: '#3a5f8a', avatar: '#a03a6a', media: '#2a6f8f', image: '#7a5a2a', audio: '#2f7d4f', colour: '#555b66', adjust: '#6a4f8a' };
+  const COLS = { intro: '#c81d24', charts: '#3b7dd8', timeline: '#2f9a8a', map: '#3c8f4a', flights: '#4f6fd0', flyover: '#2d7a6a', picto: '#b0703a', news: '#8a8a8a', story: '#7d6420', broll: '#6d4f9a', studio: '#3a5f8a', avatar: '#a03a6a', media: '#2a6f8f', image: '#7a5a2a', audio: '#2f7d4f', colour: '#555b66', adjust: '#6a4f8a' };
   const raw = k => ({ charts: typeof Charts !== 'undefined' && Charts, timeline: typeof Timeline !== 'undefined' && Timeline, map: typeof MapMod !== 'undefined' && MapMod, flights: typeof Flights !== 'undefined' && Flights, flyover: typeof Flyover !== 'undefined' && Flyover, picto: typeof Picto !== 'undefined' && Picto, news: typeof News !== 'undefined' && News, story: typeof Story !== 'undefined' && Story, broll: typeof Broll !== 'undefined' && Broll, studio: typeof Studio !== 'undefined' && Studio })[k] || null;
   const modOf = k => { const m = raw(k); return m ? (typeof Layers !== 'undefined' ? Layers.wrap(m) : m) : null; };
   const hooks = {};
@@ -20,16 +20,34 @@ const Video = (() => {
   const fitWords = s => r2(cl(String(s || '').trim().split(/\s+/).filter(Boolean).length / WPS + 0.6, 1.2, 120));
   const M = id => typeof CutMedia !== 'undefined' ? CutMedia.info(id) : null;
   const isVis = it => it && it.kind !== 'audio';
-  const hasPic = it => it && (it.kind === 'clip' || it.kind === 'media' || it.kind === 'colour' || it.kind === 'avatar');
+  const hasPic = it => it && (it.kind === 'clip' || it.kind === 'media' || it.kind === 'colour' || it.kind === 'avatar' || it.kind === 'intro');
 
   /* ---------- Lengths and layout ---------- */
   function natural(it, look) { const Mo = modOf(it.mod); if (!Mo || !it.cfg) return 3; let d = 3; try { d = Mo.duration(it.cfg, lookFor(it, look)); } catch (e) { } return d > 0 && isFinite(d) ? d : 3; }
   const speedOf = it => cl(+it.speed || 1, 0.05, 100);
+  // Speed curves (CapCut's "Curve" speed): it.curve = { k, pts: [[u, m]], a, b }. m is a speed multiplier (0.1 to 10,
+  // times the clip's speed) along the source from a to b (fixed when the curve was put on, so trims and splits keep its
+  // shape where it was). Timeline time maps to source time by adding up the time each little bit of source takes.
+  const CURVES = { montage: { label: 'Montage', pts: [[0, 1], [0.25, 3], [0.5, 0.6], [0.75, 3], [1, 1]] }, hero: { label: 'Hero', pts: [[0, 1.6], [0.38, 1.6], [0.5, 0.25], [0.62, 1.6], [1, 1.6]] },
+    bullet: { label: 'Bullet time', pts: [[0, 3], [0.33, 3], [0.45, 0.3], [0.62, 0.3], [0.74, 3], [1, 3]] }, jump: { label: 'Jump cut', pts: [[0, 1], [0.4, 1], [0.5, 6], [0.6, 1], [1, 1]] },
+    flashIn: { label: 'Flash in', pts: [[0, 6], [0.3, 1], [1, 1]] }, flashOut: { label: 'Flash out', pts: [[0, 1], [0.7, 1], [1, 6]] }, slowmo: { label: 'Slow middle', pts: [[0, 1], [0.35, 1], [0.5, 0.3], [0.65, 1], [1, 1]] } };
+  const curvePts = it => { const c = it && it.curve; if (!c || typeof c !== 'object') return null; const P = Array.isArray(c.pts) ? c.pts.filter(q => Array.isArray(q) && isFinite(+q[0]) && isFinite(+q[1])).map(q => [cl(+q[0], 0, 1), cl(+q[1], 0.1, 10)]).sort((x, y) => x[0] - y[0]) : null; return P && P.length >= 2 ? P : null; };
+  function curveMul(P, u) { if (u <= P[0][0]) return P[0][1]; for (let i = 1; i < P.length; i++) if (u <= P[i][0]) { const [u0, m0] = P[i - 1], [u1, m1] = P[i], f = u1 > u0 ? (u - u0) / (u1 - u0) : 1, e = 0.5 - 0.5 * Math.cos(Math.PI * f); return Math.exp(Math.log(m0) + (Math.log(m1) - Math.log(m0)) * e); } return P[P.length - 1][1]; }
+  const curveCache = new Map();
+  function curveMap(it, a, b) {
+    const P = curvePts(it); if (!P || !(b > a)) return null; const s0 = speedOf(it), ca = isFinite(+it.curve.a) ? +it.curve.a : a, cb = isFinite(+it.curve.b) && +it.curve.b > ca ? +it.curve.b : b, key = JSON.stringify(P) + '|' + a + '|' + b + '|' + s0 + '|' + ca + '|' + cb;
+    let m = curveCache.get(key); if (m) return m; if (curveCache.size > 300) curveCache.clear();
+    const N = 256, T = new Float64Array(N + 1), X = new Float64Array(N + 1), dx = (b - a) / N, mul = x => s0 * curveMul(P, cl((x - ca) / (cb - ca), 0, 1));
+    X[0] = a; for (let i = 1; i <= N; i++) { X[i] = a + dx * i; T[i] = T[i - 1] + dx / mul(X[i] - dx / 2); }
+    const toSrc = local => { if (local <= 0) return a; if (local >= T[N]) return b; let lo = 0, hi = N; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (T[mid] <= local) lo = mid; else hi = mid; } return X[lo] + (local - T[lo]) / (T[hi] - T[lo]) * dx; };
+    m = { len: T[N], toSrc, rateAt: local => mul(toSrc(local)) }; curveCache.set(key, m); return m;
+  }
+  const hasCurve = it => !!curvePts(it) && !(it.kind === 'media' && it.still != null);
   // A tab clip's own stretch: from its in point to its out point (seconds of the clip itself), and its whole length
   // Clips that keep animating for as long as you like (the studio is a pure function of time), so they stretch instead of holding
   const runsOn = it => !!it && it.kind === 'clip' && it.mod === 'studio';
   function clipSpan(it, look) { const nat = natural(it, look), d = runsOn(it) ? Math.max(nat, 3600) : nat, a = cl(+it.inPt || 0, 0, Math.max(0, d - 0.2)), e = it.outPt != null ? cl(+it.outPt, a + 0.1, d) : Math.max(a + 0.1, nat); return [a, e, d]; }
-  const clipInner = (it, local, look) => { const [a, e] = clipSpan(it, look); return Math.min(e - 1e-4, a + Math.max(0, local) * speedOf(it)); };
+  const clipInner = (it, local, look) => { const [a, e] = clipSpan(it, look), cm = hasCurve(it) && curveMap(it, a, e); return Math.min(e - 1e-4, cm ? cm.toSrc(Math.max(0, local)) : a + Math.max(0, local) * speedOf(it)); };
   // Source stretch of a footage or sound clip: where it starts and ends in the file
   function srcSpan(it) { const m = M(it.asset), full = m ? (m.dur || 0) : 0; let a = cl(+it.src0 || 0, 0, Math.max(0, full - 0.04)), b = it.src1 == null ? full : cl(+it.src1, a + 0.04, Math.max(a + 0.04, full)); if (!m) b = it.src1 == null ? a + 3 : +it.src1; return [a, Math.max(a + 0.04, b)]; }
   function lenOf(it, look) { const d = lenOf0(it, look); return isFinite(d) ? Math.min(d, 36000) : 3; }   // ten hours at most
@@ -37,8 +55,9 @@ const Video = (() => {
     if (!it) return 0;
     if (it.kind === 'avatar') return cl(+it.dur || 3, 0.3, 3600);
     if (it.kind === 'colour' || it.kind === 'adjust') return cl(+it.dur || 3, 0.1, 3600);
-    if (it.kind === 'media' || it.kind === 'audio') { const m = M(it.asset); if (m && m.kind === 'image') return cl(+it.dur || 4, 0.1, 3600); if (it.still != null) return cl(+it.dur || 2, 0.1, 3600); const [a, b] = srcSpan(it); return Math.max(0.04, (b - a) / speedOf(it)); }
-    const [a, e] = clipSpan(it, look); return Math.max(0.2, (e - a) / speedOf(it) + cl(+it.hold || 0, 0, 600));
+    if (it.kind === 'intro') { const D = typeof PatterIntro !== 'undefined' ? PatterIntro.DUR : 5; return cl(+it.dur || D, 0.3, D); }
+    if (it.kind === 'media' || it.kind === 'audio') { const m = M(it.asset); if (m && m.kind === 'image') return cl(+it.dur || 4, 0.1, 3600); if (it.still != null) return cl(+it.dur || 2, 0.1, 3600); const [a, b] = srcSpan(it), cm = it.kind === 'media' && hasCurve(it) && curveMap(it, a, b); return Math.max(0.04, cm ? cm.len : (b - a) / speedOf(it)); }
+    const [a, e] = clipSpan(it, look), cm = hasCurve(it) && curveMap(it, a, e); return Math.max(0.2, (cm ? cm.len : (e - a) / speedOf(it)) + cl(+it.hold || 0, 0, 600));
   }
   // A transition on a main track clip overlaps it with the next one; it can't be longer than half of either
   const TRMAX = (a, b, look) => Math.max(0, Math.min(lenOf(a, look), lenOf(b, look)) / 2 - 0.02);
@@ -116,8 +135,10 @@ const Video = (() => {
       if (m.kind === 'image') { const b = (env && env.images && env.images.get(it.asset)) || CutMedia.image(it.asset); return b ? { img: b, w: b.width, h: b.height, rot: 0 } : { pending: true, w: m.w || W, h: m.h || H }; }
       const s = srcTime(it, local);
       if (env && env.frames) { const f = env.frames.get(it.id); if (f && f.img) { const rot = f.rot || 0, fw = f.img.displayWidth || f.img.videoWidth || f.img.width, fh = f.img.displayHeight || f.img.videoHeight || f.img.height; return { img: f.img, w: rot % 180 ? fh : fw, h: rot % 180 ? fw : fh, rot, iw: fw, ih: fh }; } return { pending: true, w: m.w || W, h: m.h || H }; }
-      const el = CutMedia.live(it.asset, it.id + (slot || ''), s, !!(!look.paused && !it.rev && it.still == null), speedOf(it)); return el ? { img: el, w: el.videoWidth || m.w, h: el.videoHeight || m.h, rot: 0 } : { pending: true, w: m.w || W, h: m.h || H };
+      const el = CutMedia.live(it.asset, it.id + (slot || ''), s, !!(!look.paused && !it.rev && it.still == null), rateOf(it, local)); return el ? { img: el, w: el.videoWidth || m.w, h: el.videoHeight || m.h, rot: 0 } : { pending: true, w: m.w || W, h: m.h || H };
     }
+    if (it.kind === 'intro') { if (typeof PatterIntro === 'undefined') return { colour: '#0a2556', w: W, h: H }; const k = env && env.k || 1, c = scratch('intro' + (slot || '') + it.id.slice(-3), W * k, H * k), g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
+      try { PatterIntro.draw(g, local, W, H, { text: it.text, gull: it.gull }); } catch (e) { console.warn(e); } return { img: c, w: c.width, h: c.height, rot: 0, full: true }; }
     if (it.kind === 'clip') {
       const Mo = modOf(it.mod); if (!Mo) return { missing: 'Unknown clip', w: W, h: H };
       const k = env && env.k || 1, c = scratch('clip' + (slot || '') + it.id.slice(-3), W * k, H * k), g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
@@ -128,9 +149,11 @@ const Video = (() => {
     return null;
   }
   // Where in its file a footage clip is at this moment
-  function srcTime(it, local) { if (it.still != null) return +it.still; const [a, b] = srcSpan(it), s = speedOf(it); return it.rev ? Math.max(a, b - local * s - 1e-3) : Math.min(b - 1e-3, a + local * s); }
+  // How fast the source is running at this moment (for the preview's video element)
+  function rateOf(it, local) { if (it.kind === 'media' && hasCurve(it)) { const [a, b] = srcSpan(it), cm = curveMap(it, a, b); if (cm) return cm.rateAt(local); } return speedOf(it); }
+  function srcTime(it, local) { if (it.still != null) return +it.still; const [a, b] = srcSpan(it), s = speedOf(it); const cm = it.kind === 'media' && hasCurve(it) && curveMap(it, a, b); if (cm) { const x = cm.toSrc(Math.max(0, local)); return it.rev ? Math.max(a, b - (x - a) - 1e-3) : Math.min(b - 1e-3, x); } return it.rev ? Math.max(a, b - local * s - 1e-3) : Math.min(b - 1e-3, a + local * s); }
   // Box the clip fills before its own moves: fitted inside the frame, filling it, or stretched
-  function baseBox(it, sw, sh, W, H) { const fit = it.fit || (it.kind === 'clip' || it.kind === 'colour' ? 'stretch' : 'fit'); if (fit === 'stretch') return [W, H]; const k = fit === 'fill' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh); return [sw * k, sh * k]; }
+  function baseBox(it, sw, sh, W, H) { const fit = it.fit || (it.kind === 'clip' || it.kind === 'colour' || it.kind === 'intro' ? 'stretch' : 'fit'); if (fit === 'stretch') return [W, H]; const k = fit === 'fill' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh); return [sw * k, sh * k]; }
   // Transform of a clip at a moment: position (centre, as fractions), scale, turn, opacity, flips, plus animations
   function placeOf(it, local, len, W, H) {
     const A = animOf(it, local, len, W, H);
@@ -319,10 +342,10 @@ const Video = (() => {
   function blurHint(cfg, look, t, fps, W, H) { const o = at(cfg, look, t); if (!o || o.it.kind !== 'clip' || (cfg.tracks || []).length) return null; const Mo = modOf(o.it.mod); if (!Mo || !Mo.blurHint) return null; return Mo.blurHint(o.it.cfg, lookFor(o.it, look), clipInner(o.it, t - o.t0, look), fps, W, H); }
   const needsMap = cfg => { const f = it => it && it.kind === 'clip' && (it.mod === 'map' || it.mod === 'flights' || it.mod === 'flyover' || (it.mod === 'studio' && Studio.needsMap(it.cfg))); return (cfg.items || []).some(f) || (cfg.tracks || []).some(T => (T.items || []).some(f)) || (studioOn(cfg) && (cfg.items || []).some(it => it && it.kind === 'avatar') && Studio.needsMap(studioCfg(cfg))); };
   // Anything only the new editor can draw (own footage, sound, overlay tracks, grading...): exported by the editor's own exporter
-  const isCut = cfg => !!((cfg.tracks || []).some(T => (T.items || []).length) || (cfg.items || []).some(it => it.kind === 'media' || it.kind === 'colour' || it.tr || it.col || it.fx || it.key || it.mask || it.anIn || it.anOut || it.anLoop || it.kf || (it.speed && +it.speed !== 1) || it.x != null || it.s != null || it.crop || it.blend || it.vol != null) || (cfg.bg && cfg.bg !== 'black'));
+  const isCut = cfg => !!((cfg.tracks || []).some(T => (T.items || []).length) || (cfg.items || []).some(it => it.kind === 'media' || it.kind === 'colour' || it.kind === 'intro' || it.tr || it.col || it.fx || it.key || it.mask || it.anIn || it.anOut || it.anLoop || it.kf || (it.speed && +it.speed !== 1) || it.x != null || it.s != null || it.crop || it.blend || it.vol != null) || (cfg.bg && cfg.bg !== 'black'));
 
   /* ---------- Editing API (used by the editor workspace and the preview) ---------- */
-  const NAME = it => it.name || (it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'You in the studio') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
+  const NAME = it => it.name || (it.kind === 'intro' ? 'PatterSquid intro' : it.kind === 'avatar' ? (it.text ? '🎙 ' + it.text : 'You in the studio') : it.kind === 'media' ? ((M(it.asset) || {}).name || 'Footage') : it.kind === 'audio' ? ((M(it.asset) || {}).name || 'Sound') : it.kind === 'colour' ? 'Colour' : it.kind === 'adjust' ? 'Adjustment' : NAMES[it.mod] || it.mod || 'Clip');
   const editor = { formIsScene: true,
     tracks() { return []; },
     update() { },
@@ -358,12 +381,14 @@ const Video = (() => {
     if (!T) { T = { id: nid('t'), kind, name: kind === 'audio' ? 'Audio ' + (tracksOf(cfg, 'audio').length + 1) : 'Overlay ' + (tracksOf(cfg, 'video').length + 1), items: [] }; if (kind === 'video') { const lastV = cfg.tracks.map(x => x.kind).lastIndexOf('video'); cfg.tracks.splice(lastV + 1, 0, T); } else cfg.tracks.push(T); }
     T.items.push(it); T.items.sort((a, b) => (+a.start || 0) - (+b.start || 0)); return T;
   }
+  function pinCurve(it, look) { if (!curvePts(it)) return; const [a, b] = it.kind === 'clip' ? clipSpan(it, look) : srcSpan(it); if (!isFinite(+it.curve.a) || !isFinite(+it.curve.b)) { it.curve.a = r3(a); it.curve.b = r3(b); } }
   // Split a clip in two at the timeline moment t
   function split(cfg, id, t, look) {
     const f = findItem(cfg, id); if (!f) return null; const it = f.it, p = allPlaced(cfg, look).find(q => q.it === it); if (!p) return null; const local = t - p.t0; if (local < 0.05 || local > p.d - 0.05) return null;
+    pinCurve(it, look);
     const b = JSON.parse(JSON.stringify(it)); b.id = nid('i'); delete b.gap;
     if (it.kind === 'media' || it.kind === 'audio') { const m = M(it.asset); if (m && m.kind !== 'image' && it.still == null) { const s = srcTime(it, local); if (it.rev) { b.src1 = r3(s); it.src0 = r3(s); } else { it.src1 = r3(s); b.src0 = r3(s); } } else { it.dur = r3(local); b.dur = r3(p.d - local); } }
-    else if (it.kind === 'clip') { const [a, e] = clipSpan(it, look), inner = a + local * speedOf(it); if (inner < e - 0.1) { b.inPt = r3(inner); it.outPt = r3(inner); it.hold = 0; } else { const left = p.d - local; it.hold = r3(Math.max(0, (+it.hold || 0) - left)); b.inPt = r3(Math.max(a, e - 0.15)); b.outPt = r3(e); b.hold = r3(Math.max(0.05, left - 0.15 / speedOf(it))); } }
+    else if (it.kind === 'clip') { const [a, e] = clipSpan(it, look), inner = clipInner(it, local, look); if (inner < e - 0.1) { b.inPt = r3(inner); it.outPt = r3(inner); it.hold = 0; } else { const left = p.d - local; it.hold = r3(Math.max(0, (+it.hold || 0) - left)); b.inPt = r3(Math.max(a, e - 0.15)); b.outPt = r3(e); b.hold = r3(Math.max(0.05, left - 0.15 / speedOf(it))); } }
     else { it.dur = r3(local); b.dur = r3(p.d - local); }
     // Keyframes and the out animation go with the right half
     if (it.kf) { const ka = {}, kb = {}; Object.entries(it.kf).forEach(([k, L]) => { ka[k] = L.filter(q => q[0] <= local); kb[k] = L.filter(q => q[0] >= local).map(q => [r3(q[0] - local), q[1], q[2]]); if (!ka[k].length) ka[k] = [[0, kfAt(it, k, local, 0)]]; if (!kb[k].length) kb[k] = [[0, kfAt(it, k, local, 0)]]; }); it.kf = ka; b.kf = kb; }
@@ -375,5 +400,5 @@ const Video = (() => {
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
-    runsOn, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
+    runsOn, CURVES, curvePts, curveMul, hasCurve, rateOf, pinCurve, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();

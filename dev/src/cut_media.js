@@ -25,7 +25,7 @@ const CutMedia = (() => {
   async function blobOf(id) { if (blobs[id]) return blobs[id]; if (inWorker) return null; const r = await get('files', id).catch(() => null); if (r && r.blob) { blobs[id] = r.blob; return r.blob; } return null; }
   async function urlOf(id) { if (urls[id]) return urls[id]; const b = await blobOf(id); if (!b) return null; return urls[id] || (urls[id] = URL.createObjectURL(b)); }
   const info = id => meta[id] || null;
-  const list = () => Object.values(meta).sort((a, b) => (b.added || 0) - (a.added || 0));
+  const list = () => Object.values(meta).filter(m => !m.builtin).sort((a, b) => (b.added || 0) - (a.added || 0));
 
   /* ---------- Import ---------- */
   const kindOf = f => { const t = (f.type || '').toLowerCase(), n = (f.name || '').toLowerCase();
@@ -41,10 +41,10 @@ const CutMedia = (() => {
       el.onloadedmetadata = () => { clearTimeout(to); res({ dur: isFinite(el.duration) ? el.duration : 0, w: el.videoWidth || 0, h: el.videoHeight || 0, el }); };
       el.onerror = () => { clearTimeout(to); rej(new Error(kind === 'audio' ? 'Edge could not play that sound file.' : 'Edge could not play that video. MP4 or MOV from a phone, a screen recorder or a video editor works best.')); }; });
   }
-  async function importFile(file, onProgress) {
+  async function importFile(file, onProgress, opts = {}) {
     if (inWorker) throw new Error('No importing here');
     const kind = kindOf(file); if (!kind) throw new Error('"' + (file.name || 'That file') + '" is not a video, sound or picture Patter Studio can use.');
-    const id = nid(), m = { id, kind, name: file.name || kind, size: file.size || 0, type: file.type || '', added: Date.now() };
+    const id = opts.id && !meta[opts.id] ? opts.id : nid(), m = { id, kind, name: file.name || kind, size: file.size || 0, type: file.type || '', added: Date.now() }; if (opts.builtin) m.builtin = true;
     blobs[id] = file;
     try { await put('files', { id, blob: file }); } catch (e) { m.unsaved = true; }
     if (kind === 'image') { const b = await createImageBitmap(file); m.w = b.width; m.h = b.height; m.dur = 0; images.set(id, b); }

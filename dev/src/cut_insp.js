@@ -5,7 +5,7 @@ const CutInspect = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
   const V = () => Video;
-  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'You', colour: 'Card' };
+  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'You', colour: 'Card', intro: 'Intro' };
   const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Colour dodge'], ['color-burn', 'Colour burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Colour'], ['luminosity', 'Luminosity']];
 
   function create(o, ui) {
@@ -50,8 +50,8 @@ const CutInspect = (() => {
       if (id.startsWith('T:')) return transPanel(root, c, id.slice(2), changed);
       if (id.startsWith('K:')) return trackPanel(root, c, id.slice(2), changed);
       const f = V().findItem(c, id); if (!f) return; const it = f.it, m = it.asset ? CutMedia.info(it.asset) : null, isImg = m && m.kind === 'image', isVid = m && m.kind === 'video';
-      if (it.asset && !m) { root.append(H('section', { className: 'card cs' }, H('div', { className: 'cs-head' }, H('b', { textContent: it.file || 'Missing file' })), H('div', { className: 'cs-body' }, H('p', { className: 'hint', textContent: '"' + (it.file || 'This file') + '" isn\'t on this computer (the project was made on another one, or the file was removed). Find it and every clip that uses it comes back.' }), H('div', { className: 'btnrow' }, UI.btn('Find this file…', () => ui.relinkPick(it.asset), 'primary'), UI.btn('Remove the clip', () => { o.commit(); f.list.splice(f.i, 1); o.changed(true); o.ed.select(null); }))))); return; }
-      const tabs = it.kind === 'audio' ? ['audio', 'speed'] : it.kind === 'avatar' ? ['avatar'] : it.kind === 'adjust' ? ['col', 'fx', 'basic'] : it.kind === 'colour' ? ['colour', 'basic', 'anim', 'fx', 'mask']
+      if (it.asset && !m && it.kind !== 'intro') { root.append(H('section', { className: 'card cs' }, H('div', { className: 'cs-head' }, H('b', { textContent: it.file || 'Missing file' })), H('div', { className: 'cs-body' }, H('p', { className: 'hint', textContent: '"' + (it.file || 'This file') + '" isn\'t on this computer (the project was made on another one, or the file was removed). Find it and every clip that uses it comes back.' }), H('div', { className: 'btnrow' }, UI.btn('Find this file…', () => ui.relinkPick(it.asset), 'primary'), UI.btn('Remove the clip', () => { o.commit(); f.list.splice(f.i, 1); o.changed(true); o.ed.select(null); }))))); return; }
+      const tabs = it.kind === 'audio' ? ['audio', 'speed'] : it.kind === 'avatar' ? ['avatar'] : it.kind === 'intro' ? ['intro', 'basic', 'col', 'fx', 'audio'] : it.kind === 'adjust' ? ['col', 'fx', 'basic'] : it.kind === 'colour' ? ['colour', 'basic', 'anim', 'fx', 'mask']
         : it.kind === 'clip' ? ['clip', 'basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key'] : isImg ? ['basic', 'anim', 'col', 'fx', 'mask', 'key'] : ['basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key', ...(m && m.hasAudio !== false ? ['audio'] : [])];
       let tab = ui.inspTab[it.id] || tabs[0]; if (!tabs.includes(tab)) tab = tabs[0];
       const head = H('div', { className: 'cs-head' }, H('i', { style: 'background:' + (V().COLS[it.kind === 'clip' ? it.mod : it.kind === 'media' ? (isImg ? 'image' : 'media') : it.kind] || '#556') }), H('b', { textContent: V().NAME(it) }));
@@ -60,7 +60,7 @@ const CutInspect = (() => {
       const tb = H('div', { className: 'cs-tabs', role: 'tablist' }), body = H('div', { className: 'cs-body' });
       tabs.forEach(k => tb.append(H('button', { type: 'button', role: 'tab', className: k === tab ? 'on' : '', 'aria-selected': String(k === tab), textContent: TABS[k], on: { click: () => { ui.inspTab[it.id] = k; o.rebuildInspector(); } } })));
       const ch = full => changed(full), cm = () => o.commit();
-      ({ basic, anim, speed, col, fx, mask, key, audio, clip, avatar, colour })[tab](body, c, it, m, ch, cm, f);
+      ({ basic, anim, speed, col, fx, mask, key, audio, clip, avatar, colour, intro })[tab](body, c, it, m, ch, cm, f);
       root.append(H('section', { className: 'card cs' }, head, tb, body));
     }
     function basic(body, c, it, m, ch, cm, f) {
@@ -92,12 +92,44 @@ const CutInspect = (() => {
         H('p', { className: 'hint', textContent: 'For anything more, use the keyframe diamonds on the Video tab: set a value, move the playhead, set another.' }));
     }
     function speed(body, c, it, m, ch, cm) {
-      const isVid = m && m.kind === 'video';
-      body.append(sect('Speed', chips(String(+it.speed || 1), [['0.25', '0.25x'], ['0.5', '0.5x'], ['0.75', '0.75x'], ['1', '1x'], ['1.25', '1.25x'], ['1.5', '1.5x'], ['2', '2x'], ['3', '3x'], ['5', '5x'], ['10', '10x']], v => { cm(); if (+v === 1) delete it.speed; else it.speed = +v; ch(true); o.rebuildInspector(); }, 'wrap'),
-        slider('Exact speed', () => +it.speed || 1, v => { if (Math.abs(v - 1) < 1e-3) delete it.speed; else it.speed = r2(v); }, 0.1, 20, 0.05, v => r2(v) + 'x', { onChange: ch, commit: () => { cm(); o.rebuildInspector(); }, reset: 1 }),
-        H('p', { className: 'hint', textContent: 'The clip gets longer or shorter to match. ' + (isVid || it.kind === 'audio' ? 'Sound speeds up with it.' : '') })));
-      if (isVid || it.kind === 'audio') body.append(sect('', check('Keep the pitch (voices don\'t go squeaky or deep)', it.pitch !== false, v => { cm(); if (v) delete it.pitch; else it.pitch = false; ch(true); })));
+      const isVid = m && m.kind === 'video', canCurve = it.kind !== 'audio', curved = canCurve && !!V().curvePts(it), lenNow = () => { const p = placed(c, it); return p ? ui.short(p.d) : ''; };
+      const lenP = H('p', { className: 'hint', textContent: '' }), sayLen = () => { lenP.textContent = 'Now ' + lenNow() + ' long on the timeline.'; };
+      if (canCurve) body.append(sect('', chips(curved ? 'curve' : 'normal', [['normal', 'Normal'], ['curve', 'Curve']], v => { cm(); if (v === 'normal') delete it.curve; else { const P = V().CURVES.montage; const [a, b] = it.kind === 'clip' ? V().clipSpan(it, look()) : V().srcSpan(it); it.curve = { k: 'montage', pts: P.pts.map(q => q.slice()), a: r3(a), b: r3(b) }; } ch(true); o.rebuildInspector(); })));
+      body.append(sect(curved ? 'Overall speed' : 'Speed', chips(String(+it.speed || 1), [['0.25', '0.25x'], ['0.5', '0.5x'], ['0.75', '0.75x'], ['1', '1x'], ['1.25', '1.25x'], ['1.5', '1.5x'], ['2', '2x'], ['3', '3x'], ['5', '5x'], ['10', '10x']], v => { cm(); if (+v === 1) delete it.speed; else it.speed = +v; ch(true); o.rebuildInspector(); }, 'wrap'),
+        slider('Exact speed', () => +it.speed || 1, v => { if (Math.abs(v - 1) < 1e-3) delete it.speed; else it.speed = r2(v); sayLen(); ui.build(); }, 0.1, 20, 0.05, v => r2(v) + 'x', { onChange: ch, commit: () => { cm(); o.rebuildInspector(); }, reset: 1 }),
+        H('p', { className: 'hint', textContent: (it.kind === 'clip' ? 'The animation itself plays faster or slower, and ' : '') + 'the clip gets longer or shorter to match. ' + (curved ? '' : isVid || it.kind === 'audio' ? 'Sound speeds up with it.' : '') }), lenP));
+      if (curved) {
+        const g = H('div', { className: 'cs-curves' });
+        Object.entries(V().CURVES).forEach(([k, C]) => { const cv = H('canvas', { width: 120, height: 56 }); drawCurve(cv, C.pts, null); g.append(H('button', { type: 'button', className: it.curve.k === k ? 'on' : '', title: C.label, on: { click: () => { cm(); it.curve.k = k; it.curve.pts = C.pts.map(q => q.slice()); ch(true); o.rebuildInspector(); } } }, cv, H('span', { textContent: C.label }))); });
+        const ed = H('canvas', { className: 'cs-curve-ed', width: 560, height: 240 }); let hot = -1; const P = () => it.curve.pts;
+        const pos = e => { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+        const toM = y => Math.exp(Math.log(10) - y * 2 * Math.log(10)), toY = mm => (Math.log(10) - Math.log(mm)) / (2 * Math.log(10)), PADX = 0.04;
+        const near = ([x, y]) => P().findIndex(q => Math.abs(PADX + q[0] * (1 - 2 * PADX) - x) < 0.04 && Math.abs(toY(q[1]) - y) < 0.08);
+        let raf = 0; const tl = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => ui.build()); }, custom = () => { it.curve.k = 'custom'; g.querySelectorAll('button.on').forEach(b => b.classList.remove('on')); };
+        ed.addEventListener('pointerdown', e => { const q = pos(e); hot = near(q); if (hot < 0) return; e.preventDefault(); ed.setPointerCapture(e.pointerId); cm(); custom(); });
+        ed.addEventListener('pointermove', e => { const q = pos(e); if (hot < 0) { ed.style.cursor = near(q) >= 0 ? 'grab' : 'crosshair'; return; } const L = P(), u = (q[0] - PADX) / (1 - 2 * PADX);
+          L[hot][1] = Math.round(Math.max(0.1, Math.min(10, toM(Math.max(0, Math.min(1, q[1]))))) * 100) / 100; if (hot > 0 && hot < L.length - 1) L[hot][0] = Math.round(Math.max(L[hot - 1][0] + 0.02, Math.min(L[hot + 1][0] - 0.02, u)) * 1000) / 1000;
+          drawCurve(ed, L, hot); ch(); sayLen(); tl(); });
+        ed.addEventListener('pointerup', () => { if (hot >= 0) { hot = -1; ch(true); drawCurve(ed, P(), -1); tl(); } });
+        ed.addEventListener('dblclick', e => { const q = pos(e), k = near(q), L = P(); cm(); custom(); if (k > 0 && k < L.length - 1) L.splice(k, 1); else if (k < 0) { const u = Math.max(0.01, Math.min(0.99, (q[0] - PADX) / (1 - 2 * PADX))); L.push([Math.round(u * 1000) / 1000, Math.round(toM(q[1]) * 100) / 100]); L.sort((x, y) => x[0] - y[0]); } drawCurve(ed, L, -1); ch(true); sayLen(); tl(); });
+        drawCurve(ed, P(), -1);
+        body.append(sect('Speed curve', g, ed, H('p', { className: 'hint', textContent: 'Drag the dots up to speed up, down to slow down. Double click to add a dot, double click a dot to take it away.' + (isVid ? ' A clip with a speed curve plays its picture only: detach the sound first if you want it.' : '') }),
+          H('div', { className: 'btnrow' }, UI.btn('Back to normal speed', () => { cm(); delete it.curve; ch(true); o.rebuildInspector(); }))));
+      }
+      sayLen();
+      if ((isVid && !curved) || it.kind === 'audio') body.append(sect('', check('Keep the pitch (voices don\'t go squeaky or deep)', it.pitch !== false, v => { cm(); if (v) delete it.pitch; else it.pitch = false; ch(true); })));
       if (isVid) body.append(sect('Play backwards', check('Reverse', !!it.rev, v => { cm(); if (v) it.rev = true; else delete it.rev; ch(true); }), H('p', { className: 'hint', textContent: 'Reversed clips play smoothly in the export; the preview steps through them while playing.' })));
+    }
+    // A speed curve as a picture: speed up the side, a line at normal speed
+    function drawCurve(cv, pts, hot) {
+      const g = cv.getContext('2d'), W = cv.width, Hh = cv.height, PADX = 0.04, X = u => (PADX + u * (1 - 2 * PADX)) * W, Y = mm => (Math.log(10) - Math.log(mm)) / (2 * Math.log(10)) * Hh, big = W > 200;
+      g.clearRect(0, 0, W, Hh); g.fillStyle = '#0f1729'; g.fillRect(0, 0, W, Hh);
+      [0.25, 0.5, 2, 4].forEach(mm => { g.strokeStyle = 'rgba(255,255,255,0.07)'; g.beginPath(); g.moveTo(0, Y(mm)); g.lineTo(W, Y(mm)); g.stroke(); });
+      g.strokeStyle = 'rgba(255,255,255,0.3)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, Y(1)); g.lineTo(W, Y(1)); g.stroke(); g.setLineDash([]);
+      if (big) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '18px system-ui,sans-serif'; [[10, '10x'], [1, '1x'], [0.1, '0.1x']].forEach(([mm, t]) => g.fillText(t, 6, Math.min(Hh - 6, Math.max(18, Y(mm) - 4)))); }
+      const P = pts.slice().sort((a, b) => a[0] - b[0]); g.strokeStyle = '#f5c518'; g.lineWidth = big ? 3 : 2; g.beginPath();
+      for (let i = 0; i <= 100; i++) { const u = i / 100, mm = V().curveMul(P, u); if (i) g.lineTo(X(u), Y(mm)); else g.moveTo(X(u), Y(mm)); } g.stroke();
+      if (big) P.forEach((q, i) => { g.fillStyle = i === hot ? '#fff' : '#f5c518'; g.beginPath(); g.arc(X(q[0]), Y(q[1]), 9, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#0f1729'; g.lineWidth = 2; g.stroke(); });
     }
     function col(body, c, it, m, ch, cm) {
       const C = it.col || {}, setC = (k, v) => { it.col = Object.assign({}, it.col || {}); if (v === 0 || v == null) delete it.col[k]; else it.col[k] = v; if (!Object.keys(it.col).length) delete it.col; };
@@ -155,10 +187,18 @@ const CutInspect = (() => {
       if (f && f.track === 'main' && m && m.kind === 'video') body.append(sect('', UI.btn('Detach the sound onto its own track', () => ui.detachNow())));
       if (it.kind === 'audio') body.append(sect('', UI.btn('Replace the sound file…', () => ui.replacePick(it.id))));
     }
+    function intro(body, c, it, m, ch, cm) {
+      body.append(sect('', H('p', { className: 'hint', textContent: 'Your squid drops in, takes a traffic cone on the heid, PATTERSQUID slams in, the line below is stamped on, and a seagull nicks the cone. Five seconds, with its own sound.' }),
+        UI.field('The stamp', UI.txt(it.text == null ? 'GET IT UP YE.' : it.text, v => { it.text = v.slice(0, 40); ch(); }, 'GET IT UP YE.', 'Stamp line')),
+        chips(it.text == null ? 'GET IT UP YE.' : it.text, [['GET IT UP YE.', 'Get it up ye'], ['GONNAE NO.', 'Gonnae no'], ['AYE, RIGHT.', 'Aye, right'], ['PURE PATTER.', 'Pure patter'], ['', 'No stamp']], v => { cm(); it.text = v; ch(true); o.rebuildInspector(); }, 'wrap'),
+        check('The seagull nicks the cone', it.gull !== false, v => { cm(); if (v) delete it.gull; else it.gull = false; ch(true); }),
+        H('p', { className: 'hint', textContent: 'Drag its end on the timeline to cut it short. Put a transition after it to go into the video.' })));
+    }
     function clip(body, c, it, m, ch, cm) {
       const d = V().natural(it, look()), [a, e] = V().clipSpan(it, look());
       body.append(sect('', UI.field('Name on the timeline', UI.txt(it.name || '', v => { it.name = v; ch(); }, V().NAMES[it.mod], 'Clip name')),
         H('p', { className: 'hint', textContent: (V().NAMES[it.mod] || 'Clip') + ', ' + d.toFixed(1) + ' s long on its own. Showing ' + a.toFixed(1) + ' s to ' + e.toFixed(1) + ' s' + (it.hold ? ', then holding the last frame for ' + (+it.hold).toFixed(1) + ' s' : '') + '. Drag its ends on the timeline to trim it or hold it longer.' }),
+        H('div', { className: 'cs-quick' }, H('span', { textContent: 'Speed' }), chips(V().curvePts(it) ? 'curve' : String(+it.speed || 1), [['0.5', '0.5x'], ['1', '1x'], ['1.5', '1.5x'], ['2', '2x'], ['3', '3x'], ...(V().curvePts(it) ? [['curve', 'Curve']] : [])], v => { if (v === 'curve') { ui.inspTab[it.id] = 'speed'; o.rebuildInspector(); return; } cm(); if (+v === 1) delete it.speed; else it.speed = +v; ch(true); o.rebuildInspector(); }), UI.btn('More…', () => { ui.inspTab[it.id] = 'speed'; o.rebuildInspector(); })),
         H('div', { className: 'btnrow' }, UI.btn('Edit this clip in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id), 'primary')),
         H('p', { className: 'hint', textContent: 'This clip is its own copy, made when you added it, so changes in the ' + (V().NAMES[it.mod] || '') + ' tab since then are not in it. Edit it with the button above (double click it on the timeline does the same), or bring in what the tab has now.' }),
         H('div', { className: 'btnrow' }, UI.btn('Use what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab now', () => { const src = o.tabCfg(it.mod); if (!src) return; cm(); it.cfg = JSON.parse(JSON.stringify(src)); if (!V().runsOn(it)) { const [a2, , d2] = V().clipSpan(it, look()); if (it.outPt != null && +it.outPt > d2) delete it.outPt; if (a2 >= d2 - 0.2) it.inPt = 0; } ch(true); o.rebuildInspector(); o.say('The clip now has what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab, keeping its place, trims and effects.'); }))));

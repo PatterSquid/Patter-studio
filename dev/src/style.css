@@ -416,3 +416,11 @@ body.cut .hdr-tools{flex:none;gap:6px}
 body.cut .hdr-tools button{padding:5px 9px}
 body.cut main{grid-template-rows:minmax(160px,1fr) auto var(--tlh,clamp(210px,36vh,400px))}
 @media (max-width:1300px){ body.cut .brand{display:none} body.cut main{grid-template-columns:clamp(220px,20vw,300px) minmax(0,1fr) clamp(270px,23vw,340px)} }
+
+.cs-curves{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin-bottom:10px}
+.cs-curves button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px;border-radius:8px;background:#121b2e;border:1px solid #26344f;color:#b8c4d8;font:600 11px system-ui,sans-serif;cursor:pointer}
+.cs-curves button canvas{width:100%;height:auto;border-radius:5px}.cs-curves button.on{border-color:var(--bru);color:#fff}
+.cs-curve-ed{width:100%;height:auto;border-radius:8px;border:1px solid #26344f;touch-action:none;cursor:crosshair}
+.cs-quick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.cs-quick>span{font:600 12px system-ui,sans-serif;color:#b8c4d8}
+
+.cl-intro{margin:4px 0 12px}.cl-tile.cl-introbtn{width:100%;display:flex;flex-direction:column;gap:6px;padding:6px;align-items:stretch;min-height:0}.cl-tile.cl-introbtn canvas{width:100% !important;max-width:none !important;height:auto !important;aspect-ratio:16/9;border-radius:6px;display:block}

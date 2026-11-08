@@ -37,6 +37,7 @@ const Studio = (() => {
   const ready = () => readyP || (readyP = hasBuiltin && typeof Layers !== 'undefined' ? Promise.all([Layers.setAsset(BUILTIN, STUDIO_ROOM), typeof STUDIO_LOGO !== 'undefined' ? Layers.setAsset(LOGO, STUDIO_LOGO) : null, typeof STUDIO_PLATE !== 'undefined' ? Layers.setAsset(PLATE, STUDIO_PLATE) : null, typeof STUDIO_SQUID !== 'undefined' ? Layers.setAsset('studio-squid', STUDIO_SQUID) : null]).catch(() => null) : Promise.resolve());
   const DBG = {};
   const Ev = typeof StudioEvents !== 'undefined' ? StudioEvents : null;
+  const Dc = typeof StudioDecor !== 'undefined' ? StudioDecor : null;
   // Older settings with no room picture use the built-in studio
   // and his own studio always uses the marks that come with the app (so fixes to them reach him), unless he has marked it himself
   const eff = cfg => { if (!cfg || !hasBuiltin) return cfg; if (!cfg.room) return Object.assign({}, cfg, { room: { asset: BUILTIN, name: 'Your studio' }, marks: cfg.marksOwn && cfg.marks && cfg.marks.glass ? cfg.marks : STUDIO_MARKS });
@@ -259,7 +260,12 @@ const Studio = (() => {
     if (cfg.sway !== false) drawPlants(ctx, v.B, M, v, t, L);
     drawShows(ctx, cfg, M, v, t, look);
     if (cfg.neon !== false && !(cfg.neon && cfg.neon.on === false)) drawNeon(ctx, cfg, v, t, L, room);
+    // Decorations for the time of year: the still parts before the lamps light the room, the bulbs and candles after
+    const dth = Dc && M.glass ? Dc.themeOf(cfg) : null, DX = dth ? { Q: M.glass.map(m => P(m, v)), v, M, builtin: !!(hasBuiltin && cfg.room && cfg.room.asset === BUILTIN && !cfg.marksOwn), t, L } : null;
+    if (dth) Dc.roomPass(ctx, dth, DX);
     drawLight(ctx, cfg, M, v, t, lamps, fl, room, false);
+    if (dth) { const pw = v.EL ? 1 - cl(v.EL.roomOff, 0, 1) * 0.8 : 1; if (pw > 0.05) { ctx.save(); ctx.globalAlpha = pw; Dc.lightPass(ctx, dth, DX, room); ctx.restore(); }
+      const wa = Dc.wash(dth); if (wa) windowGlow(ctx, DX.Q, v, wa.slice(0, 3), wa[3] * pw); const fw = Dc.flash(dth, t, L); if (fw) windowGlow(ctx, DX.Q, v, fw.rgb, fw.e); }
     drawAvatar(ctx, cfg, v, tAv, lamps, fl, room);
     drawLight(ctx, cfg, M, v, t, lamps, fl, room, true);
     if (look && look.preview && cfg.mark) guides(ctx, M, v);
@@ -286,6 +292,7 @@ const Studio = (() => {
     if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
     if (w.snow) { const sc = snowCover(v.pic, R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (cfg.outside !== false) outside(ctx, cfg, M, v, t, L, fl);
+    { const dth = Dc && Dc.themeOf(cfg); if (dth) Dc.outsidePass(ctx, dth, { t, L, R, Q }); }
     // A power cut: every light out there goes off
     if (v.EL && v.EL.out > 0.01) { ctx.save(); ctx.globalAlpha = cl(v.EL.out, 0, 1); ctx.drawImage(lightsOut(v.pic, R), R.x0, R.y0, R.w, R.h); ctx.fillStyle = 'rgba(4,6,16,0.22)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (X) Ev.world(X);
@@ -678,6 +685,11 @@ const Studio = (() => {
     (cfg.stings || []).forEach(s2 => { const st = +s2.start || 0, d = Math.max(0.2, +s2.dur || 1);
       if (s2.k === 'lightsoff' || s2.k === 'blackout') { add(st, x => Math.sin(TAU * 70 * x) * 0.35 * Math.exp(-x / 0.06), 0.3, 0.5); add(st + d, x => Math.sin(TAU * 90 * x) * 0.2 * Math.exp(-x / 0.05), 0.25, 0.5); }
       if (s2.k === 'flicker') { const rb = rng(hash(s2.id)); add(st, x => { const on = Math.sin(x * 47) > 0.15 ? 1 : 0; return (Math.sign(Math.sin(TAU * 100 * x)) * 0.5 + (rb() - 0.5) * 0.4) * 0.06 * on; }, d, 0.5); } });
+    // Fireworks for Bonfire Night and Hogmanay: a whizz going up, a bang, a crackle falling away
+    if (Dc && S0.outside !== false) Dc.sounds(cfg, L).forEach((f, j) => { for (let tt = f.t; tt < total + tail; tt += L) { const rr = rng(hash('fw' + j)), pan = 0.3 + rr() * 0.4, pw = 0.5 * f.size; let lp = 0, b = 0;
+      add(tt, x => { const k = x / 0.9; lp += 0.3 * ((rr() * 2 - 1) - lp); return Math.sin(TAU * (1800 + 1400 * k) * x) * 0.04 * Math.sin(Math.PI * k) * pw + lp * 0.05 * k * pw; }, 0.9, pan);
+      add(tt + 0.9 + 0.25 + rr() * 0.3, x => { b = (b + 0.2 * (rr() * 2 - 1)) * 0.97; return (b * 2.4 * Math.exp(-x / 0.18) + (rr() * 2 - 1) * 0.5 * Math.exp(-x / 0.04)) * pw; }, 1.4, pan);
+      if (f.kind !== 'ring') add(tt + 1.4, x => (rr() < 0.012 ? (rr() * 2 - 1) * 0.6 : 0) * Math.exp(-x / 0.9) * pw, 1.8, pan); } });
     // Whatever is going on outside: the plane, the bangs, sirens, the seagull...
     if (Ev && S0.outside !== false && (cfg.events || []).length) Ev.sound(cfg, add, sr);
     // Join the end round to the start so a loop never clicks, then keep it all in range
@@ -778,7 +790,7 @@ const Studio = (() => {
       root.append(card(names[k], H('p', { className: 'hint', textContent: k === 'PL' ? 'Drag it over the plant; a corner makes it bigger or smaller.' + (M.plants[+a] ? '' : '') : k === 'O' ? 'Whatever is inside this shape stays in front of the rain on the glass.' : k === 'L' ? 'Put it on the bulb; a corner sets how far its glow reaches.' : 'Drag it into place.' }),
         k === 'PL' && M.plants[+a] ? field('Fixed at', seg([['top', 'The top (hanging)'], ['bottom', 'The bottom (in a pot)']], M.plants[+a][4] || 'top', v => { M.plants[+a][4] = v; ch(); })) : '',
         foot(k !== 'G' ? btn('Remove it', () => { removeMark(cfg, id); changed(); hooks.select && hooks.select(null); }) : ''))); return; }
-    roomCard(); if (roomBmp(cfg)) { weatherCard(); if (Ev) flatsCard(); neonCard(false); avatarCard(); framesCard(); soundCard(); }
+    roomCard(); if (roomBmp(cfg)) { weatherCard(); if (Dc) decorCard(); if (Ev) flatsCard(); neonCard(false); avatarCard(); framesCard(); soundCard(); }
 
     function roomCard() {
       const note = H('p', { className: 'hint' }), has = !!roomBmp(cfg);
@@ -800,6 +812,11 @@ const Studio = (() => {
       }
       kids.push(H('div', { className: 'btnrow' }, cfg.room.asset === BUILTIN ? '' : hasBuiltin ? btn('Back to my studio', () => { cfg.room = { asset: BUILTIN, name: 'Your studio' }; cfg.marks = builtinMarks(); cfg.marksOwn = false; cfg.mark = false; ch(); }, 'primary') : '', btn(cfg.room.asset === BUILTIN ? 'Use a different room picture' : 'Change picture', pick)), note);
       root.append(card('Your studio', ...kids));
+    }
+    function decorCard() {
+      const k = cfg.decor || 'none', now = Dc.byDate();
+      root.append(card('Decorations', H('div', { className: 'st-seg wrap g3' }, ...seg(Dc.THEMES, k, v => { if (v === 'none') delete cfg.decor; else cfg.decor = v; ch(); }).childNodes),
+        H('p', { className: 'hint', textContent: k === 'auto' ? 'By the date picks for the day you make the video: ' + (now === 'none' ? 'nothing on today.' : (Dc.THEMES.find(q => q[0] === now) || [0, ''])[1] + ' today.') : 'Dress the studio for the time of year. Fireworks outside on Bonfire Night and Hogmanay come with their own bangs on the studio sound.' })));
     }
     function weatherCard() {
       const L = loopOf(cfg), w = cfg.weather || 'rain';

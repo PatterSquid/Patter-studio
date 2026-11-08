@@ -57,7 +57,7 @@ const CutUI = (() => {
     function drawLibTabs() { libTabs.innerHTML = ''; LIB.forEach(([k, l, i]) => libTabs.append(H('button', { type: 'button', role: 'tab', className: libTab === k ? 'on' : '', 'aria-selected': String(libTab === k), title: l, on: { click: () => { libTab = k; drawLibTabs(); drawLib(); } } }, H('i', { textContent: i }), H('span', { textContent: l })))); }
     const drag0 = (el, data) => { el.draggable = true; el.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-cut', JSON.stringify(data)); e.dataTransfer.effectAllowed = 'copy'; dragData = data; }); el.addEventListener('dragend', () => { dragData = null; dropMark(null); }); return el; };
     let dragData = null, mediaFilter = 'all', importing = [];
-    function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { if (!c.bin.includes(id)) c.bin.push(id); }); return c.bin.filter(id => CutMedia.info(id)); }
+    function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { const m = CutMedia.info(id); if (!c.bin.includes(id) && !(m && m.builtin)) c.bin.push(id); }); return c.bin.filter(id => { const m = CutMedia.info(id); return m && !m.builtin; }); }
     function drawLib() {
       libBody.innerHTML = ''; libBody._n = (libBody._n || 0) + 1;
       if (libTab === 'media' || libTab === 'audio') return drawMedia(libTab === 'audio');
@@ -112,6 +112,8 @@ const CutUI = (() => {
       });
     }
     function drawPatter() {
+      if (typeof PatterIntro !== 'undefined') { const cv = H('canvas', { width: 320, height: 180 }); PatterIntro.ready().then(() => { const g = cv.getContext('2d'); PatterIntro.draw(g, 4.2, 320, 180, {}); });
+        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Your intro' }), H('div', { className: 'cl-intro' }, drag0(H('button', { type: 'button', className: 'cl-tile cl-introbtn', title: 'Add the PatterSquid intro (five seconds, with its own sound) at the start of the video', on: { click: () => addIntro() } }, cv, H('span', { textContent: 'PatterSquid intro' })), { type: 'intro' }))); }
       libBody.append(H('p', { className: 'hint', textContent: 'Clips from the other tabs: each starts as a copy of what is on that tab now, and Edit opens it there. Drag onto the main track or above it.' }));
       const g = H('div', { className: 'cl-grid' });
       Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a copy of what is in the ' + l + ' tab now', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
@@ -167,6 +169,10 @@ const CutUI = (() => {
       changed(); build(); if (nid2) select(nid2); }
     function addPatter(k, row, t) { o.commit(); const src = o.tabCfg(k), it = { id: V().nid('i'), kind: 'clip', mod: k, name: '', cfg: JSON.parse(JSON.stringify(src)), inPt: 0, hold: 0 }; const c = cfg(); t = t == null ? o.player.t : t;
       if (row && row.kind === 'video') { it.start = r3(t); V().placeFree(c, 'video', it, row.T); } else insertMain(c, it, t); changed(); build(); select('C:' + it.id); }
+    // The intro goes on the main track (at the very start unless dropped somewhere else), with its sound made the first time
+    async function addIntro(t) { const D = PatterIntro.DUR; try { await PatterIntro.ensureSound(); } catch (e) { o.say('The intro sound could not be made: ' + (e.message || e)); }
+      o.commit(); const c = cfg(), it = { id: V().nid('i'), kind: 'intro', asset: PatterIntro.SOUND_ID, dur: D }; if (t == null) { c.items = c.items || []; delete it.gap; c.items.unshift(it); } else insertMain(c, it, t);
+      changed(); build(); select('C:' + it.id); o.player.seek(V().allPlaced(c, look()).find(q => q.it === it).t0); o.say('PatterSquid intro added. Change the line on the stamp on the right.'); }
     function addBlock(k, row, t) { o.commit(); const c = cfg(); t = t == null ? o.player.t : t; let it;
       if (k === 'avatar') it = { id: V().nid('i'), kind: 'avatar', text: '', dur: 3 }; else if (k === 'colour') it = { id: V().nid('i'), kind: 'colour', fill: '#000000', dur: 3 }; else it = { id: V().nid('i'), kind: 'adjust', dur: 5, col: {} };
       if (k === 'adjust' || (row && row.kind === 'video' && k !== 'avatar')) { it.start = r3(t); V().placeFree(c, 'video', it, row && row.kind === 'video' ? row.T : null); } else insertMain(c, it, t);
@@ -330,7 +336,7 @@ const CutUI = (() => {
     function clipEl(p, r) {
       const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, kind = it.kind === 'clip' ? it.mod : it.kind === 'media' ? (m && m.kind === 'image' ? 'image' : 'media') : it.kind;
       const el = H('div', { className: 'ct-clip st k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 });
-      const badges = []; if (it.speed && +it.speed !== 1) badges.push('⏩' + (+it.speed).toFixed(2).replace(/\.?0+$/, '') + 'x'); if (it.rev) badges.push('⟲'); if (it.still != null) badges.push('❄'); if (it.col && (it.col.look || Object.keys(it.col).some(k => k !== 'look' && k !== 'lookAmt' && +it.col[k]))) badges.push('◐'); if (it.fx && it.fx.length) badges.push('✦' + it.fx.length); if (it.key && it.key.on) badges.push('⬚'); if (it.mask && it.mask.k && it.mask.k !== 'none') badges.push('◯'); if (it.kf && Object.values(it.kf).some(L => L && L.length)) badges.push('◆'); if (it.mute) badges.push('🔇'); if (it.enhance) badges.push('🎙');
+      const badges = []; if (it.speed && +it.speed !== 1) badges.push('⏩' + (+it.speed).toFixed(2).replace(/\.?0+$/, '') + 'x'); if (V().hasCurve(it)) badges.push('〰 curve'); if (it.rev) badges.push('⟲'); if (it.still != null) badges.push('❄'); if (it.col && (it.col.look || Object.keys(it.col).some(k => k !== 'look' && k !== 'lookAmt' && +it.col[k]))) badges.push('◐'); if (it.fx && it.fx.length) badges.push('✦' + it.fx.length); if (it.key && it.key.on) badges.push('⬚'); if (it.mask && it.mask.k && it.mask.k !== 'none') badges.push('◯'); if (it.kf && Object.values(it.kf).some(L => L && L.length)) badges.push('◆'); if (it.mute) badges.push('🔇'); if (it.enhance) badges.push('🎙');
       el.append(H('span', { className: 'lbl', textContent: V().NAME(it) + (badges.length ? '  ' + badges.join(' ') : '') }), H('b', { className: 'hl', title: 'Drag to trim' }), H('b', { className: 'hr', title: 'Drag to trim' }));
       if (it.fadeIn) el.append(H('i', { className: 'fdi', style: `width:${Math.min(p.d, +it.fadeIn) * pps}px` })); if (it.fadeOut) el.append(H('i', { className: 'fdo', style: `width:${Math.min(p.d, +it.fadeOut) * pps}px` }));
       if (it.kf) Object.entries(it.kf).forEach(([k, L]) => (L || []).forEach(q => el.append(H('i', { className: 'kf', style: `left:${q[0] * pps}px`, title: k + ' keyframe' }))));
@@ -359,7 +365,7 @@ const CutUI = (() => {
           g.save(); g.beginPath(); if (g.roundRect) g.roundRect(bx, by, bw, bh, 5); else g.rect(bx, by, bw, bh); g.clip(); g.fillStyle = bodyOf(el); g.fillRect(bx + a, by, w, bh);
           if (el.classList.contains('locked') || el.classList.contains('muted')) g.filter = 'saturate(' + (el.classList.contains('locked') ? 0.5 : 0.7) + ')';
           g.translate(bx + a, by); g.globalAlpha = 0.95;
-          const wave = m && m.peaks && (it.kind === 'audio' || (it.kind === 'media' && m.kind === 'video' && !it.mute)), thumbs = m && m.thumbs && it.kind === 'media', thH = wave && thumbs ? Math.round(bh * 0.62) : bh;
+          const wave = m && m.peaks && (it.kind === 'audio' || (it.kind === 'media' && m.kind === 'video' && !it.mute && !V().hasCurve(it))), thumbs = m && m.thumbs && it.kind === 'media', thH = wave && thumbs ? Math.round(bh * 0.62) : bh;
           if (thumbs) { const tw = Math.max(20, Math.round(thH * (m.thumbs.w / m.thumbs.h))); for (let x = Math.floor(a / tw) * tw; x < b; x += tw) { const local = (x + tw / 2) / pps, sT = m.kind === 'image' ? 0 : V().srcTime(it, Math.min(p.d, local)), bm = CutMedia.thumb(it.asset, sT); if (bm) g.drawImage(bm, x - a, 0, tw, thH); } }
           if (wave) { const y0 = thumbs ? thH : 0, hh = bh - y0, mid = y0 + hh / 2, span = V().speedOf(it) / pps; g.fillStyle = it.kind === 'audio' ? 'rgba(160,255,200,0.9)' : 'rgba(150,230,255,0.85)';
             for (let x = 0; x < w; x++) { const local = (a + x) / pps, sT = V().srcTime(it, local); let v = 0; for (let k = 0; k < 3; k++) v = Math.max(v, CutMedia.peakAt(it.asset, sT + span * k / 3)); const gn = Math.min(1.6, Math.sqrt(CutAudio.clipGain({ it, d: p.d, trackDb: 0 }, local))); const hv = v * gn * hh * 0.48; g.fillRect(x, mid - hv, 1, Math.max(1, hv * 2)); } }
@@ -480,6 +486,7 @@ const CutUI = (() => {
       if (dd.type === 'asset') { const id = placeAsset(dd.id, t, row && row.kind === 'new' ? { kind: 'video', T: null } : row); changed(); build(); if (id) select(id); }
       else if (dd.type === 'patter') addPatter(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
       else if (dd.type === 'block') addBlock(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
+      else if (dd.type === 'intro') addIntro(t);
       else if (dd.type === 'trans') applyTrans(dd.k);
       else if (dd.type === 'fx' || dd.type === 'look') { o.player.seek(t); dd.type === 'fx' ? applyFx(dd.k) : applyLook(dd.k); } }
     // The whole window takes dropped files when the Video tab is open
@@ -562,6 +569,7 @@ const CutUI = (() => {
     let placed = false;
     function activate(on) {
       active = !!on; document.body.classList.toggle('cut', active);
+      if (active && typeof PatterIntro !== 'undefined' && (cfg().items || []).some(it => it && it.kind === 'intro') && !CutMedia.info(PatterIntro.SOUND_ID)) PatterIntro.ensureSound().then(() => { build(); }).catch(() => { });
       if (active && !placed) { const main = document.querySelector('main'); main.prepend(lib); main.append(tl); placed = true;
         // Drag the top edge of the timeline to make it taller or shorter (remembered on this computer)
         const rz = H('div', { className: 'ct-resize', title: 'Drag to make the timeline taller or shorter' }); tl.append(rz);

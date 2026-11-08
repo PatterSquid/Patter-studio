@@ -21,6 +21,7 @@ const CutExport = (() => {
   /* run(cfg, look, opts): opts { fps, res, quality, range, audio (true/false), wav (true/false), png (true/false), sink, wavSink, dir, onProgress(p, info), signal, blur } */
   async function run(cfg, look, o = {}) {
     if (document.fonts) await document.fonts.ready;
+    if (typeof PatterIntro !== 'undefined' && (cfg.items || []).some(it => it && it.kind === 'intro')) { await PatterIntro.ready(); await PatterIntro.ensureSound().catch(() => null); }
     const Vw = Layers.wrap(Video), base = E.dims(look.format), fps = o.fps || 30, scale = (RES[o.res] || base.H) / (look.format === '9:16' ? base.W : base.H);
     const W = Math.round(base.W * scale / 2) * 2, H = Math.round(base.H * scale / 2) * 2, dur = Vw.duration(cfg, look);
     const t0 = o.range ? cl(o.range[0], 0, dur) : 0, t1 = o.range ? cl(o.range[1], t0 + 1 / fps, dur) : dur, n = Math.max(1, Math.round((t1 - t0) * fps));
@@ -117,6 +118,7 @@ const CutExport = (() => {
   function blobWav() { const s = MP4Out.blobSink(); return s; }
   // One frame at full quality as a PNG (for thumbnails), with every footage frame exact
   async function still(cfg, look, t, res) {
+    if (typeof PatterIntro !== 'undefined') await PatterIntro.ready();
     if (document.fonts) await document.fonts.ready;
     const Vw = Layers.wrap(Video), base = E.dims(look.format), scale = (RES[res] || base.H) / (look.format === '9:16' ? base.W : base.H), W = Math.round(base.W * scale), H = Math.round(base.H * scale);
     const lookX = Object.assign({}, look, { preview: false, paused: true }), images = new Map(); for (const id of Video.imagesUsed(cfg)) images.set(id, await CutMedia.bitmap(id));

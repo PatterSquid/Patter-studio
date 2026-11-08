@@ -104,6 +104,16 @@ standard and as easy to use.
   off; Shift+Delete still closes it.
 * Patter clips in a video are copies of their tab from when they were added; the Clip panel has "Use what's in the ...
   tab now" (keeps place, trims and effects) besides Edit. Studio clips (`runsOn`) stretch instead of holding the last frame.
+* **Speed** works on every clip (Patter clips too: the animation itself plays faster or slower). **Speed curves**
+  (`it.curve = { k, pts: [[u, m]], a, b }`, presets in `Video.CURVES`: montage, hero, bullet, jump, flashIn, flashOut,
+  slowmo; m is a 0.1 to 10 multiplier along the source from a to b, pinned when set so trims and splits keep the shape)
+  map timeline time to source time through `curveMap` (adds up the time each bit of source takes). The Speed panel has
+  Normal and Curve, with presets and a graph to drag. Footage with a curve plays its picture only (no sound).
+* **PatterSquid intro** (`dev/src/cut_intro.js`, `PatterIntro`, main track kind `intro`): five seconds; his squid disc
+  drops in, a traffic cone bonks it (eyes spin), PATTERSQUID slams in, a cream label is stamped "GET IT UP YE." (`it.text`,
+  editable, or none), a seagull nicks the cone (`it.gull: false` to leave it out). Its sound is made in code and kept as a
+  built in media file `PatterIntro.SOUND_ID` (hidden from the library, made again if missing); `it.asset` points at it, so
+  the preview and export play it like footage. First in the Patter section of the library.
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
@@ -149,6 +159,14 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   carrying on from one part to the next (one take, lines in order). The studio's own clock (weather, outside events like the
   plane) carries on the same way (`studioT`: avatar time less its in point), so the Studio tab's timeline plays through the [ME] parts. There are no black or green gaps any more (`cfg.gap` is
   ignored). A video follows the Studio tab (`Video.hooks.studio()`) unless it keeps its own copy in `cfg.studio`. `projects/my-studio.patter.json` is his room, already marked.
+* **Decorations** (`dev/src/studio_decor.js`, `StudioDecor`, `cfg.decor`: none, auto (by the date), halloween,
+  bonfire, standrew, christmas, hogmanay, burns, valentine, easter, match). Placed on the marked window (string of bulbs or
+  bunting across the top, things standing on the sill), the picture frames (tinsel, scarf) and, in his own studio, the
+  shelves. Still parts are drawn once into a sprite and darkened to sit in the room before the lamp light; bulbs, candles,
+  pumpkin faces and glints go on after; fireworks (Bonfire Night, Hogmanay) and bats burst outside, cut to the sky so
+  they stay behind the flats, light the room through the window and have bangs on the studio sound. Glasgow touches: a
+  traffic cone on top of the Christmas tree, an "Auld Patter" bottle and coal for first footing, a bitten Easter bunny.
+  Loops exactly like the rest.
 * **Outside events** (`dev/src/studio_events.js`, `StudioEvents`): a running gag in the flats across the road. `cfg.events`
   is a list of `{ id, k, start, dur, text }` bars on an Outside track (+ Outside on the timeline, or the Outside the window
   card): plane, demolish, squid, telly, bonfire, polis, carfire, ufo, gull, summer, spell (`text`, 3x5 font on the block's
