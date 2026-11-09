@@ -24,7 +24,7 @@ const Character = (() => {
   const LOOKS = { 'look left': 'left', 'look right': 'right', 'look up': 'up', 'look down': 'down' };
   const ALIAS = { mad: 'angry', raging: 'furious', fuming: 'furious', shocked: 'surprised', shock: 'surprised', sus: 'suspicious', unhappy: 'sad', neutral: 'calm', normal: 'calm', chuffed: 'happy',
     shout: 'p1', rage: 'p1', 'lose it': 'p1', 'at you': 'p2', 'point at you': 'p2', you: 'p2', thumbs: 'thumbs up', thumb: 'thumbs up', 'thumbs-up': 'thumbs up', coat: 'lab coat',
-    left: 'look left', right: 'look right', up: 'look up', down: 'look down', 'turn left': 'look left', 'turn right': 'look right', 'look away': 'look right', bang: 'slap', slam: 'slap', fist: 'slap', fists: 'slap', 'fist shake': 'finger wag', 'shake fist': 'finger wag', wag: 'finger wag' };
+    left: 'look left', right: 'look right', up: 'look up', down: 'look down', 'turn left': 'look left', 'turn right': 'look right', 'look away': 'look right', bang: 'fist', slam: 'fist', fists: 'fist', 'shake fist': 'fist shake', wag: 'finger wag' };
   const FRIENDLY = { p1: 'Shout (P1)', p2: 'Point at you (P2)', 'thumbs up': 'Thumbs up', fist: 'Fists', point: 'Point', wave: 'Wave', 'lab coat': 'Lab coat' };
   /* Hand gestures. Values are for his left hand (on the right of the screen, clear of the mic): where the wrist goes as
      [across, up] in head heights, and how far the hand turns (radians). His right hand mirrors them. art: the hand
@@ -38,7 +38,9 @@ const Character = (() => {
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
     shrug: { art: 'wave', at: [0.14, -0.12, 2.35], side: 'both', len: 1.5, label: 'Shrug' },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
-    slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },   // flat hands: the fist drawing only shows the front of the fist
+    fist: { art: 'back fist', at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Bang the desk' },   // back fist: made by Puppet from the thumbs up (his fist drawing shows only its front)
+    'fist shake': { art: 'back fist', at: [0, -0.3, 0], side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
+    slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
     beat: { art: null, at: [0, -0.07, 0.12], side: 'L', len: 0.7, label: 'Wee hand beat' },
   };
@@ -49,7 +51,7 @@ const Character = (() => {
   lex('point', 'you your youse yous ye yer yourself yersel', true); lex('point aside', 'that there them they those over', true); lex('finger up', 'see look', true); lex('finger up', 'listen first', false);
   lex('explain', 'this here thing', true); lex('explain', 'because cause basically idea reason problem', false); lex('wave', 'hello hi hiya cheerio bye goodbye welcome tara', false);
   lex('thumbs up', 'good nice', true); lex('thumbs up', 'great brilliant class magic best love amazing perfect belter quality', false); lex('stop', 'no naw', true); lex('stop', 'stop whoa woah hold calm nope', false);
-  lex('shrug', 'why dunno whatever maybe apparently supposedly somehow anyway', false); lex('finger wag', 'ridiculous disgrace unbelievable joke bloody absolute never', false); lex('slap', 'shut enough banned raging furious fuming', false);
+  lex('shrug', 'why dunno whatever maybe apparently supposedly somehow anyway', false); lex('fist shake', 'ridiculous disgrace unbelievable joke bloody absolute', false); lex('finger wag', 'never', false); lex('fist', 'shut enough banned raging furious fuming', false);
   const LEN = { emotion: 0, look: 1.6, gesture: 1.8, pose: 1.4, costume: 0 };   // 0: until the next one of its kind
   // a tag to a move: { k, kind, side, dur }
   function readTag(raw, rig) {
@@ -152,7 +154,7 @@ const Character = (() => {
       S.ids.forEach((i, j) => { const L0 = LEX[W[i][4]]; if (!L0) return; if (j > 0 && LEX[W[S.ids[j - 1]][4]] && LEX[W[S.ids[j - 1]][4]].k === 'wave') return; if (L0.strong && st[j] < med + 0.02 && S.ids.length > 2) return; cand.push({ t: W[i][0], k: L0.k, why: W[i][4], pri: 2 + st[j], sEnd: b }); got = true; });
       const peak = S.ids[st.indexOf(Math.max(...st))];
       if (S.q && !got) { cand.push({ t: W[S.ids[S.ids.length - 1]][0], k: 'shrug', why: '?', pri: 1.6, sEnd: b }); got = true; }
-      if (S.ex && angryAt(a)) { cand.push({ t: W[peak][0], k: 'slap', why: '!', pri: 1.9, sEnd: b }); got = true; }
+      if (S.ex && angryAt(a)) { cand.push({ t: W[peak][0], k: 'fist', why: '!', pri: 1.9, sEnd: b }); got = true; }
       if (!got && b - a > 1.3 && R() < Math.min(1, 0.55 * E + 0.2)) cand.push({ t: W[peak][0], k: 'explain', why: '', pri: 1, sEnd: b, hold: true });
     });
     // in time order: close ones compete (the stronger stays); the ones kept flow into each other in the air
@@ -211,7 +213,7 @@ const Character = (() => {
       const G = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }, u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.42, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
       sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = G.at;
         if (G.wag) ar += Math.sin(u * (G.wagHz || 14)) * G.wag * sm((u - 0.2) / 0.25);
-        if (G.shake) { ax += Math.sin(u * 27) * 0.014; ay += Math.sin(u * 31 + 1) * 0.012; }
+        if (G.shake) { const on = sm((u - 0.3) / 0.2); ax += Math.sin(u * 27) * 0.014 * on; ay += Math.sin(u * 31 + 1) * 0.016 * on; }
         if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
         if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
         if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }

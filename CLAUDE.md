@@ -208,7 +208,9 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   a level curve. `fromText` times a script with no recording. About 50 ms average word error on flite tests.
 * `Character` (module `char`): blinks, breathing, nods on stressed syllables, phrase tilts, glances, eyebrows; emotion,
   look, gesture, pose and costume tags in the script and as timeline moves. **Hands are drawn lying on the desk**, so
-  gestures turn them (values in `GEST`, found by drawing each: `tests/char_hands.py`). His right hand is behind the mic, so
+  gestures turn them (values in `GEST`, found by drawing each: `tests/char_hands.py`). He checked them: turned, never mirrored
+  (mirrored hands read back to front). His fist drawing shows only its front, so `Puppet` makes a 'back fist' from the thumbs
+  up (thumb cut off along `FIST_CUT`, edge redrawn) for the desk bang and fist shake. His right hand is behind the mic, so
   one handed gestures use his left. `planHands` picks natural gestures from the words (LEX), questions (shrug), angry
   exclamations (bang), and an explaining hand in sentences with none; tags win; `cfg.hands` 'tags' turns it off.
 * Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`

@@ -168,8 +168,28 @@ const Puppet = (() => {
     await put({ id, name: base, rig: plain(rig), blobs, added: Date.now() }).catch(e => { console.warn('puppet not kept', e); });
     say(0.97, 'Getting him ready…'); const live = await make(id, rig, blobs); say(1, 'Done'); return { id, rig: live };
   }
+  /* A fist seen from the back, made from the thumbs up drawing with the thumb taken off and the top of the hand redrawn
+     (his puppet has only the front of a fist). The cut is in fractions of the drawing, found on his left hand; the right
+     hand is its mirror. Added to each hand's swap set as 'back fist'. */
+  const FIST_CUT = [[0, 0.634], [0.065, 0.552], [0.125, 0.496]].concat(Array.from({ length: 21 }, (_, i) => { const t = i / 20, P0 = [58, 190], P1 = [118, 124], P2 = [252, 141]; return [((1 - t) ** 2 * P0[0] + 2 * (1 - t) * t * P1[0] + t * t * P2[0]) / 337, ((1 - t) ** 2 * P0[1] + 2 * (1 - t) * t * P1[1] + t * t * P2[1]) / 413]; })).concat([[1, 0.341]]);
+  async function backFists(rig) {
+    const sets = []; const walk = n => { if (!n.kids) return; if (n.group && /hand/i.test(n.name) && n.kids.some(k => /^thumbs? ?up$/i.test(k.name)) && !n.kids.some(k => /back fist/i.test(k.name))) sets.push(n); n.kids.forEach(walk); }; walk(rig.tree);
+    for (const set of sets) {
+      const th = set.kids.find(k => /^thumbs? ?up$/i.test(k.name)), L = rig.layers[th.li], b = rig.bm[th.li]; if (!L || !b) continue;
+      const mir = /^\+?r/i.test(set.name), w = b.width, h = b.height, c = new OffscreenCanvas(w, h), g = c.getContext('2d'); g.drawImage(b, 0, 0);
+      const P = FIST_CUT.map(([x, y]) => [(mir ? 1 - x : x) * w, y * h]), k = w / 337;
+      g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.moveTo(P[0][0], P[0][1]); P.forEach(q => g.lineTo(q[0], q[1])); g.lineTo(mir ? 0 : w, -1); g.lineTo(mir ? w : 0, -1); g.closePath(); g.fill();
+      g.globalCompositeOperation = 'source-atop'; g.lineJoin = g.lineCap = 'round';
+      g.filter = `blur(${7 * k}px)`; g.strokeStyle = 'rgba(150,70,30,0.42)'; g.lineWidth = 26 * k; g.beginPath(); P.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.stroke(); g.filter = 'none';
+      g.strokeStyle = 'rgb(20,12,10)'; g.lineWidth = 15 * k; g.stroke();
+      const li = rig.layers.length; rig.layers.push(Object.assign({}, L)); rig.bm.push(await createImageBitmap(c));
+      set.kids.push({ name: 'back fist', li, vis: false, op: 255, made: true });
+    }
+  }
   async function make(id, rig, blobs) {
-    const bm = await Promise.all(blobs.map(b => b ? createImageBitmap(b) : null)); rig.bm = bm; rig.id = id; analyse(rig); measure(rig);
+    const bm = await Promise.all(blobs.map(b => b ? createImageBitmap(b) : null)); rig.bm = bm; rig.id = id; rig.layers = rig.layers.slice();
+    try { await backFists(rig); } catch (e) { console.warn('back fist', e); }
+    analyse(rig); measure(rig);
     mem[id] = rig; tick++; return rig;
   }
 
