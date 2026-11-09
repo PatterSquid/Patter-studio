@@ -32,6 +32,14 @@ async def main():
       return out; }}""")
     print('flash peak', await pg.evaluate('()=>window.__peak'))
     for t, s in r.items(): open(f'{OUT}/s_{float(t):05.2f}.jpg', 'wb').write(base64.b64decode(s))
+    # the Video tab: [ME] parts show him in the studio, his voice under each, carrying on through the one take
+    r = await pg.evaluate("""async()=>{ const all=JSON.parse(localStorage.getItem('patter-studio-v1')).cfg; const st=all.studio;
+      const v={v:2,items:[{id:'a1',kind:'avatar',dur:4},{id:'c1',kind:'colour',fill:'#203050',dur:2},{id:'a2',kind:'avatar',dur:5}],tracks:[],studio:st};
+      const src=CutAudio.sources(v,{format:'16:9'}).map(s=>[s.it.id, s.asset===all.char.voice, +s.t0.toFixed(2), +s.d.toFixed(2), +(s.it.src0||0).toFixed(2), s.talk]);
+      await Studio.prepare(st); const res=await CutExport.run(v,{scheme:'saltire',format:'16:9'},{fps:25,res:'720',quality:'high'}); window.__vv=res.blob; return {src, frames:res.frames}; }""")
+    print('video tab:', r)
+    s = await pg.evaluate("async()=>{ const u=new Uint8Array(await window.__vv.arrayBuffer()); let s=''; for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768)); return btoa(s); }")
+    open(OUT + '/video_tab.mp4', 'wb').write(base64.b64decode(s))
     if '--export' in sys.argv:
       n = await pg.evaluate("""async()=>{ const c=window.__sc; const v={v:2,items:[{id:'x',kind:'clip',mod:'studio',cfg:c,inPt:0,hold:0}],tracks:[]}; const res=await CutExport.run(v,{scheme:'saltire',format:'16:9'},{fps:30,res:'1080',quality:'high'}); window.__v=res.blob; return res.frames; }""")
       s = await pg.evaluate("async()=>{ const u=new Uint8Array(await window.__v.arrayBuffer()); let s=''; for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768)); return btoa(s); }")

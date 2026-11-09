@@ -13,12 +13,19 @@ const CutAudio = (() => {
   // Every clip that makes sound: footage on the main and overlay tracks (unless muted), and clips on audio tracks
   // the sound a tab clip brings with it: the intro's own, or the character's voice
   const clipSound = it => !it || !it.cfg ? null : it.mod === 'intro' && typeof Intro !== 'undefined' ? Intro.soundId(it.cfg) : it.mod === 'char' && typeof Character !== 'undefined' ? Character.soundId(it.cfg) : null;
+  // the same object each time for the same part, so the live preview keeps its player for it
+  const vItems = new Map();
+  function voiceItem(it, cc, src0) { const k = it.id + '|' + cc.voice; let v = vItems.get(k); if (!v) { v = { id: it.id + '~voice', kind: 'audio' }; vItems.set(k, v); if (vItems.size > 400) vItems.delete(vItems.keys().next().value); }
+    Object.assign(v, { asset: cc.voice, src0, src1: null, vol: (+cc.vol || 0) + (+it.vol || 0), mute: !!it.mute, fadeIn: it.fadeIn, fadeOut: it.fadeOut, enhance: it.enhance, denoise: it.denoise }); return v; }
   function sources(cfg, look) {
     const out = [], tracks = cfg.tracks || [], anySolo = tracks.some(T => T.solo) || !!cfg.mainSolo;
     const add = (it, t0, d, T, main, A) => { A = A || it.asset; if (!it || !A || it.mute) return; const m = M(A); if (!m || m.kind === 'image' || m.hasAudio === false || it.still != null || (it.kind === 'media' && V().hasCurve(it))) return;   // a speed curve plays the picture only
       if (main ? cfg.mainMute : T && T.mute) return; if (anySolo && !(main ? cfg.mainSolo : T && T.solo)) return;
       out.push({ it, t0, d, T, main, asset: A, speed: V().speedOf(it), keep: it.pitch !== false, talk: main ? cfg.mainTalk !== false : !!(T && T.talk), duck: !main && !!(T && T.duck), trackDb: main ? (+cfg.mainVol || 0) : (+(T && T.vol) || 0) }); };
     V().layout(cfg, look).forEach(o => { if (o.it.kind === 'clip' && clipSound(o.it)) { add(o.it, o.t0, o.d, null, true, clipSound(o.it)); const s = out[out.length - 1]; if (s && s.it === o.it) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; s.talk = o.it.mod === 'char'; } return; } if (o.it.kind === 'media' || o.it.kind === 'intro') { add(o.it, o.t0, o.d, null, true); const s = out[out.length - 1]; if (s && s.it === o.it) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; if (o.it.kind === 'intro') s.talk = false; } } });   // the intro brings its own sound
+    // His character in the studio: his voice plays under every [ME] part, from where that part is in the one take
+    if (typeof Studio !== 'undefined' && Studio.hooks && Studio.hooks.char && V().studioCfg) { const st = V().studioCfg(cfg), A = st && st.avatar, cc = A && A.kind === 'char' ? Studio.hooks.char() : null;
+      if (cc && cc.voice) V().layout(cfg, look).forEach(o => { if (o.it.kind !== 'avatar') return; const vi = voiceItem(o.it, cc, V().avStart(cfg, o, look)); add(vi, o.t0, o.d, null, true, cc.voice); const s = out[out.length - 1]; if (s && s.it === vi) { s.trIn = o.trIn || 0; s.trOut = o.trOut || 0; s.talk = true; } }); }
     tracks.forEach(T => (T.items || []).forEach(it => { if (it.kind === 'media' || it.kind === 'audio') add(it, +it.start || 0, V().lenOf(it, look), T, false); else if (it.kind === 'clip' && clipSound(it)) add(it, +it.start || 0, V().lenOf(it, look), T, false, clipSound(it)); }));
     return out;
   }

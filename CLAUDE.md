@@ -218,6 +218,13 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   repo when he presses the panel's download button, kept in IndexedDB `patter-lipsync`, run in a worker. Only the mouth
   shapes come from it (A..H, X mapped to the twelve); words, tags and level still from LipSync. Tests serve a copy from
   `dev/tmp_rh/` (`window.PATTER_LIPSYNC`): `tests/char_rhubarb.py`. Downloads in this workspace work from cdn.jsdelivr.net.
+* **In the Studio**: the avatar can be his character (`cfg.avatar.kind` 'char', "Use my character"): `Studio.hooks.char()`
+  gives the Character tab's cfg and `Character.drawRig` draws the puppet into the avatar buffer. He is lit by direction
+  (window and lamp positions from the marks): thin rims on the facing sides, lightning and outside events wash him from the
+  window side (screen blend), his shadow falls on the wall away from the window, and the room's flash and darkness are
+  drawn behind him (he darkens himself). Studio and Character have `mainThread` (no render workers: the puppet's pictures
+  live on the page) and `prepare`. In the Video tab his voice plays under every [ME] part from that part's place in the
+  one take (`cut_audio.js` `voiceItem`, src0 = `Video.avStart`). Test: `tests/char_studio.py`.
 * Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
