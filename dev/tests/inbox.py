@@ -28,7 +28,7 @@ async def main():
         await pg.evaluate("()=>document.getElementById('libBtn').click()"); await pg.wait_for_timeout(800)
         await pg.screenshot(path='st/inbox_dlg.png')
         await pg.locator('dialog button', has_text='Open').first.click(); await pg.wait_for_timeout(2000)
-        print('opened:', await pg.evaluate("()=>{const s=JSON.parse(localStorage.getItem('patter-studio-v1')); return [s.name, s.module, document.querySelector('#tabs button.on').dataset.mod]}"), '| dot now:', await pg.evaluate("()=>document.getElementById('libBtn').classList.contains('has-new')"))
+        print('opened:', await pg.evaluate("()=>{const s=JSON.parse(localStorage.getItem('patter-studio-v1')); return [s.name, s.module, document.querySelector('[data-mod].on').dataset.mod]}"), '| dot now:', await pg.evaluate("()=>document.getElementById('libBtn').classList.contains('has-new')"))
         await pg.reload(); await pg.wait_for_timeout(3000)
         print('after reload, dot:', await pg.evaluate("()=>document.getElementById('libBtn').classList.contains('has-new')"), '| status:', (await pg.locator('#status').inner_text())[:60])
         await pg.evaluate("()=>document.getElementById('libBtn').click()"); await pg.wait_for_timeout(800)

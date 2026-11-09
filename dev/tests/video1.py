@@ -26,13 +26,13 @@ async def main():
         # edit the first clip (B roll) in its own tab, change something, come back
         first=v['items'][0]['id']; before=json.dumps(v['items'][0]['cfg'])[:80]
         await pg.evaluate(f"()=>Video.hooks.openItem('{first}')"); await pg.wait_for_timeout(1200)
-        mod=await pg.evaluate("()=>document.querySelector('#tabs button.on').dataset.mod"); banner=await pg.locator('#editBanner').inner_text(); print('editing in', mod, '| banner:', banner.replace('\n',' '))
+        mod=await pg.evaluate("()=>document.querySelector('[data-mod].on').dataset.mod"); banner=await pg.locator('#editBanner').inner_text(); print('editing in', mod, '| banner:', banner.replace('\n',' '))
         await pg.evaluate("()=>{ const st=JSON.parse(localStorage.getItem('patter-studio-v1')); }")
         # change the host's colour through the stored cfg path the UI uses: pick an action via the timeline
         await pg.evaluate("()=>[...document.querySelectorAll('.tl-bar button')].find(b=>/Action/.test(b.textContent)).click()"); await pg.wait_for_timeout(300)
         await pg.evaluate("()=>[...document.querySelectorAll('.tl-pop button')].find(b=>/Waves/.test(b.title||b.textContent)).click()"); await pg.wait_for_timeout(800)
         await pg.locator('#editBanner button').click(); await pg.wait_for_timeout(1200)
-        v=await V(); acts=[a['k'] for a in v['items'][0]['cfg']['scenes'][0]['acts']]; print('back on', await pg.evaluate("()=>document.querySelector('#tabs button.on').dataset.mod"), 'clip acts now', acts)
+        v=await V(); acts=[a['k'] for a in v['items'][0]['cfg']['scenes'][0]['acts']]; print('back on', await pg.evaluate("()=>document.querySelector('[data-mod].on').dataset.mod"), 'clip acts now', acts)
         broll=await pg.evaluate("()=>JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.broll"); print('B roll tab own clip untouched:', 'wave' not in [a['k'] for a in broll['scenes'][0]['acts']])
         # reorder by dragging logic: move item 3 to the front via update
         await pg.evaluate("()=>{ const st=JSON.parse(localStorage.getItem('patter-studio-v1')); }")

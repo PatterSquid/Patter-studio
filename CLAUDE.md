@@ -64,6 +64,16 @@ git add -A && git commit && git push origin main
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
   after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).
 
+## Layout: Video, Graphics, Animator (then Audio)
+
+He asked for fewer, bigger tabs so the app does not feel cluttered. The header (`#tabs`) has **Video** (`data-mod=video`,
+the editor), **Graphics** (`data-group=gfx`: the nine clip makers, chosen in a slim icon strip down the left, `#gfxRail`,
+whose buttons keep their `data-mod`; `body.gfx` adds its grid column; it reopens the last maker used, `state.lastGfx`) and
+**Animator** (`data-mod=studio` for now; his own character goes here too). An **Audio** tab is planned next (voice
+clean up like Audacity's noise profile, cutting, then send to the video). Modules are unchanged underneath: tests still
+click `button[data-mod=...]` with JS (the rail buttons exist when hidden). Editing a Video clip opens its maker under
+Graphics (or Animator) with the "Back to the video" banner.
+
 ## The Video tab: the editor (dev/src/video.js and dev/src/cut_*.js)
 
 The Video tab is a full video editor laid out like CapCut: library on the left (`.cut-lib`: Media, Audio with made-on-the-spot
@@ -129,7 +139,7 @@ standard and as easy to use.
   newspapers where they fit), a "You in the studio" part (kind `avatar`) for every line marked [ME], new drawings as a pack. Hand it over as a
   .patter.json project file plus an MP4 preview. His own footage isn't in project files: clips keep `file` so he can relink.
 
-## The Studio tab (dev/src/studio.js)
+## The Studio (the Animator tab, dev/src/studio.js)
 
 His room picture brought to life for the bits where he talks to camera: rain on the window (beads that bend the view,
 runners with wet trails, rain beyond the glass), lamps that glow and flicker, lights going on and off in the flats outside,
