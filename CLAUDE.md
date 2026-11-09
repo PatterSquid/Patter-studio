@@ -69,7 +69,7 @@ git add -A && git commit && git push origin main
 He asked for fewer, bigger tabs so the app does not feel cluttered. The header (`#tabs`) has **Video** (`data-mod=video`,
 the editor), **Graphics** (`data-group=gfx`: the nine clip makers, chosen in a slim icon strip down the left, `#gfxRail`,
 whose buttons keep their `data-mod`; `body.gfx` adds its grid column; it reopens the last maker used, `state.lastGfx`) and
-**Animator** (`data-mod=studio` for now; his own character goes here too). An **Audio** tab is planned next (voice
+**Animator** (`data-group=anim`, its own strip `#animRail`: Studio and Character). An **Audio** tab is planned next (voice
 clean up like Audacity's noise profile, cutting, then send to the video). Modules are unchanged underneath: tests still
 click `button[data-mod=...]` with JS (the rail buttons exist when hidden). Editing a Video clip opens its maker under
 Graphics (or Animator) with the "Back to the video" banner.
@@ -192,6 +192,28 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
 * Event layers are drawn a little smaller than full size and enlarged on the way in (that is their softness; no blur
   filter), all the light thrown into the room is one pass, and `cfg.vfocus` (auto, you, window, middle) sets where a 9:16
   frame looks (auto: you, else the window when events are on, else the middle).
+
+## The Character (the Animator tab: dev/src/puppet.js, lipsync.js, character.js)
+
+His Character Animator puppet animated without Adobe. **His artwork never goes in the repo**: he loads his .puppet (a zip
+with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patter-puppet`. Test fixture: `dev/tmp_puppet.puppet`
+(gitignored; his Massive_v2.puppet), voices `dev/tmp_voice.wav`, `dev/tmp_voice2.wav` made with ffmpeg's flite.
+* `Puppet`: our own zip and PSD reader (RLE, zip, PSB, masks), layers kept as WebP at up to 2200 wide, the rig worked out
+  from Character Animator names: Head with views (frontal, left/right profile, upward, downward), Mouth with the twelve
+  visemes, eyes with blink, lid, pupil, eyebrows, Body, arms (`+Rarm` with a hand swap set and a sleeve), and swap sets
+  (one visible child) as triggers: hands (point, wave, fist, thumbs up), poses (P1 shout, P2 point at you), costumes (lab
+  coat). Arms: the sleeve swings from the shoulder and stretches to the wrist, the hand turns at the cuff (`pose.arms`).
+* `LipSync`: script to visemes by spelling rules plus a word list (Glaswegian too), audio features with the background
+  noise taken off, forced alignment (Viterbi, each sound between a least and most length, banded); word times, tags and
+  a level curve. `fromText` times a script with no recording. About 50 ms average word error on flite tests.
+* `Character` (module `char`): blinks, breathing, nods on stressed syllables, phrase tilts, glances, eyebrows; emotion,
+  look, gesture, pose and costume tags in the script and as timeline moves. **Hands are drawn lying on the desk**, so
+  gestures turn them (values in `GEST`, found by drawing each: `tests/char_hands.py`). His right hand is behind the mic, so
+  one handed gestures use his left. `planHands` picks natural gestures from the words (LEX), questions (shrug), angry
+  exclamations (bang), and an explaining hand in sentences with none; tags win; `cfg.hands` 'tags' turns it off.
+* Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`
+  `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
+  `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
 
 ## The intro (dev/src/intro.js `Intro`, dev/src/intro_scenes.js `IntroScenes`, dev/src/squid.js `Squid`)
 
