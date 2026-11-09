@@ -274,19 +274,18 @@ const IntroScenes = (() => {
     return p; }
   // the ned: far up the road to past the camera; s his size (1 = level with the squid)
   function nedAt(t) { const u = (t - B.ned) / NED_DUR; if (u <= 0 || u >= 1) return null; const z = 8 - 7.55 * u, s = 1 / z; return { x: 1060 + (XN - 1060) * s + Math.max(0, s - 0.8) * 420, y: 610 + 236 * s, s, z }; }
-  // the bouncer: two big hands shoving him out, then they let go, the boot draws back and comes through
-  const SLV = { sh: '#121318', hl: '#33363f', rim: 'rgba(255,160,80,0.75)' };
-  function bouncer(g, t, Wh) { const hk = key(t, [[B.push - 0.1, 0], [B.push + 0.05, 1], [B.shove, 1], [B.shove + 0.14, 0]]);
-    if (hk > 0.01) { const sx = Wh.cx - 0.3 * Wh.h; [[592, -0.06], [676, 0.04]].forEach(([yy, d], i) => { const hand = [lerp(262, sx, hk) + 4 * Math.sin(t * 9 + i), yy + d * 100 + 3 * Math.sin(t * 11 + i * 2)], elbow = [lerp(255, (262 + hand[0]) / 2, hk), yy + 18];
-      vol(g, tube([[250, yy - 4], elbow, [hand[0] - 14, hand[1]]], 40, 32, 38), '#23252d', SLV); vol(g, tube([[hand[0] - 22, hand[1]], [hand[0] - 12, hand[1]]], 34, 34), '#f0eee6', { sh: '#bdbab0', k: 5, lw: 3 });
-      vol(g, path(P => { P.moveTo(hand[0] - 10, hand[1] - 20); P.quadraticCurveTo(hand[0] + 14, hand[1] - 24, hand[0] + 18, hand[1] - 4); P.quadraticCurveTo(hand[0] + 20, hand[1] + 18, hand[0] - 10, hand[1] + 18); P.closePath(); }), '#f0b99a', { sh: '#c48870', k: 8, lw: 3.5 }); }); }
-    // the boot: draws back (knee up), then through his back fast but eased, follows through, holds, slides back in
-    const kb = t < B.cock ? null : t < B.kick - 0.1 ? -0.3 * sm((t - B.cock) / (B.kick - 0.1 - B.cock)) : t < B.kick ? lerp(-0.3, 1, ei((t - B.kick + 0.1) / 0.1)) : t < B.kick + 0.08 ? 1 + 0.08 * Math.sin(Math.PI * (t - B.kick) / 0.08) : t < B.kick + 0.3 ? 1 : 1 - sm((t - B.kick - 0.3) / 0.4);
-    if (kb == null || (t > B.kick && kb <= 0.02)) return; const e = kb, hip = [252, 598], knee = [lerp(262, 300, e) + (e < 0 ? e * 20 : 0), lerp(648, 612, e) + (e < 0 ? e * 60 : 0)], foot = [lerp(262, 312, e) + (e < 0 ? e * 50 : 0), lerp(676, 640, e) + (e < 0 ? e * 40 : 0)];
-    vol(g, tube([hip, knee, foot], 46, 34, 44), '#23252d', Object.assign({ k: 12 }, SLV)); vol(g, tube([[foot[0] - 14, foot[1] - 2], [foot[0] - 2, foot[1] - 4]], 30, 28), '#f0eee6', { sh: '#bdbab0', k: 5, lw: 3 });
-    g.save(); g.translate(foot[0], foot[1]); g.rotate(-0.25 * cl(e)); g.scale(1.3, 1.3); vol(g, path(P => { P.moveTo(-12, -20); P.lineTo(18, -22); P.quadraticCurveTo(52, -20, 56, 2); P.quadraticCurveTo(56, 12, 44, 12); P.lineTo(-14, 12); P.closePath(); }), '#16161b', { sh: '#08080b', hl: '#3a3b44', k: 8 });
-    line(g, 3, c => { c.moveTo(-14, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(36, -12, 10, 3.5, -0.2, 0, TAU); g.fill(); g.restore();
-    if (t > B.kick - 0.04 && t < B.kick + 0.12) { const k = (t - B.kick + 0.04) / 0.16; g.save(); g.translate(foot[0] + 70, foot[1] - 10); line(g, 4, c => { for (let i = 0; i < 6; i++) { const a = -0.9 + i * 0.36, r1 = 30 + 60 * k, r2 = r1 + 34; c.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); c.lineTo(Math.cos(a) * r2, Math.sin(a) * r2); } }, `rgba(246,239,224,${1 - k})`); g.restore(); } }
+  // the bouncer, unseen in the doorway behind him: dark shapes against the light, a warm edge on them. His hands at
+  // the squid's back for the shove, then his leg comes straight out, boots him, follows through and slides back in.
+  const SIL = '#0d0c11', EDGE = 'rgba(255,175,95,0.75)';
+  function sil(g, P) { g.fillStyle = SIL; g.fill(P); g.save(); g.clip(P); g.fillStyle = EDGE; g.fill(sh2(P, 2.5, 3), 'evenodd'); g.restore(); }
+  function bouncer(g, t, Wh) { const hk = key(t, [[B.push - 0.15, 0], [B.push + 0.1, 1], [B.shove, 1], [B.shove + 0.2, 0]]);
+    if (hk > 0.01) { const sx = Wh.cx - 0.26 * Wh.h; [[600, 0], [672, 1]].forEach(([yy, i]) => { const hand = [lerp(250, sx, hk) + 3 * Math.sin(t * 7 + i * 2), yy + 2 * Math.sin(t * 9 + i)], el = [lerp(246, (252 + hand[0]) / 2 - 6, hk), yy + 14];
+      sil(g, tube([[236, yy - 6], el, hand], 30, 24, 28)); sil(g, path(P => P.ellipse(hand[0] + 4, hand[1], 15, 13, 0, 0, TAU))); }); }
+    // the leg: out in one smooth movement into his back, carries on as he goes, a wee hold, back in
+    const L = 0.24, e = t < B.kick - L ? 0 : t < B.kick ? 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L) : t < B.kick + 0.14 ? 1 + 0.14 * Math.sin(0.5 * Math.PI * (t - B.kick) / 0.14) : t < B.kick + 0.3 ? 1.14 : 1.14 * (1 - sm((t - B.kick - 0.3) / 0.5));
+    if (e <= 0.01) return; const hip = [244, 606], knee = [lerp(246, 296, e), lerp(668, 618, e)], foot = [lerp(244, 318, e), lerp(700, 642, e)];
+    sil(g, tube([hip, knee, foot], 44, 34, 42)); g.save(); g.translate(foot[0], foot[1]); g.rotate(-0.2 * cl(e)); g.scale(1.25, 1.25);
+    const shoe = path(P => { P.moveTo(-12, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-14, 11); P.closePath(); }); sil(g, shoe); g.fillStyle = 'rgba(255,220,180,0.35)'; g.beginPath(); g.ellipse(34, -11, 9, 3, -0.2, 0, TAU); g.fill(); g.restore(); }
   // skid: a grubby streak where his face went along the road, scuffs and dust
   function skid(g, t) { if (t < B.land) return; const k = t - B.land, hx = scrapeX(t);
     g.save(); g.fillStyle = 'rgba(16,12,22,0.5)'; g.beginPath(); g.moveTo(IMP - 10, ROAD); g.quadraticCurveTo((IMP + hx) / 2, ROAD - 12, hx, ROAD - 5); g.lineTo(hx, ROAD + 7); g.quadraticCurveTo((IMP + hx) / 2, ROAD + 10, IMP - 10, ROAD + 3); g.closePath(); g.fill();
@@ -312,6 +311,7 @@ const IntroScenes = (() => {
     P.postArm = (gg) => { const hd = Squid.hand(P); gg.save(); gg.translate(hd.x, hd.y); const ba = key(t, [[0, 0.1], [B.lift, 0.1], [B.glug, -2.25], [B.down - 0.15, -2.45], [B.ahh + 0.1, 0.15]]) + key(t, [[B.push, 0], [B.push + 0.2, 0.4], [L0(), 0.4], [L0() + 0.1, 0]]) * Math.sin(t * 8); gg.rotate(ba); gg.drawImage(bottle(), -26, -96, 52, 144); gg.restore(); };
     P.postArmL = (gg) => { if (!(P.finger > 0.3)) return; const hd = Squid.hand(P, -1); gg.save(); gg.translate(hd.tip[0], hd.tip[1]); gg.rotate(Math.atan2(hd.tip[1] - hd.y, hd.tip[0] - hd.x) + Math.PI / 2); const sc = 1.35 * sm((P.finger - 0.3) / 0.3); gg.scale(sc, sc);
       flat(gg, Q => Q.roundRect(-13, -10, 26, 24, 8), '#ece6db', '#bfb6a8', 3, 3); flat(gg, Q => Q.roundRect(-4.5, -40, 9, 34, 4.5), '#ece6db', '#bfb6a8', 2, 3); OL(gg, 2); gg.beginPath(); gg.moveTo(-6, -8); gg.lineTo(-6, 0); gg.moveTo(6, -8); gg.lineTo(6, 0); gg.stroke(); gg.restore(); };
+    bouncer(g, t, Wh);
     if (t > B.push - 0.05 && t < B.splat + 0.1) { g.save();
       if (Wh.ss && Math.abs(Wh.ss.s - 1) > 0.002) { const { ang, s, px, py } = Wh.ss; g.translate(px, py); g.rotate(ang); g.scale(s, Math.pow(s, -0.7)); g.rotate(-ang); g.translate(-px, -py); }
       squidComic(g, Wh.x, Wh.y, h, P, k);
@@ -324,8 +324,6 @@ const IntroScenes = (() => {
       // the cap knocked off when his face hits the road, spinning up and landing back on his heid as he gets up
       if (t > B.land && t < B.up + 0.05) { const capAt = tt => { const W2 = where(tt), P2 = pose(tt), q = Squid.point([151, 40], W2.x, W2.y, W2.h, P2); return [q[0], q[1], Squid.headAngle(P2) - 0.22]; };
         const a0 = capAt(B.land - 0.001); a0[1] = Math.min(a0[1], ROAD - 45); const a1 = capAt(B.up + 0.05), f = (t - B.land) / (B.up + 0.05 - B.land), fe = sm(f); cap(g, lerp(a0[0], a1[0], fe), lerp(a0[1], a1[1], f) - Math.sin(Math.PI * f) * 360, cw, a1[2] + (1 - fe) * 2 * TAU + (1 - fe) * (a0[2] - a1[2]), false); } }
-    // the hands and the boot come out the door in front of him
-    bouncer(g, t, Wh);
     if (N && N.s >= 1) drawNed();
     splash(g, B.splash, t, PUD.x, PUD.y, 0.8);
     g.restore();
