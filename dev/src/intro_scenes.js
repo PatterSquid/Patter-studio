@@ -179,9 +179,10 @@ const IntroScenes = (() => {
     g.strokeStyle = 'rgba(235,235,255,0.35)'; g.lineWidth = Math.max(2, H / 180); for (let i = 0; i < 7; i++) { const x = W * (cx + (rr() - 0.5) * 0.7), y = H * (cy + (rr() - 0.5) * 0.6); g.beginPath(); g.arc(x, y, H * (0.03 + rr() * 0.05), 3.6, 4.5); g.stroke(); } g.restore(); }
 
   // his logo pops up in the ink, PatterSquid under it, the episode, and a cone lands on the squid's heid in the logo
+  const SPL = k => k <= 0 ? 0 : k < 0.08 ? lerp(0.55, 1.14, eo(k / 0.08)) : 1 + 0.14 * Math.exp(-(k - 0.08) * 8) * Math.cos((k - 0.08) * 22);
   function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-    const rL = H * 0.2, cx = W / 2, cy = H * (ep ? 0.29 : 0.32), bonk = bump(t - B.bonk, 0.22), ps = eb(k / 0.32) * (1 - 0.12 * bonk);
-    g.save(); g.translate(cx, cy + rL); g.scale(eb(k / 0.32) / Math.sqrt(1 - 0.12 * bonk), ps); g.translate(0, -rL); g.rotate(-0.05 * Math.sin(Math.min(k, 0.6) * 10) * Math.exp(-k * 3));
+    const rL = H * 0.2, cx = W / 2, cy = H * (ep ? 0.29 : 0.32), bonk = bump(t - B.bonk, 0.22), ps = SPL(k) * (1 - 0.12 * bonk);
+    g.save(); g.translate(cx, cy + rL); g.scale(SPL(k) / Math.sqrt(1 - 0.12 * bonk), ps); g.globalAlpha = cl(k / 0.03); g.translate(0, -rL); g.rotate(-0.05 * Math.sin(Math.min(k, 0.6) * 10) * Math.exp(-k * 3));
     g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.arc(10 * u, 14 * u, rL * 1.06, 0, TAU); g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.08, 0, TAU); g.fillStyle = INK; g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.04, 0, TAU); g.fillStyle = '#f4efe2'; g.fill();
     g.save(); g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.clip(); if (logo) g.drawImage(logo, -rL, -rL, rL * 2, rL * 2); else { g.fillStyle = '#16264a'; g.fillRect(-rL, -rL, rL * 2, rL * 2); } g.restore(); g.lineWidth = rL * 0.035; g.strokeStyle = INK; g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.stroke();
     // the cone: falls spinning out the top of the screen, bonks on his heid, hops, settles squint
@@ -190,11 +191,11 @@ const IntroScenes = (() => {
       cone(g, x, y, ch, rot, sq); }
     g.restore();
     // the name
-    const nk = t - B.name; if (nk > 0) { const s = nk < 0.14 ? lerp(1.6, 0.94, ei(nk / 0.14)) : 1 - 0.06 * Math.exp(-(nk - 0.14) * 10) * Math.cos((nk - 0.14) * 34); let fs = 150 * u; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(name).width > W * 0.82) { fs -= 4; g.font = `400 ${fs}px ${TITLE}`; }
+    const nk = t - B.name; if (nk > 0) { const s = SPL(nk); let fs = 150 * u; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(name).width > W * 0.82) { fs -= 4; g.font = `400 ${fs}px ${TITLE}`; }
       g.save(); g.translate(cx, H * (ep ? 0.66 : 0.72)); g.rotate(-0.03); g.scale(s, s); g.globalAlpha = cl(nk / 0.05); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(name, 8 * u, 12 * u); g.lineWidth = fs * 0.14; g.strokeStyle = '#08070c'; g.strokeText(name, 0, 0); g.fillStyle = '#f7f1e3'; g.fillText(name, 0, 0); g.restore(); }
     const ek = t - B.ep; if (ep && ek > 0) { let es = 68 * u; g.font = `400 ${es}px ${TALL}`; while (g.measureText(ep).width > W * 0.72) { es -= 2; g.font = `400 ${es}px ${TALL}`; }
-      g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(eb(ek / 0.22), eb(ek / 0.22)); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(SPL(ek), SPL(ek)); g.globalAlpha = cl(ek / 0.03); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
       if (kick) { g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 1.3); g.font = `400 ${es}px ${TALL}`; }
       g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(ep, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(ep, 0, 0); g.restore(); }
     const lk = t - (ep ? B.ep + 0.3 : B.name + 0.35); if (line && lk > 0) { let ls = 38 * u; g.font = `700 ${ls}px ${BODY}`; while (g.measureText(line).width > W * 0.6) { ls -= 2; g.font = `700 ${ls}px ${BODY}`; } g.globalAlpha = cl(lk / 0.3); g.textAlign = 'center'; g.fillStyle = '#e9e2d2'; g.fillText(line, cx, H * (ep ? 0.94 : 0.86)); }
@@ -213,7 +214,7 @@ const IntroScenes = (() => {
   B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
   B.flop = B.stop + 0.34; B.capRest = B.land + 0.75; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.reach = B.up + 0.12; B.grab = B.up + 0.5; B.capOn = B.up + 0.85; B.bout = B.up + 1.0; B.bin = B.up + 1.35; B.finger = B.up + 1.5; B.ned = B.finger + 0.1;
   B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.05; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.4;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.02; B.name = B.logo; B.ep = B.logo; B.cone = B.logo + 1.0; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.3;
   // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
