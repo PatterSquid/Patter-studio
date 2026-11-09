@@ -36,10 +36,10 @@ const IntroScenes = (() => {
 
   /* ---------- his icon with a thick cartoon outline ---------- */
   const SB = { a: null, b: null };
-  function squidComic(g, x, y, h, pose, k) { if (typeof Squid === 'undefined') return; const s = Math.ceil(h * 2.6 * Math.max(1, k)), sc = s / (h * 2.6);
+  function squidComic(g, x, y, h, pose, k) { if (typeof Squid === 'undefined') return; const s = Math.ceil(h * 2.9 * Math.max(1, k)), sc = s / (h * 2.9);
     if (!SB.a || SB.a.width < s) { SB.a = mk(s, s); SB.b = mk(s, s); } const a = SB.a.getContext('2d'), b = SB.b.getContext('2d'); a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, SB.a.width, SB.a.height);
-    if (!Squid.draw(a, s / 2, s * 0.75, h * sc, pose)) return; b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, SB.b.width, SB.b.height); b.drawImage(SB.a, 0, 0); b.globalCompositeOperation = 'source-in'; b.fillStyle = INK; b.fillRect(0, 0, s, s); b.globalCompositeOperation = 'source-over';
-    const ox = x - s / 2 / sc, oy = y - s * 0.75 / sc, ow = h * 0.016; for (let i = 0; i < 12; i++) { const an = i / 12 * TAU; g.drawImage(SB.b, 0, 0, s, s, ox + Math.cos(an) * ow, oy + Math.sin(an) * ow, s / sc, s / sc); }
+    if (!Squid.draw(a, s / 2, s * 0.5, h * sc, pose)) return; b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, SB.b.width, SB.b.height); b.drawImage(SB.a, 0, 0); b.globalCompositeOperation = 'source-in'; b.fillStyle = INK; b.fillRect(0, 0, s, s); b.globalCompositeOperation = 'source-over';
+    const ox = x - s / 2 / sc, oy = y - s * 0.5 / sc, ow = h * 0.016; for (let i = 0; i < 12; i++) { const an = i / 12 * TAU; g.drawImage(SB.b, 0, 0, s, s, ox + Math.cos(an) * ow, oy + Math.sin(an) * ow, s / sc, s / sc); }
     g.drawImage(SB.a, 0, 0, s, s, ox, oy, s / sc, s / sc); }
 
   /* ---------- props ---------- */
@@ -225,7 +225,7 @@ const IntroScenes = (() => {
     if (t < B.fly) { h = KH; rot = pushRot(t); x = pushFeet(t); y = 772; if (t > B.kick) { const k = t - B.kick; x += 6 * sm(k / 0.1); ss = { ang: 0, s: 1 - 0.3 * Math.sin(Math.PI * cl(k / 0.1)), px: x + 0.3 * h, py: y - 0.5 * h }; } else if (t > B.shove) x += 6 * sm((t - B.kick + 0.1) / 0.1); }
     else if (t < B.land) { const tau = t - B.fly; h = lerp(KH, 300, sm(tau / FT)); hd = flightHead(tau); rot = lerp(pushRot(B.kick), flightAng(tau) + Math.PI / 2, sm(tau / 0.24)); const sp = Math.hypot(VX, VY + GRAV * tau);
       ss = { ang: rot - Math.PI / 2, s: 1 + 0.26 * sm(tau / 0.1) * cl(sp / 1500), px: hd[0], py: hd[1] }; }
-    else if (t < B.stop) { const k = t - B.land, sp0 = Math.hypot(VX, VY + GRAV * FT), sEnd = 1 + 0.26 * cl(sp0 / 1500); hd = [scrapeX(t), ROAD - 9 * bump(k - 0.06, 0.2)]; rot = scrapeRot(k) + 0.025 * Math.sin(k * 55) * Math.exp(-k * 4) * sm(k / 0.1);
+    else if (t < B.stop) { const k = t - B.land, sp0 = Math.hypot(VX, VY + GRAV * FT), sEnd = 1 + 0.26 * cl(sp0 / 1500); hd = [scrapeX(t), ROAD - 9 * bump(k - 0.06, 0.2)]; rot = scrapeRot(k);
       // the head takes the hit: the stretch from the fall runs into a soft squash and back, then the body lands flat on top of it
       const hit = 1 - 0.55 * spring(k, 17, 0.42), slap = 1 - 0.3 * (k > TOP ? spring(k - TOP, 26, 0.45) : 0);
       ss = { ang: rot - Math.PI / 2, s: (1 + (sEnd - 1) * Math.exp(-k * 18)) * hit * slap * (1 + 0.04 * sm(k / 0.15) * (1 - k / TS)), px: hd[0], py: hd[1] }; }
@@ -333,7 +333,7 @@ const IntroScenes = (() => {
       if (t > B.spew) { const m = Squid.point('mouth', Wh.x, Wh.y, h, P), M = g.getTransform(); mouthS = [M.a * m[0] + M.c * m[1] + M.e, M.b * m[0] + M.d * m[1] + M.f]; }
       g.restore();
       // the cap knocked off when his face hits the road, spinning up and landing back on his heid as he gets up
-      if (t > B.land && t < B.capOn) { const W1 = where(B.land - 0.001), P1 = pose(B.land - 0.001), q0 = Squid.point([151, 40], W1.x, W1.y, W1.h, P1), a0 = [q0[0], Math.min(q0[1], ROAD - 45), Squid.headAngle(P1) - 0.22], REST = [HOME.x + 78, ROAD - 10, Math.PI * 0.86];
+      if (t > B.land && t < B.capOn) { const W1 = where(B.land - 0.001), P1 = pose(B.land - 0.001), q0 = Squid.point([151, 40], W1.x, W1.y, W1.h, P1), a0 = [q0[0], q0[1], Squid.headAngle(P1) - 0.22], REST = [HOME.x + 78, ROAD - 10, Math.PI * 0.86];
         let c; if (t < B.capRest) { const f = (t - B.land) / (B.capRest - B.land), hop = f < 0.8 ? Math.sin(Math.PI * f / 0.8) * 230 : Math.sin(Math.PI * (f - 0.8) / 0.2) * 22; c = [lerp(a0[0], REST[0], eo(f)), lerp(a0[1], REST[1], f < 0.8 ? f / 0.8 : 1) - hop, lerp(a0[2] + 3 * TAU, REST[2], eo(f))]; }
         else if (t < B.grab) c = REST;
         else { const hp = Squid.point('hand', Wh.x, Wh.y, h, P), onHand = [hp[0], hp[1] - cw * 0.12, lerp(REST[2], ha - 0.22, sm((t - B.grab) / (B.capOn - B.grab)))], g1 = sm((t - B.grab) / 0.08), g2 = sm((t - B.capOn + 0.12) / 0.12);
