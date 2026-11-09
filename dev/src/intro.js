@@ -853,7 +853,8 @@ void main(){
       { let a = 0, b = 0; add(0, D, 0.5, x => { a += 0.015 * (nz() - a); b += 0.0015 * (nz() - b); return (a * 0.6 + b * 2) * 0.25 * Math.min(1, x / 0.4); }); }
       const beat = 60 / 124; for (let i = 0; i * beat < S.splash + 0.5; i++) { const t0 = i * beat, op = t0 > S.push - 0.05 && t0 < S.stop + 0.05, v = (op ? 0.55 : 0.2) * (t0 > S.splash ? 0.6 : 1); add(t0, 0.25, 0.25, x => Math.sin(TAU * (55 + 60 * Math.exp(-x * 30)) * x) * v * Math.exp(-x * 9)); if (op && i % 2) add(t0, 0.12, 0.25, x => nz() * 0.06 * Math.exp(-x * 30)); if (op) add(t0 + beat / 2, 0.3, 0.27, x => Math.sin(TAU * [220, 247, 196, 262][i % 4] * x) * 0.05 * Math.exp(-x * 6)); }
       add(S.push - 0.05, 0.3, 0.25, x => (nz() * 0.6 + Math.sin(TAU * 90 * x)) * 0.6 * Math.exp(-x * 14)); // the door bangs open
-      for (let k = 0; k < 3; k++) add(S.push + 0.04 + k * 0.06, 0.06, 0.3, x => (nz() * 0.4 + Math.sin(TAU * 140 * x)) * 0.4 * Math.exp(-x * 50)); // stumbling feet
+      for (let k = 0; k < 9; k++) add(S.push + 0.05 + k * 0.11, 0.08, 0.3, x => (nz() * 0.5 + Math.sin(TAU * (160 + 30 * (k % 3)) * x)) * 0.3 * Math.exp(-x * 40)); // tentacles squeaking on the step as he digs in
+      swish(S.kick - 0.1, 0.12, 400, 1500, 0.3, 0.3); // the boot coming through
       add(S.kick, 0.3, 0.3, x => { const ph = TAU * (60 * x + 70 * (1 - Math.exp(-x * 20)) / 20); return Math.sin(ph) * 0.9 * Math.exp(-x * 14) + nz() * 0.4 * Math.exp(-x * 60); }); // the boot
       swish(S.fly, S.land - S.fly, 300, 2200, 0.45, 0.45);
       add(S.land, 0.5, 0.5, x => { const ph = TAU * (42 * x + 55 * (1 - Math.exp(-x * 8)) / 8); return Math.sin(ph) * 1.0 * Math.exp(-x * 8) + nz() * 0.45 * Math.exp(-x * 40); }); // face into the road
@@ -875,7 +876,6 @@ void main(){
       // the belly rumbles, heave, heave, a big gulp of air, then BLEURGH and the splat on the lens
       add(S.green, 0.8, 0.5, x => Math.sin(TAU * (70 + 20 * Math.sin(TAU * 5 * x)) * x) * 0.25 * Math.sin(Math.PI * x / 0.8));
       [S.hurk1, S.hurk2].forEach((t0, i) => add(t0, 0.3, 0.5, x => { const f = 120 + 60 * Math.sin(Math.PI * x / 0.3); let v = 0; [1, 2, 3, 5].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.25) * Math.sin(Math.PI * x / 0.3) * (0.8 + i * 0.2); }));
-      { let a = 0; add(S.wind, S.spew - S.wind, 0.5, x => { a += 0.08 * (nz() - a); return a * 1.4 * (x / (S.spew - S.wind)); }); }
       { let a = 0; add(S.spew - 0.01, 0.5, 0.5, x => { a += 0.3 * (nz() - a); const f = 85 + 40 * Math.sin(TAU * 11 * x); return (a * 1.3 + Math.sin(TAU * f * x) * 0.55) * Math.min(1, x / 0.015) * Math.exp(-x * 2.2); }); }
       boom(S.splat, 150, 45, 0.9, 0.9); { let a = 0; add(S.splat, 0.7, 0.5, x => { a += 0.5 * (nz() - a); return a * 0.8 * Math.exp(-x * 7); }); }
       for (let k = 0; k < 8; k++) add(S.splat + 0.3 + k * 0.17, 0.08, 0.3 + (k % 3) * 0.2, x => Math.sin(TAU * (700 - 2000 * x) * x) * 0.1 * Math.exp(-x * 30));

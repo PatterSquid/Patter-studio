@@ -201,106 +201,99 @@ const IntroScenes = (() => {
     g.restore(); }
 
   /* ---------- "Chucked oot" ---------- */
-  // beats (seconds): shoved out the door, the boot, flying, face into the road and scraping along it, keeled over, up,
-  // the finger at the pub, the ned and the soaking, the swally, green, the heaves, the spew, the ink and the title
-  const NED_DUR = 1.25, B = { push: 0.3, kick: 0.5, fly: 0.58, land: 1.04, stop: 1.52, peel: 1.75, up: 2.2, finger: 2.45, ned: 2.6 };
-  B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.wind = B.hurk2 + 0.32; B.spew = B.wind + 0.2; B.spew2 = B.spew + 0.6; B.splat = B.spew2 + 0.26; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.05; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.4;
-  const HOME = { x: 860, y: 846 }, IMP = 640, STOP = 870, PUD = { x: 1010, y: 800 }, XN = 994;
+  // beats (seconds). Every moving value is a smooth curve through these, so nothing pops between frames.
+  const B = { open: 0.3, push: 0.4, shove: 1.45, cock: 1.6, kick: 1.82 }; B.fly = B.kick + 0.1;
+  const FT = 0.52, GRAV = 2400, ROAD = 846, IMP = 640, TS = 0.72, NED_DUR = 1.25, PUD = { x: 1010, y: 800 }, XN = 994;
   const axis = r => [Math.sin(r), -Math.cos(r)];
-  // where he is: his middle (cx, cy), turn (rot), his feet (x, y), and the squash and stretch on him (ss: along the
-  // angle ang by s, the other way by s^-0.7, about px, py), all from the beats
-  function where(t) { let h = 300, cx = HOME.x, cy = HOME.y - 150, rot = 0, ss = null, zoom = 1;
-    const fromHead = (hx, hy, r, hh) => { const u = axis(r); return [hx - 0.47 * hh * u[0], hy - 0.47 * hh * u[1]]; };
-    const FL = tt => { const f = cl((tt - B.fly) / (B.land - B.fly)), c0 = [433, 770 - 0.5 * 265], c1 = fromHead(IMP, HOME.y, 1.95, 300); return [lerp(c0[0], c1[0], f), lerp(c0[1], c1[1], f) - 4 * 170 * f * (1 - f)]; };
-    if (t < B.kick) { const f = sm((t - B.push) / (B.kick - B.push)); h = 265; cx = lerp(300, 425, f); cy = 770 - 0.5 * h - 10 * Math.abs(Math.sin(f * 9)) * (1 - f); rot = -0.1 - 0.12 * Math.sin(f * 7); }
-    else if (t < B.fly) { const f = (t - B.kick) / (B.fly - B.kick); h = 265; cx = 425 + 8 * f; cy = 770 - 0.5 * h; rot = -0.15; ss = { ang: 0, s: lerp(1, 0.58, eo(f / 0.45)), px: cx - 60, py: cy }; }
-    else if (t < B.land) { const f = (t - B.fly) / (B.land - B.fly); h = lerp(265, 300, f); [cx, cy] = FL(t); rot = lerp(-0.15, 1.95, f);
-      const a = FL(t - 0.01), b = FL(t + 0.01); ss = { ang: Math.atan2(b[1] - a[1], b[0] - a[0]), s: f < 0.15 ? lerp(0.58, 1.42, eo(f / 0.15)) : 1.12 + 0.3 * Math.abs(2 * f - 1), px: cx, py: cy }; }
-    else if (t < B.stop) { const k = t - B.land, f = k / (B.stop - B.land), hx = IMP + (STOP - IMP) * eo(f); rot = lerp(1.95, 1.78, sm(f)) + 0.05 * Math.sin(k * 70) * Math.exp(-k * 5); [cx, cy] = fromHead(hx, HOME.y, rot, h);
-      const u = axis(rot); ss = { ang: Math.atan2(u[1], u[0]), s: (1 - 0.46 * Math.exp(-k * 9) * Math.cos(k * 24)) * (1 + 0.08 * (1 - f)), px: hx, py: HOME.y }; }
-    else if (t < B.peel) { const k = t - B.stop; rot = lerp(1.78, 1.6, eo(k / 0.14)); [cx, cy] = fromHead(STOP, HOME.y, rot, h); const u = axis(rot); ss = { ang: Math.atan2(u[1], u[0]) + Math.PI / 2, s: 1 - 0.22 * Math.exp(-k * 10) * Math.cos(k * 30), px: cx, py: HOME.y }; }
-    else if (t < B.up) { const f = (t - B.peel) / (B.up - B.peel), stand = [HOME.x, HOME.y - 0.5 * h];
-      if (f < 0.35) { const a = f / 0.35; rot = 1.6 + 0.08 * sm(a); [cx, cy] = fromHead(STOP, HOME.y, rot, h); const u = axis(rot); ss = { ang: Math.atan2(u[1], u[0]) + Math.PI / 2, s: 1 - 0.24 * sm(a), px: cx, py: HOME.y }; }
-      else { const a = (f - 0.35) / 0.65, lie = fromHead(STOP, HOME.y, 1.68, h); rot = 1.68 * (1 - eb(a)); cx = lerp(lie[0], stand[0], sm(a)); cy = lerp(lie[1], stand[1], sm(a)) - Math.sin(Math.PI * a) * 80; ss = { ang: -Math.PI / 2, s: 1 + 0.32 * Math.sin(Math.PI * Math.min(1, a * 1.25)), px: cx, py: cy }; } }
-    else { const k = t - B.up; cx = HOME.x; cy = HOME.y - 0.5 * h; if (t > B.fingerOff) { const w = t - B.fingerOff; cx += 12 * Math.sin(w * 2.1) * sm(w / 0.5); }
-      let s = 1 - 0.3 * Math.exp(-k * 8) * Math.cos(k * 22); const k2 = t - B.splash - 0.06; if (k2 > 0) s *= 1 - 0.24 * bump(k2, 0.22) + 0.06 * bump(k2 - 0.2, 0.2);
-      if (t > B.glug && t < B.down) s *= 1 + 0.05 * Math.sin((t - B.glug) / (B.down - B.glug) * Math.PI);
-      if (t > B.wind) { const lur = (t0, a, b) => lerp(a, b, eo((t - t0) / 0.08)) + 0.05 * Math.sin((t - t0) * 40) * Math.exp(-(t - t0) * 6); s *= t < B.spew ? lerp(1, 1.2, sm((t - B.wind) / (B.spew - B.wind))) : t < B.spew + 0.38 ? lur(B.spew, 1.2, 0.82) : t < B.spew2 ? lerp(0.82, 1.18, sm((t - B.spew - 0.38) / (B.spew2 - B.spew - 0.38))) : lur(B.spew2, 1.18, 0.8); }
-      if (t > B.spew) zoom = 1 + 0.12 * eo((t - B.spew) / 0.1) + 0.14 * eo((t - B.spew2) / 0.08);
-      ss = { ang: -Math.PI / 2, s, px: cx, py: HOME.y }; }
-    const u = axis(rot), x = cx - 0.5 * h * u[0], y = cy - 0.5 * h * u[1];
-    const cam = { x: key(t, [[0, 560], [B.fly, 600], [B.land, 700], [B.stop, 770], [B.up, 790], [B.ned + 0.2, 830], [B.splash, 840], [B.glare, 862], [B.spew, 862]]), y: key(t, [[0, 650], [B.ned + 0.2, 650], [B.glare, 680], [B.spew, 670]]),
-      z: key(t, [[0, 1.45], [B.land, 1.5], [B.stop, 1.6], [B.up, 1.55], [B.ned + 0.2, 1.45], [B.splash, 1.5], [B.glare, 1.95], [B.lift, 2.0], [B.green, 2.05], [B.wind, 2.15], [B.spew, 2.2]]) };
-    const sh = bump(t - B.kick, 0.12) * 4 + bump(t - B.land, 0.25) * 14 + bump(t - B.stop, 0.15) * 5 + bump(t - B.splash, 0.3) * 10 + (t > B.spew ? bump(t - B.spew, 0.3) * 12 : 0); cam.x += Math.sin(t * 90) * sh; cam.y += Math.cos(t * 77) * sh;
-    return { x, y, h, cam, cx, cy, rot, ss, zoom }; }
-  function pose(t) { const W0 = where(t), p = { t, rot: W0.rot, wave: 0.5, waveF: 1.6, amb: [0.88, 0.84, 0.92], rim: [1, 0.66, 0.32], rimDir: [-1, -0.6], rimAmt: 1.0, lidTilt: 0, armLA: 0.42, armLCurl: 1.1 };
-    p.armA = key(t, [[0, 0.95], [B.lift, 0.95], [B.glug, -1.72], [B.down, -1.8], [B.ahh + 0.1, 0.8]]); p.armCurl = key(t, [[0, 1.0], [B.lift, 1.0], [B.glug, -0.35], [B.down, -0.3], [B.ahh + 0.1, 1.0]]); p.armLen = key(t, [[0, 112], [B.lift, 112], [B.glug, 78], [B.down, 78], [B.ahh + 0.1, 112]]);
-    // shoved out backwards, then the boot: eyes like saucers, arms going
-    if (t < B.fly) { p.eye = t > B.kick ? 1.5 : 1.25; p.lean = 0.12 * Math.sin(t * 18); p.armA = -0.5 + 0.6 * Math.sin(t * 14); p.armLA = -0.4 + 0.5 * Math.sin(t * 13 + 1); p.armLCurl = 0.4; p.wave = 1.4; p.waveF = 10; return p; }
-    // flying: legs trailing, everything flapping
-    if (t < B.land) { p.splay = 0.8; p.eye = 1.45; p.armA = 0.6 + 0.8 * Math.sin(t * 19); p.armLA = -0.6 + 0.8 * Math.sin(t * 17 + 1); p.armLCurl = 0.3; p.wave = 2; p.waveF = 9; return p; }
-    // face down the road: eyes screwed shut, the bottle held up out the way, legs dragging
-    if (t < B.stop) { p.lidL = p.lidR = 0.9; p.lidTilt = 0.25; p.eye = 0.9; p.wave = 0.15; p.armA = -2.3; p.armCurl = 0.3; p.armLA = 0.9; return p; }
-    if (t < B.up) { const k = t - B.stop; p.lidL = 0.55; p.lidR = 0.75; p.eye = 1.1; p.wave = 0.9 * Math.exp(-k * 3) + 0.3; p.waveF = 18; p.armA = 0.6; p.armLA = 0.5; return p; }
-    // up and raging: the "who you looking at" glare at the pub, then the finger
-    const lk = t - B.up; p.sq = 1 + 0.04 * Math.sin(lk * 5) * Math.exp(-lk);
-    p.lidL = p.lidR = key(t, [[B.up, 0.3], [B.up + 0.2, 0.44]]); p.lidTilt = key(t, [[B.up, 0.15], [B.up + 0.2, 0.36]]); p.eye = 1;
-    p.lean = key(t, [[B.up, 0.05], [B.finger - 0.05, -0.14], [B.fingerOff, -0.17], [B.fingerOff + 0.3, 0.02]]);
-    const fk = sm((t - B.finger) / 0.14) * (1 - sm((t - B.fingerOff) / 0.4)); p.armLA = lerp(0.42, -1.3 + 0.07 * Math.sin(t * 32), fk); p.armLCurl = lerp(1.1, 0.1, fk); p.armLLen = lerp(112, 126, fk); p.finger = fk;
+  // the shove: his feet slide out the door while he digs in, leaning back against the hands
+  const pushFeet = t => { const f = cl((t - B.push) / (B.shove - B.push)); return 300 + 132 * sm(f) - 6 * Math.sin(f * 22) * f * (1 - f) * 4; };
+  const pushRot = t => key(t, [[0, -0.05], [B.push, -0.2], [B.shove, -0.24], [B.shove + 0.18, 0.06], [B.cock, -0.06], [B.kick, -0.08]]) + 0.04 * Math.sin(t * 9) * key(t, [[B.push, 0], [B.push + 0.1, 1], [B.shove, 1], [B.shove + 0.1, 0]]);
+  const KH = 265, headAt = (fx, fy, r, h) => { const u = axis(r); return [fx + 0.97 * h * u[0], fy + 0.97 * h * u[1]]; };
+  const H0 = headAt(pushFeet(B.kick) + 6, 772, pushRot(B.kick), KH), VX = (IMP - H0[0]) / FT, VY = (ROAD - H0[1] - 0.5 * GRAV * FT * FT) / FT;
+  B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
+  B.flop = B.stop + 0.34; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.finger = B.up + 0.25; B.ned = B.finger + 0.1;
+  B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.05; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.4;
+  // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
+  const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
+  const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
+  const scrapeX = t => { const k = cl(t - B.land, 0, TS); return IMP + VX * k - 0.5 * (VX / TS) * k * k; };
+  const scrapeRot = k => ROT_SLIDE + (rotLand - ROT_SLIDE) * Math.exp(-k * 9) * (1 + 9 * k);
+  const spring = (k, w, z) => Math.exp(-z * w * k) * Math.sin(w * Math.sqrt(1 - z * z) * k);
+  // where he is: head (his anchor while he flies and slides) or feet, turn, size, and the squash and stretch on him
+  function where(t) { let h = 300, rot = 0, ss = null, x, y, hd = null;
+    if (t < B.fly) { h = KH; rot = pushRot(t); x = pushFeet(t); y = 772; if (t > B.kick) { const k = t - B.kick; x += 6 * sm(k / 0.1); ss = { ang: 0, s: 1 - 0.3 * Math.sin(Math.PI * cl(k / 0.1)), px: x + 0.3 * h, py: y - 0.5 * h }; } else if (t > B.shove) x += 6 * sm((t - B.kick + 0.1) / 0.1); }
+    else if (t < B.land) { const tau = t - B.fly; h = lerp(KH, 300, sm(tau / FT)); hd = flightHead(tau); rot = lerp(pushRot(B.kick), flightAng(tau) + Math.PI / 2, sm(tau / 0.24)); const sp = Math.hypot(VX, VY + GRAV * tau);
+      ss = { ang: rot - Math.PI / 2, s: 1 + 0.26 * sm(tau / 0.1) * cl(sp / 1500), px: hd[0], py: hd[1] }; }
+    else if (t < B.stop) { const k = t - B.land, sp0 = Math.hypot(VX, VY + GRAV * FT), sEnd = 1 + 0.26 * cl(sp0 / 1500); hd = [scrapeX(t), ROAD]; rot = scrapeRot(k) + 0.03 * Math.sin(k * 55) * Math.exp(-k * 4);
+      ss = { ang: rot - Math.PI / 2, s: (1 + (sEnd - 1) * Math.exp(-k * 30)) * (1 - 0.82 * spring(k, 30, 0.38)) * (1 + 0.05 * (1 - k / TS)), px: hd[0], py: hd[1] }; }
+    else if (t < B.peel) { const k = t - B.stop, r0 = scrapeRot(TS); hd = [STOP, ROAD];
+      // follow through: his legs carry on, swing up over him, then he slaps down flat
+      rot = k < 0.34 ? r0 + 0.62 * Math.sin(Math.PI * k / 0.34) * (1 - 0.3 * k / 0.34) : lerp(r0, 1.6, ei(cl((k - 0.34) / 0.14)));
+      const kk = k - 0.48; ss = kk > 0 ? { ang: rot, s: 1 - 0.6 * spring(kk, 32, 0.4), px: STOP - 0.47 * 300 * Math.sin(rot), py: ROAD } : null; }
+    else if (t < B.up) { const f = (t - B.peel) / (B.up - B.peel), lieHd = [STOP, ROAD];
+      if (f < 0.3) { const a = sm(f / 0.3); rot = 1.6 + 0.06 * a; hd = lieHd; ss = { ang: rot, s: 1 - 0.2 * a, px: STOP - 0.47 * 300 * Math.sin(rot), py: ROAD }; }
+      else { const a = (f - 0.3) / 0.7, e = eb(a), lieC = [STOP - 0.47 * 300 * Math.sin(1.66), ROAD + 0.47 * 300 * Math.cos(1.66)], stand = [HOME.x, ROAD - 150]; rot = 1.66 * (1 - e);
+        const c = [lerp(lieC[0], stand[0], sm(a)), lerp(lieC[1], stand[1], sm(a)) - Math.sin(Math.PI * a) * 70], u = axis(rot); x = c[0] - 0.5 * 300 * u[0]; y = c[1] - 0.5 * 300 * u[1];
+        ss = { ang: -Math.PI / 2, s: 1 + 0.26 * Math.sin(Math.PI * Math.min(1, a * 1.2)) - 0.2 * (1 - sm(a / 0.15)), px: c[0], py: c[1] }; } }
+    else { const k = t - B.up; x = HOME.x; y = ROAD; rot = 0; if (t > B.fingerOff) { const w = t - B.fingerOff; x += 12 * Math.sin(w * 2.1) * sm(w / 0.5); }
+      let s = 1 - 0.3 * spring(k, 22, 0.35) * 1.3; const k2 = t - B.splash - 0.06; if (k2 > 0) s *= 1 - 0.24 * bump(k2, 0.22) + 0.06 * bump(k2 - 0.2, 0.2);
+      if (t > B.glug && t < B.down) s *= 1 + 0.05 * Math.sin((t - B.glug) / (B.down - B.glug) * Math.PI); ss = { ang: -Math.PI / 2, s, px: x, py: ROAD }; }
+    if (hd) { const u = axis(rot); x = hd[0] - 0.97 * h * u[0]; y = hd[1] - 0.97 * h * u[1]; }
+    const u = axis(rot), cx = x + 0.5 * h * u[0], cy = y + 0.5 * h * u[1];
+    const cam = { x: key(t, [[0, 540], [B.shove, 560], [B.kick, 590], [B.land, 690], [B.stop, 760], [B.up, 780], [B.ned + 0.2, 830], [B.splash, 840], [B.glare, 800], [B.spew, 800]]), y: key(t, [[0, 640], [B.kick, 640], [B.land, 650], [B.ned + 0.2, 650], [B.glare, 690], [B.spew, 700]]),
+      z: key(t, [[0, 1.6], [B.shove, 1.66], [B.kick, 1.62], [B.land, 1.5], [B.stop, 1.55], [B.up, 1.5], [B.ned + 0.2, 1.45], [B.splash, 1.5], [B.glare, 1.95], [B.lift, 2.0], [B.green, 2.15], [B.spew - 0.2, 2.3], [B.spew, 2.7]]) };
+    const sh = bump(t - B.kick, 0.12) * 5 + bump(t - B.land, 0.22) * 12 + bump(t - B.flop - 0.14, 0.15) * 5 + bump(t - B.splash, 0.3) * 10 + (t > B.spew ? bump(t - B.spew, 0.3) * 12 : 0); cam.x += Math.sin(t * 90) * sh; cam.y += Math.cos(t * 77) * sh;
+    return { x, y, h, cam, cx, cy, rot, ss, hd }; }
+  function pose(t) { const W0 = where(t), p = { t, rot: W0.rot, waveF: 7, amb: [0.88, 0.84, 0.92], rim: [1, 0.66, 0.32], rimDir: [-1, -0.6], rimAmt: 1.0 };
+    const L = B.land, S = B.stop;
+    p.eye = key(t, [[0, 1.05], [B.shove, 1.05], [B.shove + 0.12, 1.15], [B.kick, 1.0], [B.kick + 0.05, 1.6], [L - 0.05, 1.4], [L + 0.05, 0.85], [S, 0.85], [S + 0.3, 1.15], [B.up, 1.1], [B.up + 0.3, 1]]);
+    p.lidL = p.lidR = key(t, [[0, 0.3], [B.push, 0.42], [B.shove, 0.42], [B.shove + 0.15, 0.55], [B.kick, 0.5], [B.kick + 0.04, 0], [L - 0.03, 0], [L + 0.05, 0.92], [S + 0.25, 0.92], [S + 0.5, 0.6], [B.up, 0.35], [B.up + 0.25, 0.44]]);
+    p.lidTilt = key(t, [[0, 0.3], [B.shove, 0.38], [B.shove + 0.15, 0.08], [B.kick, 0.08], [B.kick + 0.04, 0], [L, 0], [L + 0.05, 0.25], [S + 0.3, 0.2], [B.up, 0.2], [B.up + 0.25, 0.36]]);
+    p.splay = key(t, [[0, 0], [B.push, 0.12], [B.shove, 0.12], [B.kick, 0], [B.fly + 0.1, 0.72], [L, 0.8], [L + 0.15, 0.1], [S, 0.1], [S + 0.22, 0.55], [B.flop + 0.1, 0], [B.up, 0]]);
+    p.wave = key(t, [[0, 0.5], [B.push, 1.5], [B.shove, 1.5], [B.shove + 0.2, 0.6], [B.fly, 1.6], [L, 1.6], [L + 0.1, 0.25], [S, 0.25], [S + 0.3, 1.0], [B.up, 0.5]]);
+    p.lean = key(t, [[0, 0], [B.push, -0.14], [B.shove, -0.14], [B.shove + 0.2, 0.06], [B.cock, -0.04], [B.kick, -0.04], [B.kick + 0.06, 0.2], [B.fly + 0.2, 0], [B.up, 0.05], [B.finger - 0.05, -0.14], [B.fingerOff, -0.17], [B.fingerOff + 0.3, 0.02]]);
+    // arms: a slow base pose with flailing on top (one steady rhythm, so they never jump)
+    const fl = key(t, [[0, 0.1], [B.push, 0.4], [B.shove, 0.4], [B.kick, 0.1], [B.fly, 0.7], [L, 0.7], [L + 0.1, 0.05], [S, 0.05], [S + 0.3, 0.2], [B.up, 0.05], [B.up + 0.3, 0]]);
+    p.armA = key(t, [[0, 0.8], [B.kick, 0.8], [B.fly + 0.15, -0.2], [L, -0.6], [L + 0.12, -2.2], [S + 0.3, -2.2], [S + 0.6, 0.6], [B.up, 0.9], [B.lift, 0.95], [B.glug, -1.72], [B.down, -1.8], [B.ahh + 0.1, 0.8]]) + fl * Math.sin(t * 8);
+    p.armCurl = key(t, [[0, 1.0], [L, 0.6], [L + 0.12, 0.3], [S + 0.5, 1.0], [B.lift, 1.0], [B.glug, -0.35], [B.down, -0.3], [B.ahh + 0.1, 1.0]]); p.armLen = key(t, [[0, 112], [B.lift, 112], [B.glug, 78], [B.down, 78], [B.ahh + 0.1, 112]]);
+    p.armLA = key(t, [[0, 0.42], [B.push, -0.2], [B.shove, -0.2], [B.shove + 0.2, 0.42], [B.fly, -0.4], [L, -0.6], [L + 0.12, 0.9], [S + 0.4, 0.5], [B.up, 0.42]]) + fl * Math.sin(t * 7 + 1.3); p.armLCurl = key(t, [[0, 1.1], [B.push, 0.5], [B.shove, 0.5], [B.shove + 0.2, 1.1], [B.fly, 0.4], [L, 0.4], [L + 0.12, 1.1]]);
+    p.sq = 1 + 0.03 * Math.sin(t * 12) * key(t, [[B.push, 0], [B.push + 0.1, 1], [B.shove, 1], [B.shove + 0.1, 0]]);
+    if (t < B.up) return p;
+    // up and raging: the glare at the pub, then the finger
+    const fk = sm((t - B.finger) / 0.18) * (1 - sm((t - B.fingerOff) / 0.4)); p.armLA = lerp(p.armLA, -1.3 + 0.07 * Math.sin(t * 32), fk); p.armLCurl = lerp(p.armLCurl, 0.1, fk); p.armLLen = lerp(112, 126, fk); p.finger = fk;
     if (t > B.fingerOff) { const w = t - B.fingerOff; p.lean += 0.05 * Math.sin(w * 3.3); }
     // soaked: frozen mid gesture, then the slow turn to us, dripping
-    if (t > B.splash) { const sk = t - B.splash; p.wet = sm((sk - 0.06) / 0.12); p.eye = 1 + 0.45 * bump(sk - 0.05, 0.4); p.droop = 0.5 * sm((sk - 0.1) / 0.3); p.wave = 0.2; p.lidL = p.lidR = lerp(0, 0.5, sm((sk - 0.35) / 0.3)); p.lidTilt = lerp(0, 0.42, sm((sk - 0.35) / 0.3)); if (t > B.glare + 0.25 && t < B.glare + 0.33) p.lidL = 0.65; }
-    // the swally
+    if (t > B.splash) { const sk = t - B.splash; p.wet = sm((sk - 0.06) / 0.12); p.eye = 1 + 0.45 * bump(sk - 0.05, 0.4); p.droop = 0.5 * sm((sk - 0.1) / 0.3); p.wave = lerp(p.wave, 0.2, sm(sk / 0.3)); p.lidL = p.lidR = lerp(0, 0.5, sm((sk - 0.35) / 0.3)); p.lidTilt = lerp(0, 0.42, sm((sk - 0.35) / 0.3)); if (t > B.glare + 0.25 && t < B.glare + 0.33) p.lidL = 0.65; }
+    // the swally, green, the heaves, the spew
     if (t > B.lift) p.lean = key(t, [[B.lift, p.lean], [B.glug, -0.16], [B.down - 0.1, -0.22], [B.ahh, -0.05], [B.green, 0]]);
-    if (t > B.glug - 0.1 && t < B.ahh + 0.3) { p.lidL = p.lidR = 0.92; p.lidTilt = 0; p.sq = 1 + 0.03 * Math.sin((t - B.glug) * 18); }
-    if (t > B.green) { const gk = sm((t - B.green) / 0.5); p.amb = [lerp(0.88, 0.7, gk), lerp(0.84, 0.95, gk), lerp(0.92, 0.64, gk)]; p.lidL = lerp(0.5, 0.25, gk); p.lidR = lerp(0.5, 0.35, gk); p.lidTilt = 0.1; }
-    // the heaves: sucked in, cheeks out, eyes popping
-    const h1 = bump(t - B.hurk1, 0.3), h2 = bump(t - B.hurk2, 0.32); p.sq = (p.sq || 1) - 0.18 * (h1 + h2); p.eye = (p.eye || 1) + 0.35 * (h1 + h2); if (t > B.hurk1 - 0.1) { p.lidL = p.lidR = 0.1 + 0.3 * (1 - h1 - h2); p.lean = 0.14 * (h1 + h2) + 0.04 * Math.sin(t * 7); p.armLA = lerp(0.42, -0.3, h1 + h2); }
-    // winding up (leaning back, gulping air), then the lurch
-    if (t > B.wind) { const w = sm((t - B.wind) / (B.spew - B.wind)); p.lean = lerp(p.lean, -0.22, w); p.eye = 1.25; p.lidL = p.lidR = 0; p.lidTilt = 0; }
-    if (t > B.spew) { const sk = t - B.spew, back = sm((t - B.spew - 0.38) / 0.15) * (1 - eo((t - B.spew2) / 0.08)); p.lean = lerp(lerp(-0.22, 0.14, eo(sk / 0.08)), -0.2, back); p.splay = 0.9 * eo(sk / 0.1) * (1 - 0.6 * back); p.eye = 1.5 - 0.3 * back; p.armA = 0.2; p.armLA = -0.9; }
+    if (t > B.glug - 0.1 && t < B.ahh + 0.3) { p.lidL = p.lidR = 0.92; p.lidTilt = 0; }
+    if (t > B.green) { const gk = sm((t - B.green) / 0.5); p.amb = [lerp(0.88, 0.72, gk), lerp(0.84, 0.95, gk), lerp(0.92, 0.66, gk)]; p.lidL = lerp(0.5, 0.25, gk); p.lidR = lerp(0.5, 0.35, gk); p.lidTilt = 0.1; }
+    const h1 = bump(t - B.hurk1, 0.28), h2 = bump(t - B.hurk2, 0.3); p.sq -= 0.16 * (h1 + h2); p.eye += 0.3 * (h1 + h2); if (t > B.hurk1 - 0.1) { p.lidL = p.lidR = 0.1 + 0.3 * (1 - h1 - h2); p.lean = 0.12 * (h1 + h2) + 0.05 * Math.sin(t * 7); }
+    if (t > B.spew - 0.18) { const sk = t - (B.spew - 0.18); p.sq = sk < 0.18 ? lerp(0.8, 0.62, ei(sk / 0.18)) : 1.35 - 0.15 * eo((sk - 0.18) / 0.2); p.splay = sk > 0.18 ? 0.9 : 0; p.eye = sk > 0.18 ? 1.45 : 1.2; p.lidL = p.lidR = 0; p.lidTilt = 0; p.lean = sk < 0.18 ? -0.18 : 0.12; }
     return p; }
   // the ned: far up the road to past the camera; s his size (1 = level with the squid)
   function nedAt(t) { const u = (t - B.ned) / NED_DUR; if (u <= 0 || u >= 1) return null; const z = 8 - 7.55 * u, s = 1 / z; return { x: 1060 + (XN - 1060) * s + Math.max(0, s - 0.8) * 420, y: 610 + 236 * s, s, z }; }
-  // the bouncer's boot, out the door and into his back
-  function boot(g, t) { const ext = t < B.kick - 0.07 ? 0 : t < B.kick ? eo((t - B.kick + 0.07) / 0.07) : t < B.fly + 0.12 ? 1 : 1 - sm((t - B.fly - 0.12) / 0.25); if (ext <= 0) return;
-    const hip = [256, 610], knee = [lerp(268, 318, ext), lerp(672, 618, ext)], foot = [lerp(266, 352, ext), lerp(690, 634, ext)];
-    vol(g, tube([hip, knee, foot], 46, 34, 44), '#23252d', { sh: '#121318', hl: '#33363f', rim: 'rgba(255,160,80,0.75)', k: 12 }); vol(g, tube([[foot[0] - 14, foot[1] - 2], [foot[0] - 2, foot[1] - 4]], 30, 28), '#f0eee6', { sh: '#bdbab0', k: 5, lw: 3 });
-    g.save(); g.translate(foot[0], foot[1]); g.rotate(-0.25 * ext); g.scale(1.3, 1.3); vol(g, path(P => { P.moveTo(-12, -20); P.lineTo(18, -22); P.quadraticCurveTo(52, -20, 56, 2); P.quadraticCurveTo(56, 12, 44, 12); P.lineTo(-14, 12); P.closePath(); }), '#16161b', { sh: '#08080b', hl: '#3a3b44', k: 8 });
-    line(g, 3, c => { c.moveTo(-14, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(36, -12, 10, 3.5, -0.2, 0, TAU); g.fill(); g.restore(); }
-  // his gob: cheeks out and lips clamped in the heaves, wide open for the spew (drawn on him, in his picture's coordinates)
-  function gob(g, t, Wh, h, P) { const h1 = bump(t - B.hurk1, 0.3), h2 = bump(t - B.hurk2, 0.32), wd = t > B.wind && t < B.spew ? sm((t - B.wind) / 0.12) : t > B.spew + 0.4 && t < B.spew2 ? sm((t - B.spew - 0.4) / 0.1) : 0, b = Math.max(h1, h2 * 1.15, wd * 1.25);
-    const op = t > B.spew2 ? eo((t - B.spew2) / 0.05) : t > B.spew ? eo((t - B.spew) / 0.05) * (1 - sm((t - B.spew - 0.36) / 0.06)) : 0; if (b < 0.02 && op <= 0) return;
-    const m = Squid.point([151, 198], Wh.x, Wh.y, h, P), a = Squid.headAngle(P), k = h / 401, am = P.amb || [1, 1, 1], col = (r, gg, bb) => `rgb(${Math.round(r * am[0])},${Math.round(gg * am[1])},${Math.round(bb * am[2])})`; g.save(); g.translate(m[0], m[1]); g.rotate(a); g.scale(k, k);
-    if (op < 0.3) { const P2 = path(Q => { Q.moveTo(-58 * b - 14, -6); Q.bezierCurveTo(-64 * b - 14, 30 + 26 * b, 64 * b + 14, 30 + 26 * b, 58 * b + 14, -6); Q.quadraticCurveTo(0, 6, -58 * b - 14, -6); Q.closePath(); });
-      g.fillStyle = col(236, 230, 220); g.fill(P2); g.save(); g.clip(P2); g.fillStyle = col(196, 188, 178); g.beginPath(); g.ellipse(0, 34 + 30 * b, 90 * b + 20, 24, 0, 0, TAU); g.fill(); g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(-26 * b, 6 + 6 * b, 16 * b + 3, 6 * b + 2, -0.3, 0, TAU); g.fill(); g.restore();
-      line(g, 3, c => { c.moveTo(-58 * b - 14, -2); c.bezierCurveTo(-64 * b - 14, 30 + 26 * b, 64 * b + 14, 30 + 26 * b, 58 * b + 14, -2); }, 'rgba(21,18,26,0.85)'); vol(g, path(Q => Q.ellipse(0, 12 + 8 * b, 7, 5, 0, 0, TAU)), '#5a2830', { lw: 2.5 }); }
-    if (op > 0) { const mo = path(Q => Q.ellipse(0, 12, 38 * op, 34 * op, 0, 0, TAU)); vol(g, mo, '#3a0d16', { lw: 5 }); g.save(); g.clip(mo); g.fillStyle = '#0b0a12'; g.beginPath(); g.ellipse(0, 20, 44, 34, 0, 0, TAU); g.fill(); g.restore(); }
-    g.restore(); }
-  // the spew: a solid rope of ink pouring out his gob, in perspective (it swells as it comes at us). The first gush arcs
-  // out and down past the camera so you see it pour; the second comes straight down the lens.
-  function gush(g, W, H, t, m, t0, dur, X, Y, Z) { const sk = t - t0; if (sk < 0) return; const S = [];
-    for (let i = 0; i < 60; i++) { const te = i * 0.0075; if (te > dur) break; const tau = sk - te; if (tau < 0) continue; const z = Z(tau); if (z < 0.12) continue;
-      const wob = Math.sin(te * 70) * 0.012 + Math.sin(te * 23) * 0.01; S.push([W / 2 + (m[0] - W / 2 + X(tau, te) * H + wob * H) / z, H / 2 + (m[1] - H / 2 + Y(tau, te) * H) / z, H * 0.034 / z * (0.8 + 0.3 * Math.sin(te * 130)) * Math.min(1, 0.4 + tau * 6), z]); }
-    if (!S.length) return; g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.lineCap = 'round'; g.lineJoin = 'round';
-    [[1.12, '#050409'], [1, '#14111f']].forEach(([wm, col]) => { g.strokeStyle = col; g.fillStyle = col; for (let i = 0; i < S.length; i++) { const a = S[i]; g.beginPath(); g.arc(a[0], a[1], a[2] * wm, 0, TAU); g.fill(); if (i) { const b = S[i - 1]; g.beginPath(); g.moveTo(b[0], b[1]); g.lineTo(a[0], a[1]); g.lineWidth = (a[2] + b[2]) * wm; g.stroke(); } } });
-    g.strokeStyle = 'rgba(170,160,225,0.45)'; for (let i = 1; i < S.length; i++) { const a = S[i], b = S[i - 1]; g.beginPath(); g.moveTo(b[0] - b[2] * 0.35, b[1] - b[2] * 0.5); g.lineTo(a[0] - a[2] * 0.35, a[1] - a[2] * 0.5); g.lineWidth = Math.max(1.5, (a[2] + b[2]) * 0.14); g.stroke(); }
-    // chunks and spray flung off it
-    const r = rng(21 + (t0 * 10 | 0)); g.fillStyle = '#14111f'; for (let i = 0; i < 50; i++) { const te = r() * dur, tau = sk - te, z = Z(tau); if (tau < 0 || z < 0.15) { r(); r(); r(); continue; } const an = r() * TAU, sp = 0.05 + r() * 0.12, rad = H * (0.004 + r() * 0.008) / z;
-      g.beginPath(); g.ellipse(W / 2 + (m[0] - W / 2 + (X(tau, te) + Math.cos(an) * sp * tau * 4) * H) / z, H / 2 + (m[1] - H / 2 + (Y(tau, te) + Math.sin(an) * sp * tau * 3) * H) / z, rad * 1.3, rad, an, 0, TAU); g.fill(); }
-    g.restore(); }
-  function spew(g, W, H, t, m) { if (!m) return;
-    gush(g, W, H, t, m, B.spew, 0.36, (tau, te) => 0.3 * tau + 0.04 * Math.sin(te * 9), tau => -0.12 * tau + 1.3 * tau * tau, tau => 1 - 2.4 * tau);
-    gush(g, W, H, t, m, B.spew2, 0.3, (tau, te) => 0.02 * Math.sin(te * 11), tau => 0.1 * tau, tau => 1 - 3.5 * tau); }
+  // the bouncer: two big hands shoving him out, then they let go, the boot draws back and comes through
+  const SLV = { sh: '#121318', hl: '#33363f', rim: 'rgba(255,160,80,0.75)' };
+  function bouncer(g, t, Wh) { const hk = key(t, [[B.push - 0.1, 0], [B.push + 0.05, 1], [B.shove, 1], [B.shove + 0.14, 0]]);
+    if (hk > 0.01) { const sx = Wh.cx - 0.3 * Wh.h; [[592, -0.06], [676, 0.04]].forEach(([yy, d], i) => { const hand = [lerp(262, sx, hk) + 4 * Math.sin(t * 9 + i), yy + d * 100 + 3 * Math.sin(t * 11 + i * 2)], elbow = [lerp(255, (262 + hand[0]) / 2, hk), yy + 18];
+      vol(g, tube([[250, yy - 4], elbow, [hand[0] - 14, hand[1]]], 40, 32, 38), '#23252d', SLV); vol(g, tube([[hand[0] - 22, hand[1]], [hand[0] - 12, hand[1]]], 34, 34), '#f0eee6', { sh: '#bdbab0', k: 5, lw: 3 });
+      vol(g, path(P => { P.moveTo(hand[0] - 10, hand[1] - 20); P.quadraticCurveTo(hand[0] + 14, hand[1] - 24, hand[0] + 18, hand[1] - 4); P.quadraticCurveTo(hand[0] + 20, hand[1] + 18, hand[0] - 10, hand[1] + 18); P.closePath(); }), '#f0b99a', { sh: '#c48870', k: 8, lw: 3.5 }); }); }
+    // the boot: draws back (knee up), then through his back fast but eased, follows through, holds, slides back in
+    const kb = t < B.cock ? null : t < B.kick - 0.1 ? -0.3 * sm((t - B.cock) / (B.kick - 0.1 - B.cock)) : t < B.kick ? lerp(-0.3, 1, ei((t - B.kick + 0.1) / 0.1)) : t < B.kick + 0.08 ? 1 + 0.08 * Math.sin(Math.PI * (t - B.kick) / 0.08) : t < B.kick + 0.3 ? 1 : 1 - sm((t - B.kick - 0.3) / 0.4);
+    if (kb == null || (t > B.kick && kb <= 0.02)) return; const e = kb, hip = [252, 598], knee = [lerp(262, 300, e) + (e < 0 ? e * 20 : 0), lerp(648, 612, e) + (e < 0 ? e * 60 : 0)], foot = [lerp(262, 312, e) + (e < 0 ? e * 50 : 0), lerp(676, 640, e) + (e < 0 ? e * 40 : 0)];
+    vol(g, tube([hip, knee, foot], 46, 34, 44), '#23252d', Object.assign({ k: 12 }, SLV)); vol(g, tube([[foot[0] - 14, foot[1] - 2], [foot[0] - 2, foot[1] - 4]], 30, 28), '#f0eee6', { sh: '#bdbab0', k: 5, lw: 3 });
+    g.save(); g.translate(foot[0], foot[1]); g.rotate(-0.25 * cl(e)); g.scale(1.3, 1.3); vol(g, path(P => { P.moveTo(-12, -20); P.lineTo(18, -22); P.quadraticCurveTo(52, -20, 56, 2); P.quadraticCurveTo(56, 12, 44, 12); P.lineTo(-14, 12); P.closePath(); }), '#16161b', { sh: '#08080b', hl: '#3a3b44', k: 8 });
+    line(g, 3, c => { c.moveTo(-14, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(36, -12, 10, 3.5, -0.2, 0, TAU); g.fill(); g.restore();
+    if (t > B.kick - 0.04 && t < B.kick + 0.12) { const k = (t - B.kick + 0.04) / 0.16; g.save(); g.translate(foot[0] + 70, foot[1] - 10); line(g, 4, c => { for (let i = 0; i < 6; i++) { const a = -0.9 + i * 0.36, r1 = 30 + 60 * k, r2 = r1 + 34; c.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); c.lineTo(Math.cos(a) * r2, Math.sin(a) * r2); } }, `rgba(246,239,224,${1 - k})`); g.restore(); } }
   // skid: a grubby streak where his face went along the road, scuffs and dust
-  function skid(g, t) { if (t < B.land) return; const k = t - B.land, f = cl(k / (B.stop - B.land)), hx = IMP + (STOP - IMP) * eo(f);
-    g.save(); g.fillStyle = 'rgba(16,12,22,0.5)'; g.beginPath(); g.moveTo(IMP - 10, HOME.y); g.quadraticCurveTo((IMP + hx) / 2, HOME.y - 12, hx, HOME.y - 5); g.lineTo(hx, HOME.y + 7); g.quadraticCurveTo((IMP + hx) / 2, HOME.y + 10, IMP - 10, HOME.y + 3); g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(16,12,22,0.4)'; g.lineWidth = 2; for (let i = 0; i < 6; i++) { const y = HOME.y - 8 + i * 3.5; g.beginPath(); g.moveTo(IMP + 10 + i * 9, y); g.lineTo(hx - 10 - i * 6, y + 1); g.stroke(); } g.restore();
-    const puff = (x, y, rr, a) => { const dg = g.createRadialGradient(x, y, 0, x, y, rr); dg.addColorStop(0, `rgba(150,138,128,${0.65 * a})`); dg.addColorStop(0.6, `rgba(120,110,104,${0.4 * a})`); dg.addColorStop(1, 'rgba(120,110,104,0)'); g.fillStyle = dg; g.beginPath(); g.arc(x, y, rr, 0, TAU); g.fill(); };
-    const r = rng(41); for (let i = 0; i < 16; i++) { const te = B.land + r() * (B.stop - B.land) * 0.9, dk = t - te; if (dk < 0 || dk > 0.7) continue; const ff = cl((te - B.land) / (B.stop - B.land)), x0 = IMP + (STOP - IMP) * eo(ff); puff(x0 - 20 - 40 * dk * r(), HOME.y - 8 - 60 * eo(dk / 0.5) * r(), (18 + 30 * r()) * (0.6 + dk * 1.4), 1 - dk / 0.7); }
-    [[B.land, IMP, 1.4], [B.stop, STOP - 40, 0.8]].forEach(([t0, x0, m]) => { const dk = t - t0; if (dk < 0 || dk > 0.6) return; for (let i = 0; i < 8; i++) { const sd = i % 2 ? 1 : -1; puff(x0 + sd * (20 + 150 * eo(dk / 0.5) * (0.3 + r() * 0.7)) * m, HOME.y - 10 - 50 * eo(dk / 0.4) * r() * m, (16 + 26 * r()) * m * (0.6 + dk), 1 - dk / 0.6); } });
-    if (k < 0.2) { g.save(); g.translate(IMP, HOME.y - 15); line(g, 4, c => { for (let i = 0; i < 7; i++) { const a = -Math.PI + i * Math.PI / 6, r1 = 60 + 90 * k / 0.2, r2 = r1 + 40; c.moveTo(Math.cos(a) * r1, Math.sin(a) * r1 * 0.7); c.lineTo(Math.cos(a) * r2, Math.sin(a) * r2 * 0.7); } }, '#f6efe0'); g.restore(); } }
+  function skid(g, t) { if (t < B.land) return; const k = t - B.land, hx = scrapeX(t);
+    g.save(); g.fillStyle = 'rgba(16,12,22,0.5)'; g.beginPath(); g.moveTo(IMP - 10, ROAD); g.quadraticCurveTo((IMP + hx) / 2, ROAD - 12, hx, ROAD - 5); g.lineTo(hx, ROAD + 7); g.quadraticCurveTo((IMP + hx) / 2, ROAD + 10, IMP - 10, ROAD + 3); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(16,12,22,0.4)'; g.lineWidth = 2; for (let i = 0; i < 6; i++) { const y = ROAD - 8 + i * 3.5; g.beginPath(); g.moveTo(IMP + 10 + i * 9, y); g.lineTo(Math.max(IMP + 10 + i * 9, hx - 10 - i * 6), y + 1); g.stroke(); } g.restore();
+    const puff = (x, y, rr, a) => { if (a <= 0) return; const dg = g.createRadialGradient(x, y, 0, x, y, rr); dg.addColorStop(0, `rgba(150,138,128,${0.65 * a})`); dg.addColorStop(0.6, `rgba(120,110,104,${0.4 * a})`); dg.addColorStop(1, 'rgba(120,110,104,0)'); g.fillStyle = dg; g.beginPath(); g.arc(x, y, rr, 0, TAU); g.fill(); };
+    const r = rng(41); for (let i = 0; i < 18; i++) { const te = B.land + r() * TS * 0.9, dk = t - te, a = r(), b2 = r(), c2 = r(); if (dk < 0 || dk > 0.8) continue; const x0 = scrapeX(te); puff(x0 - 20 - 50 * dk * a, ROAD - 8 - 60 * eo(dk / 0.5) * b2, (18 + 30 * c2) * (0.6 + dk * 1.4), (1 - dk / 0.8) * cl(dk / 0.05)); }
+    [[B.land, IMP, 1.4], [B.flop + 0.14, STOP - 140, 0.8]].forEach(([t0, x0, m]) => { const dk = t - t0; if (dk < 0 || dk > 0.7) return; const rr = rng(53 + (m * 10 | 0)); for (let i = 0; i < 8; i++) { const sd = i % 2 ? 1 : -1, a = rr(), b2 = rr(), c2 = rr(); puff(x0 + sd * (20 + 150 * eo(dk / 0.5) * (0.3 + a * 0.7)) * m, ROAD - 10 - 50 * eo(dk / 0.4) * b2 * m, (16 + 26 * c2) * m * (0.6 + dk), (1 - dk / 0.7) * cl(dk / 0.04)); } }); }
 
   function useLabel(src) { if (!src || typeof src !== 'string') return null; if (LBL.src !== src) { LBL = { src, img: null }; BOT = null; bmp(src).then(b => { if (LBL.src === src) { LBL.img = b; BOT = null; } }).catch(() => {}); } return LBL.img; }
   function swally(g, t, W, H, o = {}) { if (!plate) return false; const name = o.name || 'PatterSquid', P = pose(t), Wh = where(t), h = Wh.h; useLabel(o.label);
@@ -308,43 +301,46 @@ const IntroScenes = (() => {
     if (t < B.splat + 0.6) {
     g.save(); const k = camTo(g, W, H, Wh.cam); g.drawImage(soft || plate, 0, 0, PW, PH);
     g.save(); g.globalCompositeOperation = 'screen'; [[757, 178, 150], [1142, 352, 90], [1043, 458, 55]].forEach(([x, y, r], i) => glow(g, x, y, r, 'rgba(255,170,80,A)', 0.3 + 0.05 * Math.sin(t * 7 + i * 2))); glow(g, 1060, 112, 130, 'rgba(190,210,255,A)', 0.2); g.restore();
-    // the pub: the door bangs open, he comes out backwards, the boot, the door slams
-    const open = t < B.push - 0.05 ? 0 : t < B.stop + 0.05 ? sm((t - B.push + 0.05) / 0.06) : 1 - sm((t - B.stop - 0.05) / 0.06); pub(g, t, open, 0); boot(g, t);
+    // the pub: the door opens, he is shoved out, the boot, then the door slams
+    const open = t < B.open ? 0 : t < B.stop ? sm((t - B.open) / 0.12) : 1 - sm((t - B.stop) / 0.07); pub(g, t, open, 0);
     skid(g, t);
     const N = nedAt(t), drawNed = () => { if (!N) return; g.save(); g.translate(N.x, N.y); g.scale(N.s, N.s); ned(g, { ph: t * 13, sway: 0.06 * Math.sin(t * 6.5) }); g.restore(); };
     if (N && N.s < 1) drawNed();
     // his shadow, a puddle under him once soaked
-    g.save(); g.fillStyle = 'rgba(6,4,12,0.6)'; const gy = t < B.fly ? 772 : HOME.y, air = Math.max(0, gy - 0.5 * h - Wh.cy - 25); g.beginPath(); g.ellipse(Wh.cx + 10, gy + 4, h * 0.38 * (1 - 0.6 * cl(air / 220)), h * 0.06, 0, 0, TAU); g.fill();
-    if (t > B.splash) { const pk = sm((t - B.splash - 0.1) / 1.2); g.fillStyle = 'rgba(110,150,190,0.5)'; g.beginPath(); g.ellipse(Wh.x + 6, HOME.y + 2, h * 0.42 * pk + 0.1, h * 0.035 * pk + 0.1, 0, 0, TAU); g.fill(); } g.restore();
-    P.postArm = (gg) => { const hd = Squid.hand(P); gg.save(); gg.translate(hd.x, hd.y); const ba = key(t, [[0, 0.1], [B.lift, 0.1], [B.glug, -2.25], [B.down - 0.15, -2.45], [B.ahh + 0.1, 0.15]]) + (t < B.land ? Math.sin(t * 13) * 0.6 : 0); gg.rotate(ba); gg.drawImage(bottle(), -26, -96, 52, 144); gg.restore(); };
+    g.save(); g.fillStyle = 'rgba(6,4,12,0.6)'; const gy = t < B.fly ? 772 : ROAD, air = Math.max(0, gy - 0.5 * h - Wh.cy - 25); g.beginPath(); g.ellipse(Wh.cx + 10, gy + 4, h * 0.38 * (1 - 0.6 * cl(air / 220)), h * 0.06, 0, 0, TAU); g.fill();
+    if (t > B.splash) { const pk = sm((t - B.splash - 0.1) / 1.2); g.fillStyle = 'rgba(110,150,190,0.5)'; g.beginPath(); g.ellipse(Wh.x + 6, ROAD + 2, h * 0.42 * pk + 0.1, h * 0.035 * pk + 0.1, 0, 0, TAU); g.fill(); } g.restore();
+    P.postArm = (gg) => { const hd = Squid.hand(P); gg.save(); gg.translate(hd.x, hd.y); const ba = key(t, [[0, 0.1], [B.lift, 0.1], [B.glug, -2.25], [B.down - 0.15, -2.45], [B.ahh + 0.1, 0.15]]) + key(t, [[B.push, 0], [B.push + 0.2, 0.4], [L0(), 0.4], [L0() + 0.1, 0]]) * Math.sin(t * 8); gg.rotate(ba); gg.drawImage(bottle(), -26, -96, 52, 144); gg.restore(); };
     P.postArmL = (gg) => { if (!(P.finger > 0.3)) return; const hd = Squid.hand(P, -1); gg.save(); gg.translate(hd.tip[0], hd.tip[1]); gg.rotate(Math.atan2(hd.tip[1] - hd.y, hd.tip[0] - hd.x) + Math.PI / 2); const sc = 1.35 * sm((P.finger - 0.3) / 0.3); gg.scale(sc, sc);
       flat(gg, Q => Q.roundRect(-13, -10, 26, 24, 8), '#ece6db', '#bfb6a8', 3, 3); flat(gg, Q => Q.roundRect(-4.5, -40, 9, 34, 4.5), '#ece6db', '#bfb6a8', 2, 3); OL(gg, 2); gg.beginPath(); gg.moveTo(-6, -8); gg.lineTo(-6, 0); gg.moveTo(6, -8); gg.lineTo(6, 0); gg.stroke(); gg.restore(); };
-    if (t > B.push - 0.02 && t < B.splat + 0.1) { g.save();
-      // squash and stretch: along the way he is moving or being hit, keeping his bulk; then his lurch at the camera
+    if (t > B.push - 0.05 && t < B.splat + 0.1) { g.save();
       if (Wh.ss && Math.abs(Wh.ss.s - 1) > 0.002) { const { ang, s, px, py } = Wh.ss; g.translate(px, py); g.rotate(ang); g.scale(s, Math.pow(s, -0.7)); g.rotate(-ang); g.translate(-px, -py); }
-      if (Wh.zoom !== 1) { g.translate(Wh.x, Wh.y); g.scale(Wh.zoom, Wh.zoom); g.translate(-Wh.x, -Wh.y); }
       squidComic(g, Wh.x, Wh.y, h, P, k);
       const top = Squid.point([151, 40], Wh.x, Wh.y, h, P), ha = Squid.headAngle(P), cw = h * 0.5;
       if (t > B.up - 0.05 && t < B.spew) { [[110, 178], [192, 178]].forEach(pt => { const c = Squid.point(pt, Wh.x, Wh.y, h, P); g.save(); g.globalAlpha = 0.3 * (1 - (P.wet || 0) * 0.5); g.fillStyle = '#ff5a6e'; g.beginPath(); g.ellipse(c[0], c[1], h * 0.06, h * 0.03, 0, 0, TAU); g.fill(); g.restore(); }); }
-      gob(g, t, Wh, h, P);
       if (!(t > B.land && t < B.up + 0.05)) cap(g, top[0], top[1], cw, ha - 0.22 + 0.25 * bump(t - B.up - 0.05, 0.25) + 0.3 * bump(t - B.splash, 0.3), P.wet);
       if (P.wet > 0 && t < B.spew) { const r = rng(9); for (let i = 0; i < 14; i++) { const x0 = (r() - 0.5) * h * 0.7, y0 = -h * (0.1 + r() * 0.5), per = 0.4 + r() * 0.5, ph = ((t - B.splash) / per + r()) % 1; g.globalAlpha = 1 - ph; flat(g, Q => Q.ellipse(Wh.x + x0, Wh.y + y0 + ph * h * 0.6, 4, 6, 0, 0, TAU), '#cfe8ff', null, 0, 1.5); } g.globalAlpha = 1; }
-      if (t > B.spew) { const m = Squid.point([151, 210], Wh.x, Wh.y, h, P), M = g.getTransform(); mouthS = [M.a * m[0] + M.c * m[1] + M.e, M.b * m[0] + M.d * m[1] + M.f]; }
+      if (t > B.spew) { const m = Squid.point('mouth', Wh.x, Wh.y, h, P), M = g.getTransform(); mouthS = [M.a * m[0] + M.c * m[1] + M.e, M.b * m[0] + M.d * m[1] + M.f]; }
       g.restore();
       // the cap knocked off when his face hits the road, spinning up and landing back on his heid as he gets up
-      if (t > B.land && t < B.up + 0.05) { const capAt = tt => { const W2 = where(tt), P2 = pose(tt), q = Squid.point([151, 40], W2.x, W2.y, h, P2); return [q[0], q[1], Squid.headAngle(P2) - 0.22]; };
-        const a0 = capAt(B.land - 0.001); a0[1] = Math.min(a0[1], HOME.y - 45); const a1 = capAt(B.up + 0.05), f = (t - B.land) / (B.up + 0.05 - B.land); cap(g, lerp(a0[0], a1[0], f), lerp(a0[1], a1[1], f) - Math.sin(Math.PI * f) * 340, cw, a1[2] + (1 - f) * 2 * TAU + (1 - f) * (a0[2] - a1[2]), false); } }
+      if (t > B.land && t < B.up + 0.05) { const capAt = tt => { const W2 = where(tt), P2 = pose(tt), q = Squid.point([151, 40], W2.x, W2.y, W2.h, P2); return [q[0], q[1], Squid.headAngle(P2) - 0.22]; };
+        const a0 = capAt(B.land - 0.001); a0[1] = Math.min(a0[1], ROAD - 45); const a1 = capAt(B.up + 0.05), f = (t - B.land) / (B.up + 0.05 - B.land), fe = sm(f); cap(g, lerp(a0[0], a1[0], fe), lerp(a0[1], a1[1], f) - Math.sin(Math.PI * f) * 360, cw, a1[2] + (1 - fe) * 2 * TAU + (1 - fe) * (a0[2] - a1[2]), false); } }
+    // the hands and the boot come out the door in front of him
+    bouncer(g, t, Wh);
     if (N && N.s >= 1) drawNed();
     splash(g, B.splash, t, PUD.x, PUD.y, 0.8);
     g.restore();
     // vignette, grain
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); const v = g.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, H); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,10,0.5)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
     const rr = rng(1 + Math.floor(t * 24)); g.globalAlpha = 0.035; for (let i = 0; i < 500; i++) { g.fillStyle = rr() < 0.5 ? '#000' : '#fff'; g.fillRect(rr() * W, rr() * H, 2, 2); } g.restore();
-    spew(g, W, H, t, mouthS);
+    // the spew: a jet of ink blobs out of his gub at the lens
+    if (mouthS && t < B.splat + 0.12) { const r = rng(5), sk = t - B.spew; g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0a12'; g.strokeStyle = 'rgba(160,150,200,0.35)'; g.lineWidth = Math.max(1, H / 400);
+      for (let i = 0; i < 50; i++) { const t0 = r() * 0.16, life = 0.16 + r() * 0.1, f = (sk - t0) / life, tx = W * (0.5 + (r() - 0.5) * 0.95), ty = H * (0.5 + (r() - 0.5) * 0.85), rad = H * (0.006 + 0.004 * r()) * Math.pow(32, cl(f)); if (f <= 0 || f > 1.2) continue;
+        const ff = eo(cl(f)), x = lerp(mouthS[0], tx, ff), y = lerp(mouthS[1], ty, ff) - Math.sin(Math.PI * cl(f)) * H * 0.05; g.beginPath(); g.ellipse(x, y, rad * 1.1, rad, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.5, 3.6, 4.6); g.stroke(); } g.restore(); }
     }
     // SPLAT: the ink takes the whole screen, then the logo, the name, the episode and the cone
-    if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.52); titleCard(g, W, H, t, name, o.episode, o.kicker, o.line); }
+    if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); titleCard(g, W, H, t, name, o.episode, o.kicker, o.line); }
     if (t < 0.25) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(0,0,0,${1 - t / 0.25})`; g.fillRect(0, 0, W, H); g.restore(); }
     return true; }
+  const L0 = () => B.land;
   return { ready, swally, B, PW, PH, TITLE, useLabel };
 })();
