@@ -13,7 +13,7 @@
 const Intro = (() => {
   const STYLES = [['swally', 'Chucked oot']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
   const LINES = { swally: '', ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
-  const BASE = { swally: 10.9, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
+  const BASE = { swally: 11.05, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, f) => a + (b - a) * f, sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const eo = x => 1 - Math.pow(1 - cl(x, 0, 1), 3), eo5 = x => 1 - Math.pow(1 - cl(x, 0, 1), 5), ei = x => Math.pow(cl(x, 0, 1), 2), eio = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const spring = (k, amp, w, d) => k < 0 ? 0 : amp * Math.exp(-k * d) * Math.cos(k * w);
