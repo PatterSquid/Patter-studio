@@ -13,7 +13,7 @@
 const Intro = (() => {
   const STYLES = [['swally', 'Chucked oot']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
   const LINES = { swally: '', ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
-  const BASE = { swally: 11.05, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
+  const BASE = { swally: typeof IntroScenes !== 'undefined' ? IntroScenes.B.end : 10.6, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, f) => a + (b - a) * f, sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const eo = x => 1 - Math.pow(1 - cl(x, 0, 1), 3), eo5 = x => 1 - Math.pow(1 - cl(x, 0, 1), 5), ei = x => Math.pow(cl(x, 0, 1), 2), eio = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const spring = (k, amp, w, d) => k < 0 ? 0 : amp * Math.exp(-k * d) * Math.cos(k * w);
@@ -22,7 +22,7 @@ const Intro = (() => {
   const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); };
   const HEAVY = '"Arial Black", "Segoe UI Black", Impact, "Helvetica Neue", Arial, sans-serif', COND = 'Bahnschrift, "Arial Narrow", "Segoe UI", Arial, sans-serif', SERIF = 'Georgia, Cambria, "Times New Roman", serif', SCRIPT = '"Segoe Script", "Brush Script MT", "Comic Sans MS", cursive', MARK = '"Segoe Print", "Comic Sans MS", "Segoe Script", cursive';
 
-  function defaults() { return { style: 'swally', name: 'PatterSquid', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', sound: { on: true, vol: 0.9 } }; }
+  function defaults() { return { style: 'swally', name: 'PatterSquid', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', label: '', sound: { on: true, vol: 0.9 } }; }
   const lineOf = cfg => { const L = cfg.lines && typeof cfg.lines === 'object' ? cfg.lines[styleOf(cfg)] : null; return L == null ? LINES[styleOf(cfg)] : String(L); };
   const styleOf = cfg => STYLES.some(s => s[0] === cfg.style) ? cfg.style : 'swally';
   const nameOf = cfg => String(cfg.name == null || cfg.name === 'PATTERSQUID' ? 'PatterSquid' : cfg.name).slice(0, 24);
@@ -834,7 +834,7 @@ void main(){
   function draw(g, t, cfg, look, W, H) {
     q3live = !(look && (look.exporting || (look.cutEnv && !look.preview)));
     t = cl(t, 0, duration(cfg)); const L = layout(W, H), st = styleOf(cfg), tm = Math.min(t, mainLen(cfg)) + Math.max(0, t - mainLen(cfg)) * 0;
-    if (st === 'swally') { g.save(); let ok = false; try { ok = typeof IntroScenes !== 'undefined' && IntroScenes.swally(g, t, W, H, { name: nameOf(cfg), line: lineOf(cfg), episode: epOf(cfg), kicker: String(cfg.kicker || '').trim().slice(0, 40) }); } catch (e) { console.warn('intro', e); } if (!ok) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0d18'; g.fillRect(0, 0, W, H); } g.restore(); return; }
+    if (st === 'swally') { g.save(); let ok = false; try { ok = typeof IntroScenes !== 'undefined' && IntroScenes.swally(g, t, W, H, { name: nameOf(cfg), line: lineOf(cfg), episode: epOf(cfg), kicker: String(cfg.kicker || '').trim().slice(0, 40), label: typeof cfg.label === 'string' ? cfg.label : '' }); } catch (e) { console.warn('intro', e); } if (!ok) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0d18'; g.fillRect(0, 0, W, H); } g.restore(); return; }
     g.save(); try { if (st === 'battered') { if (!try3D(drawBattered3D, 'battered', g, t, L, cfg)) drawBattered(g, t, L, cfg); } else if (st === 'neon') { let ok = false; try { ok = drawNeon3D(g, t, L, cfg); } catch (e) { if (!drawNeon3D.warned) { drawNeon3D.warned = 1; console.warn('3D neon', e); } } if (!ok) drawNeon(g, t, L, cfg); } else if (st === 'epic') { if (!try3D(drawEpic3D, 'epic', g, t, L, cfg)) drawEpic(g, t, L, cfg); } else { if (!try3D(drawInk3D, 'ink', g, t, L, cfg)) drawInk(g, t, L, cfg); } } finally { g.restore(); }
     void tm; void look;
   }
@@ -849,36 +849,36 @@ void main(){
     const click = (t0, f, amp, pan) => { let lp = 0; add(t0, 0.06, pan == null ? 0.5 : pan, x => { lp += 0.35 * (nz() - lp); return (Math.sin(TAU * f * x) * 0.6 + lp * 0.6) * amp * Math.exp(-x * 70) * Math.min(1, x / 0.0015); }); };
     const pad = (t0, len, freqs, amp, att) => add(t0, len, 0.5, x => { const env = Math.min(1, x / att) * Math.min(1, (len - x) / 0.6); let v = 0; freqs.forEach((f, i) => { const ph = TAU * f * x + i; v += Math.sin(ph) + 0.35 * Math.sin(2 * ph + 0.3) + 0.15 * Math.sin(3 * ph); }); return v * amp * env / freqs.length; });
     if (st === 'swally') { const S = IntroScenes.B;
-      // the pub: a muffled thump of music through the wall, loud when the door flies open, a wee bit wind outside
+      // the street: a wee bit wind; the pub: music thumping through the wall, loud while the door is open
       { let a = 0, b = 0; add(0, D, 0.5, x => { a += 0.015 * (nz() - a); b += 0.0015 * (nz() - b); return (a * 0.6 + b * 2) * 0.25 * Math.min(1, x / 0.4); }); }
-      const beat = 60 / 124; for (let i = 0; i * beat < S.splash + 0.4; i++) { const t0 = i * beat, op = t0 > S.open && t0 < S.splash + 0.3, v = (op ? 0.55 : 0.22) * (t0 > S.splash ? 0.5 : 1); add(t0, 0.25, 0.3, x => Math.sin(TAU * (55 + 60 * Math.exp(-x * 30)) * x) * v * Math.exp(-x * 9)); if (op && i % 2) add(t0, 0.12, 0.3, x => nz() * 0.06 * Math.exp(-x * 30)); if (op) add(t0 + beat / 2, 0.3, 0.32, x => Math.sin(TAU * [220, 247, 196, 262][i % 4] * x) * 0.05 * Math.exp(-x * 6)); }
-      add(S.open, 0.3, 0.3, x => (nz() * 0.6 + Math.sin(TAU * 90 * x)) * 0.6 * Math.exp(-x * 14)); // door bangs open
-      swish(S.throw, S.land - S.throw, 300, 1800, 0.35, 0.4);
-      add(S.land, 0.4, 0.55, x => { const ph = TAU * (45 * x + 50 * (1 - Math.exp(-x * 8)) / 8); return Math.sin(ph) * 0.9 * Math.exp(-x * 9) + nz() * 0.3 * Math.exp(-x * 60); }); // splat on the road
-      add(S.land + 0.05, 0.15, 0.6, x => (Math.sin(TAU * 2900 * x) * 0.4 + Math.sin(TAU * 4100 * x) * 0.2) * Math.exp(-x * 30)); // the bottle clinks but survives
-      // gruff shout, the squid's raspberry back
-      add(S.land + 0.05, 0.55, 0.35, x => { const f = 110 + 20 * Math.sin(TAU * 3 * x); let v = 0; [1, 2, 3, 4, 6].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.12) * Math.sin(Math.PI * x / 0.55) * (0.6 + 0.4 * Math.abs(Math.sin(TAU * 7 * x))); });
-      add(S.maw, 0.45, 0.6, x => { const f = 260 - 80 * x; let v = 0; [1, 2, 3].forEach(hh => { v += Math.sin(TAU * f * hh * x + 3 * Math.sin(TAU * 31 * x)) / hh; }); return (v * 0.3 + nz() * 0.2) * Math.sin(Math.PI * x / 0.45); });
-      // the bike: freewheel ticking closer, the splash, the whoosh past, a cackle
-      { const L = S.splash - S.ned + 0.2; add(S.ned, L, 0.4, x => { const u = x / L, tick = Math.pow(Math.max(0, Math.sin(TAU * (12 + 14 * u) * x)), 40); return tick * Math.sin(TAU * 3200 * x) * 0.4 * u * u; }); }
-      add(S.ned + 0.5, 0.6, 0.45, x => (Math.sin(TAU * 2400 * x) * 0.5 + Math.sin(TAU * 3570 * x) * 0.3) * Math.exp(-x * 7) * 0.25);
-      { let a = 0; add(S.splash - 0.02, 0.9, 0.55, x => { a += 0.45 * (nz() - a); return (a * 1.1 + nz() * 0.3 * Math.exp(-x * 20)) * Math.min(1, x / 0.01) * Math.exp(-x * 4.5); }); }
+      const beat = 60 / 124; for (let i = 0; i * beat < S.splash + 0.5; i++) { const t0 = i * beat, op = t0 > S.push - 0.05 && t0 < S.stop + 0.05, v = (op ? 0.55 : 0.2) * (t0 > S.splash ? 0.6 : 1); add(t0, 0.25, 0.25, x => Math.sin(TAU * (55 + 60 * Math.exp(-x * 30)) * x) * v * Math.exp(-x * 9)); if (op && i % 2) add(t0, 0.12, 0.25, x => nz() * 0.06 * Math.exp(-x * 30)); if (op) add(t0 + beat / 2, 0.3, 0.27, x => Math.sin(TAU * [220, 247, 196, 262][i % 4] * x) * 0.05 * Math.exp(-x * 6)); }
+      add(S.push - 0.05, 0.3, 0.25, x => (nz() * 0.6 + Math.sin(TAU * 90 * x)) * 0.6 * Math.exp(-x * 14)); // the door bangs open
+      for (let k = 0; k < 3; k++) add(S.push + 0.04 + k * 0.06, 0.06, 0.3, x => (nz() * 0.4 + Math.sin(TAU * 140 * x)) * 0.4 * Math.exp(-x * 50)); // stumbling feet
+      add(S.kick, 0.3, 0.3, x => { const ph = TAU * (60 * x + 70 * (1 - Math.exp(-x * 20)) / 20); return Math.sin(ph) * 0.9 * Math.exp(-x * 14) + nz() * 0.4 * Math.exp(-x * 60); }); // the boot
+      swish(S.fly, S.land - S.fly, 300, 2200, 0.45, 0.45);
+      add(S.land, 0.5, 0.5, x => { const ph = TAU * (42 * x + 55 * (1 - Math.exp(-x * 8)) / 8); return Math.sin(ph) * 1.0 * Math.exp(-x * 8) + nz() * 0.45 * Math.exp(-x * 40); }); // face into the road
+      { let a = 0; add(S.land + 0.02, S.stop - S.land, 0.55, x => { a += 0.25 * (nz() - a); const p = x / (S.stop - S.land); return (a * 0.9 + nz() * 0.25) * (1 - p) * (0.7 + 0.3 * Math.sin(TAU * 35 * x)); }); } // scraping along it
+      add(S.stop, 0.25, 0.6, x => (nz() * 0.5 + Math.sin(TAU * 110 * x) * 0.6) * Math.exp(-x * 18)); // flop
+      add(S.stop + 0.05, 0.4, 0.2, x => (nz() * 0.6 + Math.sin(TAU * 70 * x) * 0.8) * 0.8 * Math.exp(-x * 12)); // the door slams
+      add(S.peel + 0.15, 0.3, 0.6, x => Math.sin(TAU * (180 + 500 * x) * x) * 0.18 * Math.sin(Math.PI * x / 0.3)); // boing up
+      add(S.up, 0.15, 0.6, x => (nz() * 0.3 + Math.sin(TAU * 120 * x) * 0.5) * Math.exp(-x * 30));
+      add(S.finger, 0.12, 0.4, x => Math.sin(TAU * 900 * x) * 0.12 * Math.exp(-x * 30));
+      // the bike: freewheel ticking closer, a bell, the splash, the whoosh past
+      { const L = S.splash - S.ned + 0.15; add(S.ned, L, 0.65, x => { const u = x / L, tick = Math.pow(Math.max(0, Math.sin(TAU * (12 + 14 * u) * x)), 40); return tick * Math.sin(TAU * 3200 * x) * 0.4 * u * u; }); }
+      { let a = 0; add(S.splash - 0.02, 0.9, 0.6, x => { a += 0.45 * (nz() - a); return (a * 1.1 + nz() * 0.3 * Math.exp(-x * 20)) * Math.min(1, x / 0.01) * Math.exp(-x * 4.5); }); }
       for (let k = 0; k < 10; k++) add(S.splash + 0.25 + k * 0.09, 0.07, 0.4 + (k % 4) * 0.12, x => Math.sin(TAU * (900 - 2600 * x) * x) * 0.1 * Math.exp(-x * 35));
-      swish(S.splash, 0.35, 400, 2500, 0.4, 0.2);
-      for (let k = 0; k < 4; k++) add(S.splash - 0.35 + k * 0.13, 0.11, 0.3, x => { const f = 320 + 20 * k; let v = 0; [1, 2, 3].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.25 + nz() * 0.15) * Math.sin(Math.PI * x / 0.11) * 0.7; });
-      // the bouncers laughing
-      for (let k = 0; k < 6; k++) add(S.splash + 0.3 + k * 0.16, 0.13, 0.2, x => { const f = 120 + 10 * (k % 2); let v = 0; [1, 2, 3, 4].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.2 + nz() * 0.12) * Math.sin(Math.PI * x / 0.13) * 0.6; });
-      // drips
-      for (let k = 0; k < 8; k++) add(S.splash + 0.5 + k * 0.17, 0.06, 0.4 + (k % 3) * 0.15, x => Math.sin(TAU * (1200 - 3000 * x) * x) * 0.06 * Math.exp(-x * 40));
-      // the cap off, then glug glug glug, ahh
+      swish(S.splash, 0.35, 400, 2500, 0.4, 0.85);
+      for (let k = 0; k < 8; k++) add(S.splash + 0.5 + k * 0.17, 0.06, 0.4 + (k % 3) * 0.15, x => Math.sin(TAU * (1200 - 3000 * x) * x) * 0.06 * Math.exp(-x * 40)); // drips
+      // the cap off, then glug glug glug
       add(S.lift + 0.15, 0.08, 0.6, x => (nz() * 0.5 + Math.sin(TAU * 1800 * x)) * 0.25 * Math.exp(-x * 60));
       for (let k = 0; k < 3; k++) { const t0 = S.glug + 0.08 + k * (S.down - S.glug) / 3; add(t0, 0.32, 0.55, x => { const f = 140 + 260 * Math.exp(-x * 9) + 40 * Math.sin(TAU * 22 * x); return Math.sin(TAU * f * x) * 0.5 * Math.exp(-x * 6) * Math.min(1, x / 0.01) + nz() * 0.06 * Math.exp(-x * 12); }); }
-      add(S.ahh, 0.5, 0.5, x => { const f = 180 - 60 * x; let v = 0; [1, 2, 3, 4].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.25 + nz() * 0.15) * Math.sin(Math.PI * x / 0.5); });
-      // the belly rumbles, hurk, hurk, BLEURGH, splat on the lens
+      // the belly rumbles, heave, heave, a big gulp of air, then BLEURGH and the splat on the lens
       add(S.green, 0.8, 0.5, x => Math.sin(TAU * (70 + 20 * Math.sin(TAU * 5 * x)) * x) * 0.25 * Math.sin(Math.PI * x / 0.8));
-      [S.hurk1, S.hurk2].forEach((t0, i) => add(t0, 0.28, 0.5, x => { const f = 120 + 60 * Math.sin(Math.PI * x / 0.28); let v = 0; [1, 2, 3, 5].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.25) * Math.sin(Math.PI * x / 0.28) * (0.8 + i * 0.2); }));
-      { let a = 0; add(S.spew - 0.02, 0.45, 0.5, x => { a += 0.3 * (nz() - a); const f = 95 + 40 * Math.sin(TAU * 11 * x); return (a * 1.2 + Math.sin(TAU * f * x) * 0.5) * Math.min(1, x / 0.02) * Math.exp(-x * 2.5); }); }
+      [S.hurk1, S.hurk2].forEach((t0, i) => add(t0, 0.3, 0.5, x => { const f = 120 + 60 * Math.sin(Math.PI * x / 0.3); let v = 0; [1, 2, 3, 5].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.25) * Math.sin(Math.PI * x / 0.3) * (0.8 + i * 0.2); }));
+      { let a = 0; add(S.wind, S.spew - S.wind, 0.5, x => { a += 0.08 * (nz() - a); return a * 1.4 * (x / (S.spew - S.wind)); }); }
+      { let a = 0; add(S.spew - 0.01, 0.5, 0.5, x => { a += 0.3 * (nz() - a); const f = 85 + 40 * Math.sin(TAU * 11 * x); return (a * 1.3 + Math.sin(TAU * f * x) * 0.55) * Math.min(1, x / 0.015) * Math.exp(-x * 2.2); }); }
       boom(S.splat, 150, 45, 0.9, 0.9); { let a = 0; add(S.splat, 0.7, 0.5, x => { a += 0.5 * (nz() - a); return a * 0.8 * Math.exp(-x * 7); }); }
+      for (let k = 0; k < 8; k++) add(S.splat + 0.3 + k * 0.17, 0.08, 0.3 + (k % 3) * 0.2, x => Math.sin(TAU * (700 - 2000 * x) * x) * 0.1 * Math.exp(-x * 30));
       // the logo lands, the name stamps, the episode, the cone whistles down and bonks
       boom(S.logo, 110, 50, 0.6, 0.7); boom(S.name, 90, 50, 0.5, 0.5); if (epOf(cfg)) add(S.ep, 0.2, 0.5, x => (nz() * 0.4 + Math.sin(TAU * 200 * x) * 0.4) * Math.exp(-x * 25));
       add(S.cone, S.bonk - S.cone, 0.55, x => { const p = x / (S.bonk - S.cone); return Math.sin(TAU * (1500 * x - 450 * x * p)) * 0.1 * Math.sin(Math.PI * p); });
@@ -971,6 +971,10 @@ void main(){
       field('Wee label above the title (optional)', txt(cfg.kicker || '', v => { cfg.kicker = v.slice(0, 40); changed(); }, 'e.g. EPISODE 12', 'Label'))));
     const opts = [];
     if (st === 'neon') { const n = nameOf(cfg); opts.push(field('Which letter blows', sel(cfg.blow == null ? 'auto' : String(cfg.blow), [['auto', 'The Q (or the last letter)'], ['none', 'None, it all stays on'], ...[...n].map((c, i) => [String(i + 1), (i + 1) + ': ' + c])].filter(o => o[1].trim().slice(-1) !== ' '), v => { cfg.blow = v === 'auto' || v === 'none' ? v : +v; changed(); }, 'Letter that blows'))); }
+    if (st === 'swally') { const thumb = H('div', { className: 'hint' }); if (cfg.label) { const im = H('img', { src: cfg.label }); im.style.cssText = 'height:72px;border-radius:4px;display:block;margin:4px 0'; thumb.append(im); }
+      const pick = H('input', { type: 'file', accept: 'image/*' }); pick.style.display = 'none';
+      pick.addEventListener('change', () => { const f = pick.files && pick.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { const im = new Image(); im.onload = () => { const sc = Math.min(1, 360 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); cfg.label = c.toDataURL('image/jpeg', 0.88); redo(); }; im.src = fr.result; }; fr.readAsDataURL(f); });
+      opts.push(field('Bottle label', H('div', {}, thumb, pick, H('div', { className: 'btnrow' }, btn(cfg.label ? 'Change picture' : 'Use my own picture', () => pick.click()), cfg.label ? btn('Back to the Auld Patter label', () => { cfg.label = ''; redo(); }) : '')), 'Any picture you like goes on the front of his bottle (it fills the label, cropped to fit).')); }
     opts.push(field('Your logo', seg(cfg.logo !== false ? '1' : '0', [['1', 'Shown'], ['0', 'Left out']], v => { cfg.logo = v === '1'; redo(); })),
       field('Hold at the end (seconds)', num(cl(+cfg.hold || 0, 0, 10), v => { cfg.hold = Math.round(v * 10) / 10; changed(); }, 0, 10, 0.1, 'Hold'), 'Total ' + duration(cfg).toFixed(1) + ' s.'));
     root.append(card('Options', ...opts));
