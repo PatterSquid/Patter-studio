@@ -195,9 +195,16 @@ const IntroScenes = (() => {
       g.save(); g.translate(cx, H * (ep ? 0.66 : 0.72)); g.rotate(-0.03); g.scale(s, s); g.globalAlpha = cl(nk / 0.05); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(name, 8 * u, 12 * u); g.lineWidth = fs * 0.14; g.strokeStyle = '#08070c'; g.strokeText(name, 0, 0); g.fillStyle = '#f7f1e3'; g.fillText(name, 0, 0); g.restore(); }
     const ek = t - B.ep; if (ep && ek > 0) { let es = 68 * u; g.font = `400 ${es}px ${TALL}`; while (g.measureText(ep).width > W * 0.72) { es -= 2; g.font = `400 ${es}px ${TALL}`; }
-      g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(SPL(ek), SPL(ek)); g.globalAlpha = cl(ek / 0.03); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-      if (kick) { g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 1.3); g.font = `400 ${es}px ${TALL}`; }
-      g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(ep, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(ep, 0, 0); g.restore(); }
+      if (kick) { g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(SPL(ek), SPL(ek)); g.globalAlpha = cl(ek / 0.03); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 1.3); g.restore(); }
+      // the episode rains down a letter at a time, each landing with a squash and a wee bounce; one straggler turns up late,
+      // lands squint with a bonk, wobbles, and stays squint
+      g.save(); g.font = `400 ${es}px ${TALL}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; const chars = [...ep], wid = chars.map(c => g.measureText(c).width), tot = wid.reduce((a2, b2) => a2 + b2, 0);
+      const live = chars.map((c, i) => c.trim() ? i : -1).filter(i => i >= 0), strag = live.length > 3 ? live[Math.floor(live.length * 0.62)] : -1, base = H * 0.84 + es * 0.36; let x = cx - tot / 2;
+      chars.forEach((c, i) => { const w = wid[i], lx = x + w / 2; x += w; if (!c.trim()) return; const n = live.indexOf(i), d = B.epFall - B.logo + n * 0.045 + (i === strag ? 0.55 : 0) + (n % 3) * 0.012, lk = ek - d; if (lk <= 0) return;
+        const fall = 0.26, f = cl(lk / fall), y = f < 1 ? -(1 - f * f) * (base + es) : 0, kk = lk - fall, sq = kk > 0 ? 1 - 0.42 * Math.exp(-kk * 14) * Math.cos(kk * 30) : 1.1, hop = kk > 0 && kk < 0.2 ? Math.sin(Math.PI * kk / 0.2) * es * 0.14 * (i === strag ? 1.8 : 1) : 0;
+        const rot = f < 1 ? (1 - f) * ((n % 2 ? 1 : -1) * 0.8) : i === strag ? 0.32 + 0.22 * Math.exp(-kk * 5) * Math.sin(kk * 26) : 0.04 * Math.exp(-kk * 6) * Math.sin(kk * 24);
+        g.save(); g.translate(lx, base + y - hop); g.rotate(rot - 0.02); g.scale(1 / Math.sqrt(Math.max(0.3, sq)), sq); g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(c, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(c, 0, 0); g.restore(); });
+      g.restore(); }
     const lk = t - (ep ? B.ep + 0.3 : B.name + 0.35); if (line && lk > 0) { let ls = 38 * u; g.font = `700 ${ls}px ${BODY}`; while (g.measureText(line).width > W * 0.6) { ls -= 2; g.font = `700 ${ls}px ${BODY}`; } g.globalAlpha = cl(lk / 0.3); g.textAlign = 'center'; g.fillStyle = '#e9e2d2'; g.fillText(line, cx, H * (ep ? 0.94 : 0.86)); }
     g.restore(); }
 
@@ -214,7 +221,7 @@ const IntroScenes = (() => {
   B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
   B.flop = B.stop + 0.34; B.capRest = B.land + 0.75; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.reach = B.up + 0.12; B.grab = B.up + 0.5; B.capOn = B.up + 0.85; B.bout = B.up + 1.0; B.bin = B.up + 1.35; B.finger = B.up + 1.5; B.ned = B.finger + 0.1;
   B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.02; B.name = B.logo; B.ep = B.logo; B.cone = B.logo + 1.0; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.3;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.02; B.name = B.logo; B.ep = B.logo; B.epFall = B.logo + 0.4; B.cone = B.logo + 1.75; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.2;
   // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;

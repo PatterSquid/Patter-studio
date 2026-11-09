@@ -881,6 +881,7 @@ void main(){
       for (let k = 0; k < 8; k++) add(S.splat + 0.3 + k * 0.17, 0.08, 0.3 + (k % 3) * 0.2, x => Math.sin(TAU * (700 - 2000 * x) * x) * 0.1 * Math.exp(-x * 30));
       // the logo lands, the name stamps, the episode, the cone whistles down and bonks
       boom(S.logo, 110, 45, 0.7, 0.75); { let a = 0; add(S.logo, 0.3, 0.5, x => { a += 0.6 * (nz() - a); return a * 0.4 * Math.exp(-x * 12); }); } // logo, name and episode splat on together
+      if (epOf(cfg)) { const n = [...epOf(cfg)].filter(c => c.trim()).length, strag = n > 3 ? Math.floor(n * 0.62) : -1; for (let i = 0; i < n; i++) { const t0 = S.epFall + 0.26 + i * 0.045 + (i === strag ? 0.55 : 0) + (i % 3) * 0.012; if (i === strag) add(t0, 0.35, 0.6, x => Math.sin(TAU * (220 + 340 * Math.exp(-x * 6)) * x) * 0.25 * Math.exp(-x * 7)); else add(t0, 0.06, 0.3 + (i % 5) * 0.1, x => (Math.sin(TAU * (900 + 40 * i) * x) * 0.5 + nz() * 0.3) * 0.18 * Math.exp(-x * 60)); } } // the letters landing, the straggler's bonk
       add(S.cone, S.bonk - S.cone, 0.55, x => { const p = x / (S.bonk - S.cone); return Math.sin(TAU * (1500 * x - 450 * x * p)) * 0.1 * Math.sin(Math.PI * p); });
       add(S.bonk, 0.45, 0.5, x => (Math.sin(TAU * 520 * x) * 0.6 + Math.sin(TAU * 790 * x) * 0.35 + Math.sin(TAU * 1310 * x) * 0.15) * Math.exp(-x * 16) + nz() * 0.35 * Math.exp(-x * 110) + Math.sin(TAU * 140 * x) * 0.4 * Math.exp(-x * 20));
     } else if (st === 'ink') {
