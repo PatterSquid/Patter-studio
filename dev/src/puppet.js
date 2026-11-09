@@ -176,12 +176,21 @@ const Puppet = (() => {
     const sets = []; const walk = n => { if (!n.kids) return; if (n.group && /hand/i.test(n.name) && n.kids.some(k => /^thumbs? ?up$/i.test(k.name)) && !n.kids.some(k => /back fist/i.test(k.name))) sets.push(n); n.kids.forEach(walk); }; walk(rig.tree);
     for (const set of sets) {
       const th = set.kids.find(k => /^thumbs? ?up$/i.test(k.name)), L = rig.layers[th.li], b = rig.bm[th.li]; if (!L || !b) continue;
-      const mir = /^\+?r/i.test(set.name), w = b.width, h = b.height, c = new OffscreenCanvas(w, h), g = c.getContext('2d'); g.drawImage(b, 0, 0);
+      const mir = /^\+?r/i.test(set.name), w = b.width, h = b.height, c = new OffscreenCanvas(w, h), g = c.getContext('2d');
+      // the curled fingers squeezed in towards the knuckles (a tighter, chunkier fist)
+      const X0 = (mir ? 1 - 175 / 337 : 175 / 337) * w, sq = 0.8;
+      if (!mir) { g.drawImage(b, X0, 0, w - X0, h, X0, 0, w - X0, h); g.drawImage(b, 0, 0, X0, h, X0 - X0 * sq, 0, X0 * sq, h); }
+      else { g.drawImage(b, 0, 0, X0, h, 0, 0, X0, h); g.drawImage(b, X0, 0, w - X0, h, X0, 0, (w - X0) * sq, h); }
       const P = FIST_CUT.map(([x, y]) => [(mir ? 1 - x : x) * w, y * h]), k = w / 337;
       g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.moveTo(P[0][0], P[0][1]); P.forEach(q => g.lineTo(q[0], q[1])); g.lineTo(mir ? 0 : w, -1); g.lineTo(mir ? w : 0, -1); g.closePath(); g.fill();
       g.globalCompositeOperation = 'source-atop'; g.lineJoin = g.lineCap = 'round';
       g.filter = `blur(${7 * k}px)`; g.strokeStyle = 'rgba(150,70,30,0.42)'; g.lineWidth = 26 * k; g.beginPath(); P.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.stroke(); g.filter = 'none';
       g.strokeStyle = 'rgb(20,12,10)'; g.lineWidth = 15 * k; g.stroke();
+      // the fingers fold away from the light: their side of the knuckle row in shadow (a scallop round each knuckle)
+      const KN = [[152, 178, 26], [168, 236, 27], [188, 293, 26], [212, 345, 23]], X = x => (mir ? 337 - x : x) / 337 * w, Y = y => y / 413 * h;
+      g.filter = `blur(${2.5 * k}px)`; g.fillStyle = 'rgba(140,60,25,0.55)'; g.beginPath(); g.moveTo(X(-50), Y(KN[0][1] - 60));
+      KN.forEach(([x, y, r]) => { g.lineTo(X(x - r * 0.2), Y(y - r)); g.quadraticCurveTo(X(x - r * 1.25), Y(y), X(x - r * 0.2), Y(y + r)); });
+      g.lineTo(X(-50), Y(KN[KN.length - 1][1] + 60)); g.closePath(); g.fill(); g.filter = 'none';
       const li = rig.layers.length; rig.layers.push(Object.assign({}, L)); rig.bm.push(await createImageBitmap(c));
       set.kids.push({ name: 'back fist', li, vis: false, op: 255, made: true });
     }
