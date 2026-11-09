@@ -178,67 +178,27 @@ const IntroScenes = (() => {
     const rr = rng(seed + 3); g.lineCap = 'round';
     g.strokeStyle = 'rgba(235,235,255,0.35)'; g.lineWidth = Math.max(2, H / 180); for (let i = 0; i < 7; i++) { const x = W * (cx + (rr() - 0.5) * 0.7), y = H * (cy + (rr() - 0.5) * 0.6); g.beginPath(); g.arc(x, y, H * (0.03 + rr() * 0.05), 3.6, 4.5); g.stroke(); } g.restore(); }
 
-  // The title lands WITH the splat, as part of it: his logo, PatterSquid and the episode smack onto the lens all at once
-  // in wet cream ink, with spatters round them, then drips run down off the bottoms of the letters and slow to a stop.
-  // The cone drops onto the squid's heid in the logo once it has all settled.
-  const WM = '"Big Shoulders", "Bricolage Grotesque", Impact, sans-serif', SERIF = '"Instrument Serif", Georgia, serif', LBLF = '"Instrument Sans", "Bricolage Grotesque", sans-serif', CREAM = '#f2e9d6';
-  let TC = null; // the title layer, its drips and spatters, made once per size and wording
-  function titleLayer(W, H, name, ep, kick) { const key = [W, H, name, ep, kick, !!logo].join('|'); if (TC && TC.key === key) return TC; const u = H / 1080, r = rng(91);
-    // 1. the shapes in plain white: a splat rim for the logo, the name, the episode
-    const M = mk(W, H), g = M.getContext('2d'); g.fillStyle = '#fff';
-    let fs = 210 * u; g.font = `700 ${fs}px ${WM}`; let wm = g.measureText(name).width; const D = H * 0.25, gap = H * 0.045; if (D + gap + wm > W * 0.84) { fs *= (W * 0.84 - D - gap) / wm; g.font = `700 ${fs}px ${WM}`; wm = g.measureText(name).width; }
-    const yL = H * (ep ? 0.38 : 0.46), x0 = (W - (D + gap + wm)) / 2, lx = x0 + D / 2;
-    g.beginPath(); for (let i = 0; i <= 90; i++) { const a = i / 90 * TAU, rr = D * 0.57 * (1 + 0.07 * Math.sin(a * 5 + 1.3) + 0.04 * Math.sin(a * 9 + 0.4) + 0.03 * Math.sin(a * 17)); i ? g.lineTo(lx + Math.cos(a) * rr, yL + Math.sin(a) * rr) : g.moveTo(lx + Math.cos(a) * rr, yL + Math.sin(a) * rr); } g.closePath(); g.fill();
-    g.textBaseline = 'middle'; g.textAlign = 'left'; g.font = `700 ${fs}px ${WM}`; g.fillText(name, x0 + D + gap, yL + fs * 0.04);
-    let ey = 0, es = 0, ew = 0; if (ep) { ey = yL + D / 2 + H * (kick ? 0.17 : 0.13); es = 100 * u; g.font = `700 ${es}px ${WM}`; while (g.measureText(ep).width > W * 0.8) { es -= 2; g.font = `700 ${es}px ${WM}`; } ew = g.measureText(ep).width; g.textAlign = 'center'; g.fillText(ep, W / 2, ey); }
-    // 2. lumps along the edges, and a few fat spatters thrown off them
-    let im = g.getImageData(0, 0, W, H).data; const A0 = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? 0 : im[(Math.round(y) * W + Math.round(x)) * 4 + 3];
-    const bx0 = x0 - D * 0.2, bx1 = x0 + D + gap + wm + 20 * u, by0 = yL - D * 0.7, by1 = ep ? ey + es : yL + D * 0.7;
-    for (let i = 0; i < 2600; i++) { const x = lerp(bx0, bx1, r()), y = lerp(by0, by1, r()); if (A0(x, y) < 128) continue; const e = 9 * u, an = r() * TAU; if (A0(x + Math.cos(an) * e, y + Math.sin(an) * e) > 60) continue; const rr = (2.5 + r() * r() * 9) * u, o = r() * 6 * u; g.beginPath(); g.arc(x + Math.cos(an) * o, y + Math.sin(an) * o, rr, 0, TAU); g.fill(); if (r() < 0.06) { const d2 = (18 + r() * 40) * u; g.beginPath(); g.ellipse(x + Math.cos(an) * d2, y + Math.sin(an) * d2, rr * 0.9, rr * 0.7, an, 0, TAU); g.fill(); } }
-    // 3. a wobble through it, then melt it: soften and cut it sharp again, so it is all one wet blob
-    const Wc = mk(W, H), wg = Wc.getContext('2d'), st = Math.max(2, Math.round(2 * u)); for (let y = 0; y < H; y += st) wg.drawImage(M, 0, y, W, st, (Math.sin(y * 0.031) * 1.6 + Math.sin(y * 0.11 + 2) * 1.0) * u, y, W, st);
-    const Bc = mk(W, H), bg2 = Bc.getContext('2d'); bg2.filter = `blur(${(4.5 * u).toFixed(2)}px)`; bg2.drawImage(Wc, 0, 0); bg2.filter = 'none';
-    const id = bg2.getImageData(0, 0, W, H), d = id.data, N = W * H, A = new Uint8ClampedArray(N); for (let i = 0; i < N; i++) A[i] = Math.max(0, Math.min(255, (d[i * 4 + 3] - 112) * 7));
-    // 4. colour it like a wet splat: cream, a bright rim where the light catches the top left edges, darker underneath
-    const o = Math.max(2, Math.round(5 * u)), at = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? 0 : A[y * W + x], cr = [242, 233, 214];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x, a = A[i]; if (!a) { d[i * 4 + 3] = 0; continue; } const hl = Math.max(0, a - at(x - o, y - o)) / 255, shd = Math.max(0, a - at(x + o, y + o)) / 255, f = 1 - 0.3 * shd;
-      d[i * 4] = Math.min(255, cr[0] * f + 255 * 0.7 * hl); d[i * 4 + 1] = Math.min(255, cr[1] * f + 255 * 0.7 * hl); d[i * 4 + 2] = Math.min(255, cr[2] * f + 255 * 0.7 * hl); d[i * 4 + 3] = a; }
-    const c = mk(W, H), cg = c.getContext('2d'); cg.putImageData(id, 0, 0);
-    // his logo set into the splat, and the wee label (too small to melt) printed in the same cream
-    cg.save(); cg.beginPath(); cg.arc(lx, yL, D / 2, 0, TAU); cg.clip(); if (logo) cg.drawImage(logo, lx - D / 2, yL - D / 2, D, D); else { cg.fillStyle = '#16264a'; cg.fillRect(lx - D / 2, yL - D / 2, D, D); } cg.restore();
-    if (ep && kick) { cg.save(); cg.font = `700 ${26 * u}px ${LBLF}`; cg.letterSpacing = `${8 * u}px`; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillStyle = CREAM; cg.fillText(kick.toUpperCase(), W / 2, yL + D / 2 + H * 0.085); cg.restore(); }
-    // 5. where the drips come from: the bottoms of the splat (lowest ink in a column)
-    const drips = []; const scan = (xa, xb, ya, yb, n, len) => { for (let i = 0; i < n; i++) { const x = Math.round(lerp(xa, xb, (i + 0.15 + r() * 0.7) / n)); let yy = -1; for (let y = Math.min(H - 1, Math.round(yb)); y > ya; y--) if (at(x, y) > 160) { yy = y; break; } if (yy > 0 && r() < 0.8) drips.push({ x, y: yy - 3 * u, w: (5 + r() * 10) * u, L: len * (0.25 + r() * r() * 1.4), sp: 0.6 + r() * 1.6, d: r() * 0.5 }); } };
-    scan(x0 + D + gap, x0 + D + gap + wm, yL - fs * 0.6, yL + fs * 0.8, 26, ep ? H * 0.075 : H * 0.15); scan(lx - D * 0.5, lx + D * 0.5, yL, yL + D * 0.7, 6, H * 0.12); if (ep) scan(W / 2 - ew / 2, W / 2 + ew / 2, ey - 30 * u, ey + es * 0.8, 14, H * 0.1);
-    // the splash when it hits the glass: tongues of ink shooting out from the edges, and blobs thrown further
-    const spat = [], cxm = W / 2, cym = yL + (ep ? H * 0.08 : 0); for (let i = 0, n = 0; i < 20000 && n < 46; i++) { const x = Math.round(lerp(bx0, bx1, r())), y = Math.round(lerp(by0, by1, r())); if (at(x, y) < 200) continue; let dx = x - cxm, dy = (y - cym) * 1.6; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; const ja = (r() - 0.5) * 0.7, nx = dx * Math.cos(ja) - dy * Math.sin(ja), ny = dx * Math.sin(ja) + dy * Math.cos(ja);
-      const L = (24 + r() * r() * 110) * u; let clear = true; for (let q = 12 * u; q < L * 1.5; q += 6 * u) if (at(Math.round(x + nx * q), Math.round(y + ny * q)) > 30) { clear = false; break; } if (!clear) continue; n++; spat.push({ x, y, nx, ny, L, w: (9 + r() * 14) * u, blob: r() < 0.7 ? (5 + r() * 9) * u : 0, bd: 1.25 + r() * 0.4 }); }
-    return (TC = { key, c, drips, spat, lx, yL, D, u }); }
-  const FLY = 0.3;
-  function titleCard(g, W, H, t, name, ep, kick, line, from) { const k = t - B.logo; if (k <= -FLY) return; const T = titleLayer(W, H, name, ep, kick), u = T.u;
-    if (k < 0) { // in flight: out of his gob, tumbling, swelling as it comes at us (perspective), a smear behind it
-      const f = (k + FLY) / FLY, m = from || [W / 2, H * 0.55], at = ff => { const sc = 1 / lerp(14, 1, Math.pow(ff, 1.6)); return { x: lerp(m[0], W / 2, eo(ff)), y: lerp(m[1], H * 0.48, eo(ff)) - Math.sin(Math.PI * ff) * H * 0.06, sc, rot: lerp(-0.9, 0, ff) }; };
-      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); [0.12, 0.06, 0].forEach((lag, i) => { const q = at(Math.max(0, f - lag)); g.save(); g.globalAlpha = [0.18, 0.35, 1][i]; g.translate(q.x, q.y); g.rotate(q.rot); g.scale(q.sc * 1.05, q.sc * 0.95); g.translate(-W / 2, -H * 0.48); g.drawImage(T.c, 0, 0); g.restore(); }); g.restore(); return; }
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-    // the smack: comes in big and squashes onto the glass, a wee wobble, a shake
-    const s = 1 + 0.1 * Math.exp(-k * 9) * Math.cos(k * 30), sy = 1 - 0.14 * Math.exp(-k * 11) * Math.cos(k * 26), jx = bump(k, 0.15) * 10 * u * Math.sin(k * 120);
-    g.translate(W / 2 + jx, H * 0.48); g.scale(s / Math.sqrt(sy), s * sy); g.translate(-W / 2, -H * 0.48); g.globalAlpha = cl(k / 0.03);
-    g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 16 * u; g.shadowOffsetY = 6 * u;
-    // spatters, flung out with the hit
-    g.fillStyle = CREAM; T.spat.forEach(p => { const e = eo(cl(k / 0.09)), L = p.L * e, ex = p.x + p.nx * L, ey = p.y + p.ny * L, px = -p.ny, py = p.nx;
-      g.beginPath(); g.moveTo(p.x + px * p.w, p.y + py * p.w); const tw = p.w * 0.32; g.quadraticCurveTo(p.x + p.nx * L * 0.45 + px * p.w * 0.35, p.y + p.ny * L * 0.45 + py * p.w * 0.35, ex + px * tw, ey + py * tw); g.arc(ex, ey, tw, Math.atan2(py, px), Math.atan2(py, px) + Math.PI, true); g.quadraticCurveTo(p.x + p.nx * L * 0.45 - px * p.w * 0.35, p.y + p.ny * L * 0.45 - py * p.w * 0.35, p.x - px * p.w, p.y - py * p.w); g.closePath(); g.fill();
-      if (p.blob) { const bx = p.x + p.nx * p.L * p.bd * e, by = p.y + p.ny * p.L * p.bd * e; g.beginPath(); g.ellipse(bx, by, p.blob * 1.25, p.blob, Math.atan2(p.ny, p.nx), 0, TAU); g.fill(); } });
-    g.drawImage(T.c, 0, 0);
-    // drips running down off the letters, slowing as they go, a bulb on the end of each
-    T.drips.forEach(d => { const kk = Math.max(0, k - 0.12 - d.d), L = d.L * (1 - Math.exp(-kk * d.sp)); if (L < 1) return; const x = d.x, y = d.y, w = d.w * (1 - 0.25 * Math.min(1, L / d.L));
-      g.fillStyle = CREAM; g.beginPath(); g.moveTo(x - d.w / 2 - 2 * u, y); g.quadraticCurveTo(x - w / 2, y + 6 * u, x - w / 2, y + 10 * u); g.lineTo(x - w / 2, y + L); g.arc(x, y + L, w * 0.72, Math.PI, 0, true); g.lineTo(x + w / 2, y + 10 * u); g.quadraticCurveTo(x + w / 2, y + 6 * u, x + d.w / 2 + 2 * u, y); g.closePath(); g.fill(); });
-    g.shadowColor = 'transparent'; g.fillStyle = 'rgba(255,255,255,0.6)'; T.drips.forEach(d => { const kk = Math.max(0, k - 0.12 - d.d), L = d.L * (1 - Math.exp(-kk * d.sp)); if (L < 8 * u) return; g.fillRect(d.x - d.w * 0.22, d.y + 8 * u, Math.max(1, d.w * 0.16), L - 10 * u); g.beginPath(); g.arc(d.x - d.w * 0.2, d.y + L - d.w * 0.15, d.w * 0.18, 0, TAU); g.fill(); });
-    // the cone: drops out the top of the screen onto his heid, a wee hop, settles squint
-    if (t > B.cone) { const D = T.D, hy = T.yL - D * 0.36, ch = D * 0.34; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = T.lx + lerp(D * 0.2, 0, f); y = lerp(-ch, hy, ei(f)); rot = lerp(-3.6, -0.3, eo(f)); }
-      else { const kk = t - B.bonk, hop = kk < 0.26 ? Math.sin(Math.PI * kk / 0.26) * D * 0.08 : 0; x = T.lx + D * 0.01; y = hy - hop; rot = -0.3 + (kk < 0.26 ? -0.3 * Math.sin(Math.PI * kk / 0.26) : 0.1 * Math.exp(-(kk - 0.26) * 6) * Math.sin((kk - 0.26) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
-      g.globalAlpha = 1; cone(g, x, y, ch, rot, sq); }
+  // his logo pops up in the ink, PatterSquid under it, the episode, and a cone lands on the squid's heid in the logo
+  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    const rL = H * 0.2, cx = W / 2, cy = H * (ep ? 0.29 : 0.32), bonk = bump(t - B.bonk, 0.22), ps = eb(k / 0.32) * (1 - 0.12 * bonk);
+    g.save(); g.translate(cx, cy + rL); g.scale(eb(k / 0.32) / Math.sqrt(1 - 0.12 * bonk), ps); g.translate(0, -rL); g.rotate(-0.05 * Math.sin(Math.min(k, 0.6) * 10) * Math.exp(-k * 3));
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.arc(10 * u, 14 * u, rL * 1.06, 0, TAU); g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.08, 0, TAU); g.fillStyle = INK; g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.04, 0, TAU); g.fillStyle = '#f4efe2'; g.fill();
+    g.save(); g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.clip(); if (logo) g.drawImage(logo, -rL, -rL, rL * 2, rL * 2); else { g.fillStyle = '#16264a'; g.fillRect(-rL, -rL, rL * 2, rL * 2); } g.restore(); g.lineWidth = rL * 0.035; g.strokeStyle = INK; g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.stroke();
+    // the cone: falls spinning out the top of the screen, bonks on his heid, hops, settles squint
+    if (t > B.cone) { const hy = -rL * 0.72, ch = rL * 0.62; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = lerp(rL * 0.5, 0, f); y = lerp(-H * 0.5 - ch, hy, ei(f)); rot = lerp(-4.4, -0.3, eo(f)); }
+      else { const kk = t - B.bonk, hop = kk < 0.3 ? Math.sin(Math.PI * kk / 0.3) * rL * 0.18 : 0; x = rL * 0.03; y = hy - hop; rot = -0.3 + (kk < 0.3 ? -0.35 * Math.sin(Math.PI * kk / 0.3) : 0.12 * Math.exp(-(kk - 0.3) * 6) * Math.sin((kk - 0.3) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
+      cone(g, x, y, ch, rot, sq); }
     g.restore();
-    const lk2 = cl((t - B.logo - 0.6) / 0.5); if (line && lk2 > 0) { g.save(); let ls2 = 24 * u; g.font = `700 ${ls2}px ${LBLF}`; g.letterSpacing = `${5 * u}px`; while (g.measureText(line.toUpperCase()).width > W * 0.7) { ls2 -= 1; g.font = `700 ${ls2}px ${LBLF}`; } g.globalAlpha = sm(lk2) * 0.8; g.textAlign = 'center'; g.fillStyle = '#cfc6b4'; g.fillText(line.toUpperCase(), W / 2, H * 0.92); g.restore(); } }
+    // the name
+    const nk = t - B.name; if (nk > 0) { const s = nk < 0.14 ? lerp(1.6, 0.94, ei(nk / 0.14)) : 1 - 0.06 * Math.exp(-(nk - 0.14) * 10) * Math.cos((nk - 0.14) * 34); let fs = 150 * u; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(name).width > W * 0.82) { fs -= 4; g.font = `400 ${fs}px ${TITLE}`; }
+      g.save(); g.translate(cx, H * (ep ? 0.66 : 0.72)); g.rotate(-0.03); g.scale(s, s); g.globalAlpha = cl(nk / 0.05); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(name, 8 * u, 12 * u); g.lineWidth = fs * 0.14; g.strokeStyle = '#08070c'; g.strokeText(name, 0, 0); g.fillStyle = '#f7f1e3'; g.fillText(name, 0, 0); g.restore(); }
+    const ek = t - B.ep; if (ep && ek > 0) { let es = 68 * u; g.font = `400 ${es}px ${TALL}`; while (g.measureText(ep).width > W * 0.72) { es -= 2; g.font = `400 ${es}px ${TALL}`; }
+      g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(eb(ek / 0.22), eb(ek / 0.22)); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      if (kick) { g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 0.92); g.font = `400 ${es}px ${TALL}`; }
+      g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(ep, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(ep, 0, 0); g.restore(); }
+    const lk = t - (ep ? B.ep + 0.3 : B.name + 0.35); if (line && lk > 0) { let ls = 38 * u; g.font = `700 ${ls}px ${BODY}`; while (g.measureText(line).width > W * 0.6) { ls -= 2; g.font = `700 ${ls}px ${BODY}`; } g.globalAlpha = cl(lk / 0.3); g.textAlign = 'center'; g.fillStyle = '#e9e2d2'; g.fillText(line, cx, H * (ep ? 0.94 : 0.86)); }
+    g.restore(); }
 
   /* ---------- "Chucked oot" ---------- */
   // beats (seconds). Every moving value is a smooth curve through these, so nothing pops between frames.
@@ -253,7 +213,7 @@ const IntroScenes = (() => {
   B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
   B.flop = B.stop + 0.34; B.capRest = B.land + 0.75; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.reach = B.up + 0.12; B.grab = B.up + 0.5; B.capOn = B.up + 0.85; B.bout = B.up + 1.0; B.bin = B.up + 1.35; B.finger = B.up + 1.5; B.ned = B.finger + 0.1;
   B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.06; B.name = B.logo; B.ep = B.logo; B.cone = B.logo + 1.0; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.3;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.05; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.4;
   // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
@@ -391,7 +351,7 @@ const IntroScenes = (() => {
         const ff = eo(cl(f)), x = lerp(mouthS[0], tx, ff), y = lerp(mouthS[1], ty, ff) - Math.sin(Math.PI * cl(f)) * H * 0.05; g.beginPath(); g.ellipse(x, y, rad * 1.1, rad, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.5, 3.6, 4.6); g.stroke(); } g.restore(); }
     }
     // SPLAT: the ink takes the whole screen, then the logo, the name, the episode and the cone
-    if (mouthS) LASTM = mouthS; if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); } if (t > B.logo - FLY) titleCard(g, W, H, t, name, o.episode, o.kicker, o.line, LASTM);
+    if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); titleCard(g, W, H, t, name, o.episode, o.kicker, o.line); }
     if (t < 0.25) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(0,0,0,${1 - t / 0.25})`; g.fillRect(0, 0, W, H); g.restore(); }
     return true; }
   const L0 = () => B.land; let LASTM = null;
