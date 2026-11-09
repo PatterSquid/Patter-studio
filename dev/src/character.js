@@ -83,11 +83,13 @@ const Character = (() => {
 
   /* ---------- the voice and the timing ---------- */
   const last = {}, textMemo = new Map(), waiting = {};
+  if (typeof Rhubarb !== 'undefined' && typeof indexedDB !== 'undefined') Rhubarb.ready().then(() => { tick++; });
+  const engineOf = cfg => cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state === 'ready' ? 'rhubarb' : 'patter';
   function syncOf(cfg) {
-    const script = String(cfg.script || '');
+    const script = String(cfg.script || ''), eng = engineOf(cfg);
     if (cfg.voice && typeof CutMedia !== 'undefined') {
-      const r = LipSync.peek(cfg.voice, script); if (r) { last[cfg.voice] = r; return r; }
-      const k = cfg.voice + '|' + script; if (!waiting[k]) { waiting[k] = setTimeout(() => { LipSync.forMedia(cfg.voice, script, id => CutMedia.blobOf(id)).then(() => { tick++; }, e => console.warn('lip sync', e)).finally(() => { setTimeout(() => delete waiting[k], 50); }); }, 350); }
+      const r = LipSync.peek(cfg.voice, script, eng); if (r) { last[cfg.voice] = r; return r; }
+      const k = cfg.voice + '|' + script + '|' + eng; if (!waiting[k]) { waiting[k] = setTimeout(() => { LipSync.forMedia(cfg.voice, script, id => CutMedia.blobOf(id), eng).then(() => { tick++; }, e => console.warn('lip sync', e)).finally(() => { setTimeout(() => delete waiting[k], 50); }); }, 350); }
       return last[cfg.voice] || null;
     }
     if (script.trim()) { if (!textMemo.has(script)) { textMemo.set(script, LipSync.fromText(script, cfg.pace || 1)); if (textMemo.size > 12) textMemo.delete(textMemo.keys().next().value); } return textMemo.get(script); }
@@ -95,7 +97,8 @@ const Character = (() => {
   }
   async function prepare(cfg) {
     if (cfg.puppet) await Puppet.load(cfg.puppet);
-    if (cfg.voice && typeof CutMedia !== 'undefined') await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id)).catch(() => null);
+    if (cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined') await Rhubarb.ready();
+    if (cfg.voice && typeof CutMedia !== 'undefined') await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id), engineOf(cfg)).catch(() => null);
   }
 
   /* ---------- the performance: everything decided once per voice, script and moves ---------- */
@@ -103,7 +106,7 @@ const Character = (() => {
   const rng = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const perfMemo = new Map();
   function perfOf(cfg, A, rig, dur) {
-    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, dur.toFixed(2)]);
+    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, dur.toFixed(2)]);
     let box = perfMemo.get(A || 'none'); if (box && box.key === key) return box.p;
     const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E };
     const env = A ? A.env : new Float32Array(0), fps = A ? A.fps : 100, envAt = t => { const f = t * fps, i = Math.floor(f); if (i < 0 || i >= env.length - 1) return 0; return env[i] + (env[i + 1] - env[i]) * (f - i); };
@@ -286,7 +289,10 @@ const Character = (() => {
       field('Recording', sel(cfg.voice || '', [['', 'None (timed from the script)'], ...sounds.map(m => [m.id, m.name || 'Sound'])], v => { cfg.voice = v; const m = sounds.find(q => q.id === v); cfg.voiceName = m ? m.name : ''; redo(); }, 'Voice recording'),
         vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (A && !A.guessed ? ' Lined up with the script.' : ' Lining up…') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
       H('div', { className: 'btnrow' }, btn('Add a recording', () => vpick.click(), cfg.voice ? '' : 'primary')), vpick, vnote,
-      ...(cfg.voice ? [field('Volume (dB)', num(+cfg.vol || 0, v => { cfg.vol = Math.round(v); changed(); }, -30, 12, 1, 'Voice volume'))] : [field('Pace', seg(String(cfg.pace || 1), [['0.8', 'Slower'], ['1', 'Normal'], ['1.25', 'Quicker']], v => { cfg.pace = +v; textMemo.clear(); redo(); }))])));
+      ...(cfg.voice ? [field('Lip sync', seg(cfg.sync === 'rhubarb' ? 'rhubarb' : 'patter', [['patter', 'Patter (built in)'], ['rhubarb', 'Rhubarb']], v => { cfg.sync = v; redo(); }),
+        cfg.sync === 'rhubarb' ? (typeof Rhubarb === 'undefined' ? 'Rhubarb is not in this version.' : Rhubarb.state === 'ready' ? (A && A.engine === 'rhubarb' ? 'Mouth shapes from Rhubarb Lip Sync.' : 'Rhubarb is working on it…') : 'Rhubarb needs a one-off download of about 40 MB, then works offline.') : 'Built in and instant. Try Rhubarb if the mouth looks off.'),
+        ...(cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state !== 'ready' ? [H('div', { className: 'btnrow' }, btn(Rhubarb.state === 'downloading' ? 'Downloading…' : 'Download Rhubarb (40 MB, once)', async e => { const b = e.target, note2 = vnote; b.disabled = true; try { await Rhubarb.download(q => { b.textContent = 'Downloading… ' + Math.round(q * 100) + '%'; }); note2.textContent = 'Rhubarb is ready.'; tick++; redo(); } catch (err) { note2.textContent = err.message || String(err); b.disabled = false; b.textContent = 'Try the download again'; } }, 'primary'))] : []),
+        field('Volume (dB)', num(+cfg.vol || 0, v => { cfg.vol = Math.round(v); changed(); }, -30, 12, 1, 'Voice volume'))] : [field('Pace', seg(String(cfg.pace || 1), [['0.8', 'Slower'], ['1', 'Normal'], ['1.25', 'Quicker']], v => { cfg.pace = +v; textMemo.clear(); redo(); }))])));
     // the script
     const cat = catalogue(rig), tagHint = 'Tags: ' + cat.map(c => '[' + c.k + ']').join(' ') + '. Add a number for seconds, e.g. [point 3]. Hands: [point left]. Emotions last until the next one.';
     let tmr = null;

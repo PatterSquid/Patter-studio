@@ -214,11 +214,13 @@ const LipSync = (() => {
   // Remembered results, keyed on the recording and the script
   const cache = new Map(), pending = new Map();
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
-  const key = (id, script) => id + '|' + hash(String(script || '')) + '|' + String(script || '').length;
-  function peek(id, script) { return cache.get(key(id, script)) || null; }
-  async function forMedia(id, script, getBlob) {
-    const k = key(id, script); if (cache.has(k)) return cache.get(k); if (pending.has(k)) return pending.get(k);
-    const p = (async () => { const b = await getBlob(id); if (!b) return null; const x = await decode(b), r = analyse(x, script); cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
+  const key = (id, script, engine) => id + '|' + hash(String(script || '')) + '|' + String(script || '').length + '|' + (engine || 'patter');
+  function peek(id, script, engine) { return cache.get(key(id, script, engine)) || null; }
+  // engine 'rhubarb': the mouth shapes come from Rhubarb (when it is downloaded); words, tags and level still from here
+  async function forMedia(id, script, getBlob, engine) {
+    const k = key(id, script, engine); if (cache.has(k)) return cache.get(k); if (pending.has(k)) return pending.get(k);
+    const p = (async () => { const b = await getBlob(id); if (!b) return null; const x = await decode(b), r = analyse(x, script);
+      if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.02); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
   return { analyse, fromText, decode, parse, spell, features, forMedia, peek, FPS, _numWords: numWords };

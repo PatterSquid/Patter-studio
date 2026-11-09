@@ -213,6 +213,11 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   up (thumb cut off along `FIST_CUT`, edge redrawn) for the desk bang and fist shake. His right hand is behind the mic, so
   one handed gestures use his left. `planHands` picks natural gestures from the words (LEX), questions (shrug), angry
   exclamations (bang), and an explaining hand in sentences with none; tags win; `cfg.hands` 'tags' turns it off.
+* **Rhubarb** (`dev/src/rhubarb.js`, `cfg.sync` 'rhubarb'): Rhubarb Lip Sync as WebAssembly (`lip-sync-engine` 1.0.3, MIT,
+  PocketSphinx inside), files in `lipsync/rhubarb/` (about 40 MB, credits in NOTICE.md). Downloaded once from the update
+  repo when he presses the panel's download button, kept in IndexedDB `patter-lipsync`, run in a worker. Only the mouth
+  shapes come from it (A..H, X mapped to the twelve); words, tags and level still from LipSync. Tests serve a copy from
+  `dev/tmp_rh/` (`window.PATTER_LIPSYNC`): `tests/char_rhubarb.py`. Downloads in this workspace work from cdn.jsdelivr.net.
 * Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
