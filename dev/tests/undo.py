@@ -1,6 +1,6 @@
 import asyncio, random, sys, json
 from playwright.async_api import async_playwright
-TABS=sys.argv[1].split(',') if len(sys.argv)>1 else ['charts','timeline','map','flights','flyover','picto','news','story','broll']
+TABS=sys.argv[1].split(',') if len(sys.argv)>1 else ['charts','timeline','map','flights','flyover','picto','news','story','broll','char']
 N=int(sys.argv[2]) if len(sys.argv)>2 else 150
 SEED=int(sys.argv[3]) if len(sys.argv)>3 else 1
 PICK=r"""(seed)=>{ const els=[...document.querySelectorAll('#inspector button, #inspector select, #inspector input, #inspector textarea, .tl-bar button, .tl-pop button, #inspector .st-tile, #inspector summary')].filter(e=>{ const r=e.getBoundingClientRect(); return r.width>0&&r.height>0&&!e.disabled&&e.type!=='file'&&!/Save file|Open file|History|Reset this clip|Delete project/.test(e.textContent||''); });

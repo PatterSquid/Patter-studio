@@ -1,6 +1,6 @@
 import asyncio, random, sys, json
 from playwright.async_api import async_playwright
-TABS=sys.argv[1].split(',') if len(sys.argv)>1 else ['charts','timeline','map','flights','flyover','picto','news','story','broll']
+TABS=sys.argv[1].split(',') if len(sys.argv)>1 else ['charts','timeline','map','flights','flyover','picto','news','story','broll','char']
 N=int(sys.argv[2]) if len(sys.argv)>2 else 150
 SEED=int(sys.argv[3]) if len(sys.argv)>3 else 1
 PICK=r"""(seed)=>{ const els=[...document.querySelectorAll('#inspector button, #inspector select, #inspector input, #inspector textarea, .tl-bar button, .tl-pop button, #inspector .st-tile, #inspector summary')].filter(e=>{ const r=e.getBoundingClientRect(); return r.width>0&&r.height>0&&!e.disabled&&e.type!=='file'&&!/Save file|Open file|History|Reset this clip|Delete project/.test(e.textContent||''); });
@@ -39,7 +39,7 @@ async def main():
             await pg.wait_for_timeout(1200)
             chk=await pg.evaluate(f"""()=>{{ const st=JSON.parse(localStorage.getItem('patter-studio-v1')); const cfg=st.cfg['{tab}']; const bad=[];
               const walk=(o,p)=>{{ if(o===undefined){{bad.push(p+' undefined');return;}} if(typeof o==='number'&&!isFinite(o)) bad.push(p+' '+o); if(Array.isArray(o)) o.forEach((v,i)=>{{ if(v==null) bad.push(p+'['+i+'] '+v); else walk(v,p+'['+i+']'); }}); else if(o&&typeof o==='object') Object.entries(o).forEach(([k,v])=>walk(v,p+'.'+k)); }}; walk(cfg,'cfg');
-              const mods={{charts:Charts,timeline:Timeline,map:MapMod,flights:Flights,flyover:Flyover,picto:Picto,news:News,story:Story,broll:Broll}}; const M=Layers.wrap(mods['{tab}']); const look=st.look; const c=document.createElement('canvas'); c.width=480; c.height=270; const g=c.getContext('2d'); let d; const errs=[];
+              const mods={{charts:Charts,timeline:Timeline,map:MapMod,flights:Flights,flyover:Flyover,picto:Picto,news:News,story:Story,broll:Broll,char:Character,studio:Studio}}; const M=Layers.wrap(mods['{tab}']); const look=st.look; const c=document.createElement('canvas'); c.width=480; c.height=270; const g=c.getContext('2d'); let d; const errs=[];
               try{{ d=M.duration(cfg,look); }}catch(e){{errs.push('dur '+e.message)}} if(!(d>0&&isFinite(d))) errs.push('dur '+d);
               for(let i=0;i<=20;i++){{ try{{ g.setTransform(0.25,0,0,0.25,0,0); M.draw(g,(d||5)*i/20,cfg,look,1920,1080);}}catch(e){{errs.push(i+': '+e.message+' '+(e.stack||'').split('\\n')[1]);}} }}
               return {{bad:bad.slice(0,8), errs:errs.slice(0,5), dur:d, size:JSON.stringify(cfg).length}}; }}""")
