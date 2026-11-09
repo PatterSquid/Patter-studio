@@ -95,6 +95,7 @@
 
   // Module form, inspector and tabs
   if (!MODULES[state.module]) state.module = state.module === 'board' ? 'story' : 'charts';
+  if (state.module === 'intro') state.module = 'video'; // the intro lives in the Video tab now (Add intro, then its panel on the right)
   let ed = null, formTimer = null;
   const formChanged = () => { save(); clearTimeout(formTimer); formTimer = setTimeout(() => { commit(); ed && ed.build(); }, 350); };
   function buildForm() { mod().form($('modForm'), cfg(), formChanged); }

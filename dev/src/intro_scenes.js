@@ -21,7 +21,9 @@ const IntroScenes = (() => {
     typeof COAT_STREET !== 'undefined' ? bmp(COAT_STREET).then(b => { plate = b; soft = mk(PW, PH); const x = soft.getContext('2d'); x.filter = 'blur(1.6px)'; x.drawImage(b, 0, 0); }) : null,
     typeof STUDIO_LOGO !== 'undefined' ? bmp(STUDIO_LOGO).then(b => { logo = b; }) : null,
     typeof Squid !== 'undefined' ? Squid.ready() : null, typeof PatterFonts !== 'undefined' ? PatterFonts.ready() : null]).catch(() => null)); }
-  function camTo(g, W, H, c) { const z = Math.max(1, c.z), k = Math.max(W / PW, H / PH) * z, hw = W / 2 / k, hh = H / 2 / k, x = cl(c.x, hw, PW - hw), y = cl(c.y, hh, PH - hh); g.setTransform(k, 0, 0, k, W / 2 - x * k, H / 2 - y * k); return k; }
+  // whatever size we are asked to draw at (exports scale the picture): every 'screen' transform sits on top of the one we were given
+  let M0 = null; const ST = (g, a, b, c, d, e, f) => { if (M0) g.setTransform(M0); else g.setTransform(1, 0, 0, 1, 0, 0); g.transform(a, b, c, d, e, f); };
+  function camTo(g, W, H, c) { const z = Math.max(1, c.z), k = Math.max(W / PW, H / PH) * z, hw = W / 2 / k, hh = H / 2 / k, x = cl(c.x, hw, PW - hw), y = cl(c.y, hh, PH - hh); ST(g, k, 0, 0, k, W / 2 - x * k, H / 2 - y * k); return k; }
   function glow(g, x, y, r, col, a) { if (a <= 0) return; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col.replace('A', a.toFixed(3))); gr.addColorStop(1, col.replace('A', '0')); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
 
   /* ---------- the cartoon look: thick even outlines, flat colour, one shadow tone ---------- */
@@ -72,12 +74,12 @@ const IntroScenes = (() => {
 
   /* ---------- the pub: a Glasgow pub front painted onto the corner building ---------- */
   const PUB = { tl: [112, 332], tr: [478, 346], bl: [112, 762] };
-  function pub(g, t, open, laugh) { g.save(); const { tl, tr, bl } = PUB; g.transform((tr[0] - tl[0]) / 1000, (tr[1] - tl[1]) / 1000, (bl[0] - tl[0]) / 1000, (bl[1] - tl[1]) / 1000, tl[0], tl[1]);
+  function pub(g, t, open, laugh, name) { const PN = String(name || "THE HOLE IN THE WA'").toUpperCase(); g.save(); const { tl, tr, bl } = PUB; g.transform((tr[0] - tl[0]) / 1000, (tr[1] - tl[1]) / 1000, (bl[0] - tl[0]) / 1000, (bl[1] - tl[1]) / 1000, tl[0], tl[1]);
     flat(g, P => P.rect(0, 0, 1000, 1000), '#1e4630', '#13301f', 14, 9);
     // fascia with the name in gold
     flat(g, P => P.rect(0, 0, 1000, 175), '#123020', null, 0, 9); g.strokeStyle = '#c9a23e'; g.lineWidth = 6; g.strokeRect(22, 22, 956, 131);
-    g.save(); g.translate(500, 92); g.scale(1.15, 1); g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 92; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText("THE HOLE IN THE WA'").width > 760) { fs -= 2; g.font = `400 ${fs}px ${TITLE}`; }
-    g.lineWidth = 12; g.strokeStyle = INK; g.lineJoin = 'round'; g.strokeText("THE HOLE IN THE WA'", 0, 0); g.fillStyle = '#efc95a'; g.fillText("THE HOLE IN THE WA'", 0, 0); g.restore();
+    g.save(); g.translate(500, 92); g.scale(1.15, 1); g.textAlign = 'center'; g.textBaseline = 'middle'; let fs = 92; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(PN).width > 820 && fs > 20) { fs -= 2; g.font = `400 ${fs}px ${TITLE}`; }
+    g.lineWidth = 12; g.strokeStyle = INK; g.lineJoin = 'round'; g.strokeText(PN, 0, 0); g.fillStyle = '#efc95a'; g.fillText(PN, 0, 0); g.restore();
     // frosted windows, warm and lit, with bars
     [[70, 350], [650, 930]].forEach(([a, b], i) => { flat(g, P => P.rect(a, 245, b - a, 520), '#f4b765', '#d98e3e', 18, 8); g.fillStyle = 'rgba(255,240,200,0.5)'; g.fillRect(a + 30, 270, (b - a) * 0.3, 470); OL(g, 8); g.beginPath(); g.moveTo((a + b) / 2, 245); g.lineTo((a + b) / 2, 765); g.moveTo(a, 500); g.lineTo(b, 500); g.stroke();
       g.save(); g.globalAlpha = 0.25 + 0.15 * Math.sin(t * 9 + i * 3) * laugh; g.fillStyle = '#5a2d10'; for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(a + 60 + k * 85, 420 + (k % 2) * 30, 34, 44, 0, 0, TAU); g.fill(); g.fillRect(a + 26 + k * 85, 440 + (k % 2) * 30, 68, 120); } g.restore();
@@ -172,7 +174,7 @@ const IntroScenes = (() => {
     for (let i = 0; i < 30; i++) { const px = r() * w, l = Math.min(h, k * (0.4 + r()) * h * 0.5), ww = h * (0.01 + r() * 0.015); if (k < 0.2) continue; a.fillRect(px - ww, 0, ww * 2, h * 0.5 + l); a.beginPath(); a.arc(px, h * 0.5 + l, ww * 1.6, 0, TAU); a.fill(); }
     const b = IC.b.getContext('2d'); b.clearRect(0, 0, w, h); b.filter = `blur(${Math.max(1, h / 150)}px)`; b.drawImage(IC.a, 0, 0); b.filter = 'none'; const im = b.getImageData(0, 0, w, h), d = im.data;
     for (let i = 0; i < d.length; i += 4) { const v = cl((d[i + 3] / 255 - 0.42) / 0.1); d[i] = 11; d[i + 1] = 10; d[i + 2] = 18; d[i + 3] = v * 255; } b.putImageData(im, 0, 0);
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(IC.b, 0, 0, W, H); if (k > 0.5) { g.globalAlpha = sm((k - 0.5) / 0.15); g.fillStyle = 'rgb(11,10,18)'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
+    g.save(); ST(g, 1, 0, 0, 1, 0, 0); g.drawImage(IC.b, 0, 0, W, H); if (k > 0.5) { g.globalAlpha = sm((k - 0.5) / 0.15); g.fillStyle = 'rgb(11,10,18)'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
     // wet sheen: a cold light across the top, runs of gloss sliding down
     g.globalCompositeOperation = 'source-atop'; const gl = g.createLinearGradient(0, 0, W * 0.7, H); gl.addColorStop(0, 'rgba(150,140,200,0.3)'); gl.addColorStop(0.5, 'rgba(0,0,0,0)'); g.fillStyle = gl; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over';
     const rr = rng(seed + 3); g.lineCap = 'round';
@@ -180,7 +182,7 @@ const IntroScenes = (() => {
 
   // his logo pops up in the ink, PatterSquid under it, the episode, and a cone lands on the squid's heid in the logo
   const SPL = k => k <= 0 ? 0 : k < 0.08 ? lerp(0.55, 1.14, eo(k / 0.08)) : 1 + 0.14 * Math.exp(-(k - 0.08) * 8) * Math.cos((k - 0.08) * 22);
-  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); ST(g, 1, 0, 0, 1, 0, 0);
     const rL = H * 0.2, cx = W / 2, cy = H * (ep ? 0.29 : 0.32), bonk = bump(t - B.bonk, 0.22), ps = SPL(k) * (1 - 0.12 * bonk);
     g.save(); g.translate(cx, cy + rL); g.scale(SPL(k) / Math.sqrt(1 - 0.12 * bonk), ps); g.globalAlpha = cl(k / 0.03); g.translate(0, -rL); g.rotate(-0.05 * Math.sin(Math.min(k, 0.6) * 10) * Math.exp(-k * 3));
     g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.arc(10 * u, 14 * u, rL * 1.06, 0, TAU); g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.08, 0, TAU); g.fillStyle = INK; g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.04, 0, TAU); g.fillStyle = '#f4efe2'; g.fill();
@@ -315,13 +317,13 @@ const IntroScenes = (() => {
     [[B.land, IMP, 1.4], [B.flop + 0.14, STOP - 140, 0.8]].forEach(([t0, x0, m]) => { const dk = t - t0; if (dk < 0 || dk > 0.7) return; const rr = rng(53 + (m * 10 | 0)); for (let i = 0; i < 8; i++) { const sd = i % 2 ? 1 : -1, a = rr(), b2 = rr(), c2 = rr(); puff(x0 + sd * (20 + 150 * eo(dk / 0.5) * (0.3 + a * 0.7)) * m, ROAD - 10 - 50 * eo(dk / 0.4) * b2 * m, (16 + 26 * c2) * m * (0.6 + dk), (1 - dk / 0.7) * cl(dk / 0.04)); } }); }
 
   function useLabel(src) { if (!src || typeof src !== 'string') return null; if (LBL.src !== src) { LBL = { src, img: null }; BOT = null; bmp(src).then(b => { if (LBL.src === src) { LBL.img = b; BOT = null; } }).catch(() => {}); } return LBL.img; }
-  function swally(g, t, W, H, o = {}) { if (!plate) return false; const name = o.name || 'PatterSquid', P = pose(t), Wh = where(t), h = Wh.h; useLabel(o.label);
+  function swally(g, t, W, H, o = {}) { if (!plate) return false; M0 = g.getTransform(); const name = o.name || 'PatterSquid', P = pose(t), Wh = where(t), h = Wh.h; useLabel(o.label);
     let mouthS = null;
     if (t < B.splat + 0.6) {
     g.save(); const k = camTo(g, W, H, Wh.cam); g.drawImage(soft || plate, 0, 0, PW, PH);
     g.save(); g.globalCompositeOperation = 'screen'; [[757, 178, 150], [1142, 352, 90], [1043, 458, 55]].forEach(([x, y, r], i) => glow(g, x, y, r, 'rgba(255,170,80,A)', 0.3 + 0.05 * Math.sin(t * 7 + i * 2))); glow(g, 1060, 112, 130, 'rgba(190,210,255,A)', 0.2); g.restore();
     // the pub: the door opens, he is shoved out, the boot, then the door slams
-    const open = t < B.open ? 0 : t < B.stop ? sm((t - B.open) / 0.12) : 1 - sm((t - B.stop) / 0.07); pub(g, t, open, 0);
+    const open = t < B.open ? 0 : t < B.stop ? sm((t - B.open) / 0.12) : 1 - sm((t - B.stop) / 0.07); pub(g, t, open, 0, o.pub);
     skid(g, t);
     const N = nedAt(t), drawNed = () => { if (!N) return; g.save(); g.translate(N.x, N.y); g.scale(N.s, N.s); ned(g, { ph: t * 13, sway: 0.06 * Math.sin(t * 6.5) }); g.restore(); };
     if (N && N.s < 1) drawNed();
@@ -339,7 +341,7 @@ const IntroScenes = (() => {
       if (t > B.up - 0.05 && t < B.spew) { [[110, 178], [192, 178]].forEach(pt => { const c = Squid.point(pt, Wh.x, Wh.y, h, P); g.save(); g.globalAlpha = 0.3 * (1 - (P.wet || 0) * 0.5); g.fillStyle = '#ff5a6e'; g.beginPath(); g.ellipse(c[0], c[1], h * 0.06, h * 0.03, 0, 0, TAU); g.fill(); g.restore(); }); }
       if (!(t > B.land && t < B.capOn)) cap(g, top[0], top[1], cw, ha - 0.22 + 0.3 * bump(t - B.capOn, 0.25) + 0.3 * bump(t - B.splash, 0.3), P.wet);
       if (P.wet > 0 && t < B.spew) { const r = rng(9); for (let i = 0; i < 14; i++) { const x0 = (r() - 0.5) * h * 0.7, y0 = -h * (0.1 + r() * 0.5), per = 0.4 + r() * 0.5, ph = ((t - B.splash) / per + r()) % 1; g.globalAlpha = 1 - ph; flat(g, Q => Q.ellipse(Wh.x + x0, Wh.y + y0 + ph * h * 0.6, 4, 6, 0, 0, TAU), '#cfe8ff', null, 0, 1.5); } g.globalAlpha = 1; }
-      if (t > B.spew) { const m = Squid.point('mouth', Wh.x, Wh.y, h, P), M = g.getTransform(); mouthS = [M.a * m[0] + M.c * m[1] + M.e, M.b * m[0] + M.d * m[1] + M.f]; }
+      if (t > B.spew) { const m = Squid.point('mouth', Wh.x, Wh.y, h, P), M = (M0 ? M0.inverse() : new DOMMatrix()).multiply(g.getTransform()); mouthS = [M.a * m[0] + M.c * m[1] + M.e, M.b * m[0] + M.d * m[1] + M.f]; }
       g.restore();
       // the cap knocked off when his face hits the road, spinning up and landing back on his heid as he gets up
       if (t > B.land && t < B.capOn) { const W1 = where(B.land - 0.001), P1 = pose(B.land - 0.001), q0 = Squid.point([151, 40], W1.x, W1.y, W1.h, P1), a0 = [q0[0], q0[1], Squid.headAngle(P1) - 0.22], REST = [HOME.x + 78, ROAD - 10, Math.PI * 0.86];
@@ -352,16 +354,16 @@ const IntroScenes = (() => {
     splash(g, B.splash, t, PUD.x, PUD.y, 0.8);
     g.restore();
     // vignette, grain
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); const v = g.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, H); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,10,0.5)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
+    g.save(); ST(g, 1, 0, 0, 1, 0, 0); const v = g.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, H); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,10,0.5)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
     const rr = rng(1 + Math.floor(t * 24)); g.globalAlpha = 0.035; for (let i = 0; i < 500; i++) { g.fillStyle = rr() < 0.5 ? '#000' : '#fff'; g.fillRect(rr() * W, rr() * H, 2, 2); } g.restore();
     // the spew: a jet of ink blobs out of his gub at the lens
-    if (mouthS && t < B.splat + 0.12) { const r = rng(5), sk = t - B.spew; g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0a12'; g.strokeStyle = 'rgba(160,150,200,0.35)'; g.lineWidth = Math.max(1, H / 400);
+    if (mouthS && t < B.splat + 0.12) { const r = rng(5), sk = t - B.spew; g.save(); ST(g, 1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0a12'; g.strokeStyle = 'rgba(160,150,200,0.35)'; g.lineWidth = Math.max(1, H / 400);
       for (let i = 0; i < 50; i++) { const t0 = r() * 0.16, life = 0.16 + r() * 0.1, f = (sk - t0) / life, tx = W * (0.5 + (r() - 0.5) * 0.95), ty = H * (0.5 + (r() - 0.5) * 0.85), rad = H * (0.006 + 0.004 * r()) * Math.pow(32, cl(f)); if (f <= 0 || f > 1.2) continue;
         const ff = eo(cl(f)), x = lerp(mouthS[0], tx, ff), y = lerp(mouthS[1], ty, ff) - Math.sin(Math.PI * cl(f)) * H * 0.05; g.beginPath(); g.ellipse(x, y, rad * 1.1, rad, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.5, 3.6, 4.6); g.stroke(); } g.restore(); }
     }
     // SPLAT: the ink takes the whole screen, then the logo, the name, the episode and the cone
     if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); titleCard(g, W, H, t, name, o.episode, o.kicker, o.line); }
-    if (t < 0.25) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(0,0,0,${1 - t / 0.25})`; g.fillRect(0, 0, W, H); g.restore(); }
+    if (t < 0.25) { g.save(); ST(g, 1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(0,0,0,${1 - t / 0.25})`; g.fillRect(0, 0, W, H); g.restore(); }
     return true; }
   const L0 = () => B.land; let LASTM = null;
   return { ready, swally, B, PW, PH, TITLE, useLabel };

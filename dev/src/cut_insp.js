@@ -5,7 +5,7 @@ const CutInspect = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const r2 = v => Math.round(v * 100) / 100, r3 = v => Math.round(v * 1000) / 1000;
   const V = () => Video;
-  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', avatar: 'You', colour: 'Card', intro: 'Intro' };
+  const TABS = { basic: 'Video', anim: 'Animation', speed: 'Speed', col: 'Colour', fx: 'Effects', mask: 'Mask', key: 'Chroma key', audio: 'Audio', clip: 'Clip', title: 'Intro', avatar: 'You', colour: 'Card', intro: 'Intro' };
   const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Colour dodge'], ['color-burn', 'Colour burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Colour'], ['luminosity', 'Luminosity']];
 
   function create(o, ui) {
@@ -52,7 +52,7 @@ const CutInspect = (() => {
       const f = V().findItem(c, id); if (!f) return; const it = f.it, m = it.asset ? CutMedia.info(it.asset) : null, isImg = m && m.kind === 'image', isVid = m && m.kind === 'video';
       if (it.asset && !m && it.kind !== 'intro') { root.append(H('section', { className: 'card cs' }, H('div', { className: 'cs-head' }, H('b', { textContent: it.file || 'Missing file' })), H('div', { className: 'cs-body' }, H('p', { className: 'hint', textContent: '"' + (it.file || 'This file') + '" isn\'t on this computer (the project was made on another one, or the file was removed). Find it and every clip that uses it comes back.' }), H('div', { className: 'btnrow' }, UI.btn('Find this file…', () => ui.relinkPick(it.asset), 'primary'), UI.btn('Remove the clip', () => { o.commit(); f.list.splice(f.i, 1); o.changed(true); o.ed.select(null); }))))); return; }
       const tabs = it.kind === 'audio' ? ['audio', 'speed'] : it.kind === 'avatar' ? ['avatar'] : it.kind === 'intro' ? ['intro', 'basic', 'col', 'fx', 'audio'] : it.kind === 'adjust' ? ['col', 'fx', 'basic'] : it.kind === 'colour' ? ['colour', 'basic', 'anim', 'fx', 'mask']
-        : it.kind === 'clip' ? ['clip', 'basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key'] : isImg ? ['basic', 'anim', 'col', 'fx', 'mask', 'key'] : ['basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key', ...(m && m.hasAudio !== false ? ['audio'] : [])];
+        : it.kind === 'clip' && it.mod === 'intro' ? ['title', 'basic', 'col', 'fx'] : it.kind === 'clip' ? ['clip', 'basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key'] : isImg ? ['basic', 'anim', 'col', 'fx', 'mask', 'key'] : ['basic', 'anim', 'speed', 'col', 'fx', 'mask', 'key', ...(m && m.hasAudio !== false ? ['audio'] : [])];
       let tab = ui.inspTab[it.id] || tabs[0]; if (!tabs.includes(tab)) tab = tabs[0];
       const head = H('div', { className: 'cs-head' }, H('i', { style: 'background:' + (V().COLS[it.kind === 'clip' ? it.mod : it.kind === 'media' ? (isImg ? 'image' : 'media') : it.kind] || '#556') }), H('b', { textContent: V().NAME(it) }));
       const p = placed(c, it); if (p) head.append(H('span', { className: 'cs-time', textContent: ui.tc(p.t0) + ' · ' + ui.short(p.d) }));
@@ -60,7 +60,7 @@ const CutInspect = (() => {
       const tb = H('div', { className: 'cs-tabs', role: 'tablist' }), body = H('div', { className: 'cs-body' });
       tabs.forEach(k => tb.append(H('button', { type: 'button', role: 'tab', className: k === tab ? 'on' : '', 'aria-selected': String(k === tab), textContent: TABS[k], on: { click: () => { ui.inspTab[it.id] = k; o.rebuildInspector(); } } })));
       const ch = full => changed(full), cm = () => o.commit();
-      ({ basic, anim, speed, col, fx, mask, key, audio, clip, avatar, colour, intro })[tab](body, c, it, m, ch, cm, f);
+      ({ basic, anim, speed, col, fx, mask, key, audio, clip, title, avatar, colour, intro })[tab](body, c, it, m, ch, cm, f);
       root.append(H('section', { className: 'card cs' }, head, tb, body));
     }
     function basic(body, c, it, m, ch, cm, f) {
@@ -194,6 +194,11 @@ const CutInspect = (() => {
         check('The seagull nicks the cone', it.gull !== false, v => { cm(); if (v) delete it.gull; else it.gull = false; ch(true); }),
         H('p', { className: 'hint', textContent: 'Drag its end on the timeline to cut it short. Put a transition after it to go into the video.' })));
     }
+    // the intro's own settings, right here: the words (episode, pub, label), the bottle label, the sound, the hold.
+    // Its sound is made again (a moment after the last change) so it always matches the words.
+    let introTimer = 0;
+    function title(body, c, it, m, ch, cm) { if (typeof Intro === 'undefined') return; it.cfg = Object.assign(Intro.defaults(), it.cfg || {}); let first = true;
+      Intro.form(body, it.cfg, () => { if (first) { cm(); first = false; } ch(true); clearTimeout(introTimer); introTimer = setTimeout(() => { Intro.ensureSound(it.cfg).then(() => ch(true)).catch(() => { }); }, 700); }); }
     function clip(body, c, it, m, ch, cm) {
       const d = V().natural(it, look()), [a, e] = V().clipSpan(it, look());
       body.append(sect('', UI.field('Name on the timeline', UI.txt(it.name || '', v => { it.name = v; ch(); }, V().NAMES[it.mod], 'Clip name')),

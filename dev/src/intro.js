@@ -22,12 +22,12 @@ const Intro = (() => {
   const mk = (w, h) => { w = Math.max(1, Math.ceil(w)); h = Math.max(1, Math.ceil(h)); return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); };
   const HEAVY = '"Arial Black", "Segoe UI Black", Impact, "Helvetica Neue", Arial, sans-serif', COND = 'Bahnschrift, "Arial Narrow", "Segoe UI", Arial, sans-serif', SERIF = 'Georgia, Cambria, "Times New Roman", serif', SCRIPT = '"Segoe Script", "Brush Script MT", "Comic Sans MS", cursive', MARK = '"Segoe Print", "Comic Sans MS", "Segoe Script", cursive';
 
-  function defaults() { return { style: 'swally', name: 'PatterSquid', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', label: '', sound: { on: true, vol: 0.9 } }; }
+  function defaults() { return { style: 'swally', name: 'PatterSquid', lines: Object.assign({}, LINES), kicker: '', episode: '', hold: 0.8, logo: true, blow: 'auto', label: '', pub: "The Hole in the Wa'", sound: { on: true, vol: 0.9 } }; }
   const lineOf = cfg => { const L = cfg.lines && typeof cfg.lines === 'object' ? cfg.lines[styleOf(cfg)] : null; return L == null ? LINES[styleOf(cfg)] : String(L); };
   const styleOf = cfg => STYLES.some(s => s[0] === cfg.style) ? cfg.style : 'swally';
   const nameOf = cfg => String(cfg.name == null || cfg.name === 'PATTERSQUID' ? 'PatterSquid' : cfg.name).slice(0, 24);
   const epOf = cfg => String(cfg.episode || '').trim().slice(0, 80);
-  const mainLen = cfg => BASE[styleOf(cfg)] + (epOf(cfg) ? EP : 0);
+  const mainLen = cfg => BASE[styleOf(cfg)] + (epOf(cfg) && styleOf(cfg) !== 'swally' ? EP : 0); // the cut scene's end card has room for the episode already
   function duration(cfg) { return mainLen(cfg) + cl(+cfg.hold || 0, 0, 10); }
 
   // His logo
@@ -834,7 +834,7 @@ void main(){
   function draw(g, t, cfg, look, W, H) {
     q3live = !(look && (look.exporting || (look.cutEnv && !look.preview)));
     t = cl(t, 0, duration(cfg)); const L = layout(W, H), st = styleOf(cfg), tm = Math.min(t, mainLen(cfg)) + Math.max(0, t - mainLen(cfg)) * 0;
-    if (st === 'swally') { g.save(); let ok = false; try { ok = typeof IntroScenes !== 'undefined' && IntroScenes.swally(g, t, W, H, { name: nameOf(cfg), line: lineOf(cfg), episode: epOf(cfg), kicker: String(cfg.kicker || '').trim().slice(0, 40), label: typeof cfg.label === 'string' ? cfg.label : '' }); } catch (e) { console.warn('intro', e); } if (!ok) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0d18'; g.fillRect(0, 0, W, H); } g.restore(); return; }
+    if (st === 'swally') { g.save(); let ok = false; try { ok = typeof IntroScenes !== 'undefined' && IntroScenes.swally(g, t, W, H, { name: nameOf(cfg), line: lineOf(cfg), episode: epOf(cfg), kicker: String(cfg.kicker || '').trim().slice(0, 40), label: typeof cfg.label === 'string' ? cfg.label : '', pub: typeof cfg.pub === 'string' && cfg.pub.trim() ? cfg.pub.trim().slice(0, 28) : "The Hole in the Wa'" }); } catch (e) { console.warn('intro', e); } if (!ok) { g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0b0d18'; g.fillRect(0, 0, W, H); } g.restore(); return; }
     g.save(); try { if (st === 'battered') { if (!try3D(drawBattered3D, 'battered', g, t, L, cfg)) drawBattered(g, t, L, cfg); } else if (st === 'neon') { let ok = false; try { ok = drawNeon3D(g, t, L, cfg); } catch (e) { if (!drawNeon3D.warned) { drawNeon3D.warned = 1; console.warn('3D neon', e); } } if (!ok) drawNeon(g, t, L, cfg); } else if (st === 'epic') { if (!try3D(drawEpic3D, 'epic', g, t, L, cfg)) drawEpic(g, t, L, cfg); } else { if (!try3D(drawInk3D, 'ink', g, t, L, cfg)) drawInk(g, t, L, cfg); } } finally { g.restore(); }
     void tm; void look;
   }
@@ -960,15 +960,16 @@ void main(){
     const seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
     const redo = () => { changed(); form(root, cfg, changed); };
     // Styles as wee moving pictures to pick from
-    const grid = H('div', { className: 'in-styles' }); STYLES.forEach(([k, l]) => { const cv = H('canvas', { width: 256, height: 144 }); ready().then(() => { const c2 = Object.assign({}, cfg, { style: k }); const at = { ink: 3.0, battered: 4.4, neon: 3.4, epic: 2.7 }[k]; try { draw(cv.getContext('2d'), at, c2, {}, 256, 144); } catch (e) { } });
+    const grid = H('div', { className: 'in-styles' }); STYLES.forEach(([k, l]) => { const cv = H('canvas', { width: 256, height: 144 }); ready().then(() => { const c2 = Object.assign({}, cfg, { style: k }); const at = { swally: 13.6, ink: 3.0, battered: 4.4, neon: 3.4, epic: 2.7 }[k]; try { draw(cv.getContext('2d'), at, c2, {}, 256, 144); } catch (e) { } });
       grid.append(H('button', { type: 'button', className: 'in-style' + (k === st ? ' on' : ''), on: { click: () => { cfg.style = k; redo(); } } }, cv, H('span', { textContent: l }))); });
-    root.append(card('Style', grid, H('p', { className: 'hint', textContent: { ink: 'A drop of squid ink lands and blooms into your squid; the name soaks into the paper; one fat drip runs off the end and splats.', battered: 'Your squid goes in the fryer, comes out battered and lands on the chip paper with salt and vinegar. Name slapped on like a chippy sign.', neon: 'Night on a red sandstone tenement: your logo lights up, the name buzzes on in neon, then a letter blows in a shower of sparks.', epic: 'A massive Hollywood style opener, gold and choirs, until a tentacle reaches in, everything cuts dead and the logo gets slapped on squint.' }[st] })));
+    root.append(card('Style', grid, H('p', { className: 'hint', textContent: { swally: 'Squid gets booted out the pub, face plants down the road, gives the pub the finger, gets soaked by a ned on a bike, necks his tonic wine and spews all over the lens. The title splats on with the ink.', ink: 'A drop of squid ink lands and blooms into your squid; the name soaks into the paper; one fat drip runs off the end and splats.', battered: 'Your squid goes in the fryer, comes out battered and lands on the chip paper with salt and vinegar. Name slapped on like a chippy sign.', neon: 'Night on a red sandstone tenement: your logo lights up, the name buzzes on in neon, then a letter blows in a shower of sparks.', epic: 'A massive Hollywood style opener, gold and choirs, until a tentacle reaches in, everything cuts dead and the logo gets slapped on squint.' }[st] })));
     const lineVal = cfg.lines[st] == null ? LINES[st] : cfg.lines[st];
     root.append(card('Words',
       field('Name', txt(nameOf(cfg), v => { cfg.name = v.slice(0, 24); changed(); }, 'PATTERSQUID', 'Name')),
       field('Line (for this style)', txt(lineVal, v => { cfg.lines[st] = v.slice(0, 60); changed(); }, '', 'Line'), 'Leave it empty for no line. Each style keeps its own.'),
       H('div', { className: 'btnrow' }, btn('Put the usual line back', () => { delete cfg.lines[st]; redo(); })),
-      field('Episode title (optional)', txt(cfg.episode || '', v => { cfg.episode = v.slice(0, 80); changed(); }, 'e.g. The Great Buckfast Shortage', 'Episode title'), 'Adds a second and a half at the end to show it.'),
+      ...(st === 'swally' ? [field('Name of the pub', txt(typeof cfg.pub === 'string' ? cfg.pub : "The Hole in the Wa'", v => { cfg.pub = v.slice(0, 28); changed(); }, "The Hole in the Wa'", 'Pub name'), 'On the sign above the door he gets chucked out of.')] : []),
+      field('Episode title (optional)', txt(cfg.episode || '', v => { cfg.episode = v.slice(0, 80); changed(); }, 'e.g. The Great Buckfast Shortage', 'Episode title'), st === 'swally' ? 'It drops in under PatterSquid at the end; one word lands squint.' : 'Adds a second and a half at the end to show it.'),
       field('Wee label above the title (optional)', txt(cfg.kicker || '', v => { cfg.kicker = v.slice(0, 40); changed(); }, 'e.g. EPISODE 12', 'Label'))));
     const opts = [];
     if (st === 'neon') { const n = nameOf(cfg); opts.push(field('Which letter blows', sel(cfg.blow == null ? 'auto' : String(cfg.blow), [['auto', 'The Q (or the last letter)'], ['none', 'None, it all stays on'], ...[...n].map((c, i) => [String(i + 1), (i + 1) + ': ' + c])].filter(o => o[1].trim().slice(-1) !== ' '), v => { cfg.blow = v === 'auto' || v === 'none' ? v : +v; changed(); }, 'Letter that blows'))); }

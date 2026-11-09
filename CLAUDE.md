@@ -183,44 +183,41 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
   filter), all the light thrown into the room is one pass, and `cfg.vfocus` (auto, you, window, middle) sets where a 9:16
   frame looks (auto: you, else the window when events are on, else the middle).
 
-## The Intro tab (dev/src/intro.js, `Intro`)
+## The intro (dev/src/intro.js `Intro`, dev/src/intro_scenes.js `IntroScenes`, dev/src/squid.js `Squid`)
 
-Branded PatterSquid openers. He did not like a simple cartoon gag (too basic, cheesy): these are meant to look like proper
-studio idents with one dry, adult Glaswegian wink. Four styles (`cfg.style`), every word editable: `name` (the wordmark),
-`lines[style]` (each style keeps its own line; empty for none), `episode` and `kicker` (an episode title with a wee label,
-adds 1.6 s), `hold`, `logo`, `blow` (neon: which letter blows), `sound` { on, vol }.
-* **All four are real 3D** (he rejected the flat 2D versions as novice). `dev/src/g3.js` (`G3`) is our own WebGL2 renderer:
-  each scene is one raymarched fragment shader (signed distance fields) into a float target, then bloom, ACES tone, vignette,
-  grain and a touch of colour fringing. Typed words become distance field textures (`G3.textSdf`: canvas text, exact EDT,
-  R16F in world units, with `hw` half the stroke width) so they can be neon tubes along the middle of each letter
-  (`max(sd + hw, 0)`) or extruded, bevelled solid letters (`sdExtrude`). The 3D world is laid out from a fixed reference
-  frame (`REF`, 1280x720, one world unit is 200 design pixels) so the 2D timings and positions carry over; table top scenes
-  have the table at z = 0 with the camera above. Flat printed things (lines, tickets, the episode) are drawn by the 2D code
-  into a reference sized layer (`printLayer`) and printed onto the surface. Overlays (sparks, salt, steam, gold dust,
-  flare) are 2D, placed with `G3.camera(...).project`. Cameras are keyframed (`cam3`), pulled back for narrow frames.
-  Without WebGL2, or if a shader fails, each style falls back to its old 2D drawing (`try3D`). Software GL in headless
-  tests takes about a second a frame at 640x360; on his PC it is a few ms.
-* `ink`: a 3D drop of squid ink falls onto paper and blooms (the 2D mask, unthresholded, is a height field: glossy wet ink
-  with a meniscus, casting onto the paper); eight arms curl into spirals like tentacles and keep off the words; his disc rises out of the ink as a coin with the ink draining off it; the name
-  rises as extruded letters from the left, paper coloured where it crosses ink; a drip runs off the last
-  letter and splats.
-* `battered`: his squid (a coin) drops into a steel fryer (dark amber oil with rings, bubbles, flying drops, a basket), comes out in puffy golden batter with the squid
-  pressed in, whips across to chip paper (made up newsprint) on a heap of chunky chips (a height map
-  drawn once, `heap()`), salt and vinegar; name slapped
-  on as a chunky 3D chippy sign (red on white), the line on a 3D red menu board; the episode on a handwritten ticket.
-* `neon`: night on a wet red sandstone tenement (ashlar, sodium street lamp, drainpipe); a 3D light box with his logo
-  flickers on, the name buzzes on
-  in neon letter by letter (PATTER cold blue, SQUID red), a letter (the Q by default) blows in sparks; line in pink
-  script neon; episode as a fly poster.
-* `epic`: a gold medallion with his squid embossed rises through cloud banks, god rays round it, gold extruded serif
-  name swinging up with a glint, choir and brass, until a tentacle reaches
-  in (3D, suckers); the picture switches off like an old telly and the logo is slapped on a dark wall squint, plain,
-  under one bulb.
-* Sound (`Intro.sound`) is made from the same moments, evened out across styles; in the Video tab an Intro clip
-  (`clip` with `mod: 'intro'`) plays it through a built in media file `Intro.soundId(cfg)` (made by `ensureSound` when
-  missing; the mixer takes a tab clip's sound time from its own in point and speed). The Intro tab's Export (and
-  Ctrl+E) goes through the editor's export window as a one clip video, so it comes out with its sound; the panel also has
-  Listen and Save WAV. "Your intro" at the top of the Patter library puts it at the start of a video.
+The PatterSquid opener lives in the **Video tab** now: "+ Add intro" (Patter in the library) puts it at the start of the
+video with its sound, and selecting the intro clip shows its settings on the right (an Intro panel, `title` in
+`cut_insp.js`, which is `Intro.form` on the clip's own `cfg`; double click opens it too). The Intro tab button is hidden
+(`index.html`) and a saved `state.module` of 'intro' opens the Video tab. Changing the words makes its sound again a
+moment later (`Intro.ensureSound`, keyed on the settings).
+* **The one style, `swally` ("Chucked oot")**, a cut scene on his own Coatbridge street picture (`assets/coatbridge-street.jpg`,
+  embedded in `src/fonts.js` as `COAT_STREET`): the pub door opens, he is shoved out backwards resisting, one straight leg
+  in a black shoe swings out of the doorway and boots him, he flies (real gravity, his body turning to dive), his face hits
+  the road and he scrapes along it (squash and stretch from `where(t).ss`, the body toppling onto the road, legs swinging
+  over), his gold check cap flies off and he picks it up and puts it back on, pulls his tonic wine out from behind him,
+  gives the pub the finger, a ned on a BMX comes down the road at the camera and soaks him through a puddle, he necks the
+  bottle, goes green, heaves and spews ink at the lens. The ink covers the screen and the logo, PatterSquid and the
+  episode splat in together (overshoot and spring back); the episode drops in as one line and one word (about two thirds
+  along) lands squint; a cone drops onto the squid's heid in the logo.
+* Settings he edits: `name`, `pub` (the pub sign, default "The Hole in the Wa'"), `episode`, `kicker`, `lines.swally`,
+  `label` (his own picture for the bottle label, a downscaled JPEG data URL; empty is our made up Auld Patter label),
+  `hold`, `sound`. Everything in the scene is a pure function of time; beats are `IntroScenes.B` (all derived from a few
+  numbers, so moving one moves the rest). `BASE.swally` is `B.end`; the episode needs no extra time in this style.
+* Brands: no real labels or patterns are drawn. He asked for the Buckfast label and a Burberry cap: the bottle is our own
+  dark tonic wine bottle (or his own picture via `label`), the cap is our own gold check.
+* Look: flat adult cartoon (thick outlines, cel shading via `vol` and `tube`), his icon kept as the real picture
+  (`Squid`: WebGL mesh warp with lids that can slant angrily, `lidTilt`, and two vector arms, the left one for the finger;
+  `postArm`/`postArmL` hooks draw in the picture's coordinates). `squidComic` adds the outline; its layer keeps his feet in
+  the middle so nothing is cropped when he is upside down.
+* `swally(g, t, W, H, o)` takes the transform it is given as the screen (`M0`, `ST`), so exports at 720p or 4K frame it
+  exactly like 1080p. Fonts in `src/fonts.js` (`PATTER_FONTS`, `PatterFonts.ready()`; licences in `assets/fonts`).
+* The old styles (ink, battered, neon, epic, 3D in `g3.js`) are still in `intro.js` so old projects open, but are not
+  offered. He rejected them, the vector squid, the 3D street and several gags along the way.
+* Sound (`Intro.sound`, branch `swally`): music through the pub wall, the door, the boot, the face plant and scrape, the
+  door slam, the bike, the splash, drips, glugs, heaves, the spew, the splat, the episode thump and the loose word's bonk,
+  the cone. No rain. In the Video tab the clip plays it through a built in media file `Intro.soundId(cfg)`.
+* Tests: `tests/intro_video.py` (no Intro tab, Add intro, the panel edits pub and episode, sound remade, undo, double
+  click, export with picture and sound).
 
 ## Packs (data only, no code)
 

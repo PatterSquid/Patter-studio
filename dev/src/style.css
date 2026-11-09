@@ -427,3 +427,4 @@ body.cut main{grid-template-rows:minmax(160px,1fr) auto var(--tlh,clamp(210px,36
 
 .in-styles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}.in-style{display:flex;flex-direction:column;gap:5px;padding:5px;border-radius:9px;background:#13203a;border:2px solid transparent;color:#cfd8e8;font:600 12px system-ui,sans-serif;cursor:pointer}
 .in-style canvas{width:100%;height:auto;border-radius:6px;display:block}.in-style.on{border-color:var(--bru);color:#fff}
+[data-mod][hidden]{display:none!important}

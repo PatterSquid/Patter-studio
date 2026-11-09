@@ -113,7 +113,7 @@ const CutUI = (() => {
     }
     function drawPatter() {
       if (typeof Intro !== 'undefined') { const cv = H('canvas', { width: 320, height: 180 }), ic = o.tabCfg('intro'); Intro.ready().then(() => { try { Intro.draw(cv.getContext('2d'), Math.max(0, Intro.mainLen(ic) - 0.7), ic, {}, 320, 180); } catch (e) { } });
-        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Your intro' }), H('div', { className: 'cl-intro' }, drag0(H('button', { type: 'button', className: 'cl-tile cl-introbtn', title: 'Put the intro from the Intro tab at the start of the video, with its sound', on: { click: () => addIntro() } }, cv, H('span', { textContent: 'Intro: ' + (Intro.STYLES.find(q => q[0] === Intro.styleOf(ic)) || ['', ''])[1] + ' (make it in the Intro tab)' })), { type: 'intro' }))); }
+        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Your intro' }), H('div', { className: 'cl-intro' }, drag0(H('button', { type: 'button', className: 'cl-tile cl-introbtn', title: 'Put the PatterSquid intro at the start of the video, with its sound', on: { click: () => addIntro() } }, cv, H('span', { textContent: '+ Add intro' })), { type: 'intro' }))); }
       libBody.append(H('p', { className: 'hint', textContent: 'Clips from the other tabs: each starts as a copy of what is on that tab now, and Edit opens it there. Drag onto the main track or above it.' }));
       const g = H('div', { className: 'cl-grid' });
       Object.entries(V().NAMES).filter(([k]) => V().raw(k)).forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile pt', style: '--c:' + V().COLS[k], title: 'Add a copy of what is in the ' + l + ' tab now', on: { click: () => addPatter(k) } }, H('i', { textContent: '▣' }), H('span', { textContent: l })), { type: 'patter', k })));
@@ -173,7 +173,7 @@ const CutUI = (() => {
     // The intro from the Intro tab goes at the very start (or where it is dropped), with its sound made the first time
     async function addIntro(t) { const src = JSON.parse(JSON.stringify(o.tabCfg('intro'))); try { await Intro.ensureSound(src); } catch (e) { o.say('The intro sound could not be made: ' + (e.message || e)); }
       o.commit(); const c = cfg(), it = { id: V().nid('i'), kind: 'clip', mod: 'intro', name: '', cfg: src, inPt: 0, hold: 0 }; if (t == null) { c.items = c.items || []; c.items.unshift(it); } else insertMain(c, it, t);
-      changed(); build(); select('C:' + it.id); o.player.seek(V().allPlaced(c, look()).find(q => q.it === it).t0); o.say('Intro added. Change its words in the Intro tab, then press "Use what\u2019s in the Intro tab now".'); }
+      changed(); build(); select('C:' + it.id); o.player.seek(V().allPlaced(c, look()).find(q => q.it === it).t0); o.say('Intro added. Its episode title, pub name and the rest are on the right.'); }
     // Intro clips bring their own sound: make it if this computer has not got it yet
     function introSounds() { if (typeof Intro === 'undefined') return; V().allPlaced(cfg(), look()).forEach(p => { const it = p.it; if (it.kind === 'clip' && it.mod === 'intro' && it.cfg && !CutMedia.info(Intro.soundId(it.cfg))) Intro.ensureSound(it.cfg).catch(() => { }); }); }
     function addBlock(k, row, t) { o.commit(); const c = cfg(); t = t == null ? o.player.t : t; let it;
@@ -345,7 +345,7 @@ const CutUI = (() => {
       if (it.kf) Object.entries(it.kf).forEach(([k, L]) => (L || []).forEach(q => el.append(H('i', { className: 'kf', style: `left:${q[0] * pps}px`, title: k + ' keyframe' }))));
       el._p = p; el._r = r; el.addEventListener('pointerdown', e => clipDown(e, { it, p, r }));
       el.addEventListener('contextmenu', e => { e.preventDefault(); select('C:' + it.id); menu(e, it, p, r); });
-      el.addEventListener('dblclick', () => { if (it.kind === 'clip') o.openItem(it.id); });
+      el.addEventListener('dblclick', () => { if (it.kind === 'clip' && it.mod === 'intro') { select('C:' + it.id); } else if (it.kind === 'clip') o.openItem(it.id); });
       el.addEventListener('dragover', e => { if (dragData && (dragData.type === 'fx' || dragData.type === 'look')) { e.preventDefault(); e.stopPropagation(); el.classList.add('drop'); } }); el.addEventListener('dragleave', () => el.classList.remove('drop'));
       el.addEventListener('drop', e => { const dd = readDrop(e); el.classList.remove('drop'); if (!dd || (dd.type !== 'fx' && dd.type !== 'look')) return; e.preventDefault(); e.stopPropagation(); const f = V().findItem(cfg(), it.id); if (dd.type === 'fx') applyFx(dd.k, f); else applyLook(dd.k, f); });
       return el;
@@ -544,7 +544,7 @@ const CutUI = (() => {
     function menu(e, it, p, r) {
       const items = [['Split at the playhead', () => splitNow()], ['Duplicate', () => dupNow()], ['Copy', () => copySel()], ['Paste at the playhead', () => paste()], ['Delete', () => del(false)], ['Delete and close the gap', () => del(true)]];
       const m = it.asset ? CutMedia.info(it.asset) : null; if (m && m.kind === 'video') { items.push(['Freeze this frame', () => freezeNow()]); if (!it.mute) items.push(['Detach the sound', () => detachNow()]); }
-      if (it.kind === 'clip') items.push(['Edit in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id)]);
+      if (it.kind === 'clip' && it.mod === 'intro') items.push(['Change the intro (episode, pub)', () => { select('C:' + it.id); }]); else if (it.kind === 'clip') items.push(['Edit in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id)]);
       if (it.kind !== 'audio' && it.kind !== 'avatar') items.push(['Reset size and position', () => { o.commit(); ['x', 'y', 's', 'rot', 'crop', 'flipH', 'flipV'].forEach(k => delete it[k]); if (it.kf) ['x', 'y', 's', 'rot'].forEach(k => delete it.kf[k]); changed(); }]);
       items.push([it.mute ? 'Unmute' : 'Mute', () => { o.commit(); it.mute = !it.mute; changed(); }]);
       const pop = H('div', { className: 'ct-menu', role: 'menu' }); items.forEach(([l, fn]) => pop.append(H('button', { type: 'button', role: 'menuitem', textContent: l, on: { click: () => { pop.remove(); fn(); } } })));
