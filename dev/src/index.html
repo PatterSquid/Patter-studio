@@ -11,7 +11,7 @@
   <nav id="tabs" aria-label="Workspaces">
     <button data-mod="video" title="Edit your video: footage, clips, sound, text, transitions">Video</button>
     <button data-group="gfx" title="Make animated graphics: charts, maps, newspapers, Story and more">Graphics</button>
-    <button data-mod="studio" title="Your studio and your character">Animator</button>
+    <button data-group="anim" title="Your studio and your character">Animator</button>
     <button data-mod="intro" hidden>Intro</button>
   </nav>
   <div class="hdr-tools">
@@ -25,7 +25,11 @@
   </div>
 </header>
 <main>
-  <nav id="gfxRail" aria-label="Graphics makers" hidden>
+  <nav id="animRail" class="rail" aria-label="Animator" hidden>
+    <button data-mod="studio" title="Studio: your room brought to life"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1"/><path d="M12 4v13M3 10h18M8 21h8M12 17v4"/></svg><span>Studio</span></button>
+    <button data-mod="char" title="Character: your puppet talking from your voice"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M10 11.5c1 .8 3 .8 4 0M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg><span>Character</span></button>
+  </nav>
+  <nav id="gfxRail" class="rail" aria-label="Graphics makers" hidden>
     <button data-mod="charts" title="Charts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Charts</span></button>
     <button data-mod="timeline" title="Timeline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h20M6 8v8M12 8v8M18 8v8"/></svg><span>Timeline</span></button>
     <button data-mod="map" title="World map"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>World map</span></button>

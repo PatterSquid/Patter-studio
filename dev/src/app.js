@@ -2,7 +2,7 @@
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
   const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio' };
   const KEY = 'patter-studio-v1';
@@ -127,15 +127,16 @@
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
   function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
-  const tabs = document.querySelectorAll('#tabs button[data-mod], #gfxRail button[data-mod]');
-  const GFX = ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll'];
-  const isGfx = m => GFX.includes(m);
-  const gfxBtn = document.querySelector('#tabs button[data-group=gfx]'), rail = $('gfxRail');
+  const tabs = document.querySelectorAll('#tabs button[data-mod], .rail button[data-mod]');
+  const GFX = ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll'], ANIM = ['studio', 'char'];
+  const isGfx = m => GFX.includes(m), isAnim = m => ANIM.includes(m);
+  const gfxBtn = document.querySelector('#tabs button[data-group=gfx]'), animBtn = document.querySelector('#tabs button[data-group=anim]'), rail = $('gfxRail'), arail = $('animRail');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); });
-    const g = isGfx(state.module); if (g) state.lastGfx = state.module; if (gfxBtn) { gfxBtn.classList.toggle('on', g); gfxBtn.setAttribute('aria-pressed', g); } if (rail) rail.hidden = !g; document.body.classList.toggle('gfx', g); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
-  function switchTab(m) { if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
+    const g = isGfx(state.module), a = isAnim(state.module); if (g) state.lastGfx = state.module; if (a) state.lastAnim = state.module; [[gfxBtn, g], [animBtn, a]].forEach(([b, on]) => { if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); } }); if (rail) rail.hidden = !g; if (arail) arail.hidden = !a; document.body.classList.toggle('gfx', g); document.body.classList.toggle('anim', a); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio' || state.module === 'char'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
+  function switchTab(m) { if (typeof Character !== 'undefined') Character.stopSound(); if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
   if (gfxBtn) gfxBtn.addEventListener('click', () => { if (isGfx(state.module)) return; const e = state.edit; switchTab(e && isGfx(e.mod) ? e.mod : (isGfx(state.lastGfx) && MODULES[state.lastGfx] ? state.lastGfx : 'charts')); });
+  if (animBtn) animBtn.addEventListener('click', () => { if (isAnim(state.module)) return; const e = state.edit; switchTab(e && isAnim(e.mod) ? e.mod : (isAnim(state.lastAnim) && MODULES[state.lastAnim] ? state.lastAnim : 'studio')); });
   /* ---------- Editing a clip from the Video tab: it is opened in its own tab (that tab's usual clip is put aside), and goes
      back into the video when you return to the Video tab ---------- */
   const vItem = id => { const c = state.cfg.video; if (!c) return null; const f = typeof Video !== 'undefined' && Video.findItem ? Video.findItem(c, id) : null; return f ? f.it : (c.items || []).find(x => x.id === id); };   // clips on any track
@@ -158,6 +159,7 @@
   const player = E.Player($('prev'), () => ({ mod: mod(), cfg: cfg(), look: viewLook() }), (t, d, playing) => {
     if (ed) { ed.setTime(t); ed.drawOverlay(t); ed.syncPlay(playing); }
     if (cutUI && state.module === 'video') cutUI.frame(t, playing);
+    { const mm = mod(); if (mm && typeof mm.tick === 'function') mm.tick(t, playing && !scrubbing, cfg()); }
     if (!scrubbing) scrub.value = Math.round(t / d * 1000);
     timeEl.textContent = t.toFixed(1) + ' / ' + d.toFixed(1) + ' s'; playBtn.textContent = playing ? 'Pause' : 'Play'; playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
   });
@@ -232,6 +234,8 @@
     cutUI = CutUI.create(cutO); cutO.ui = cutUI; cutInsp = CutInspect.create(cutO, cutUI); window.PatterCut = { ui: cutUI, insp: cutInsp, player, select: id => ed.select(id) };
     if (typeof Intro !== 'undefined') Intro.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Intro.ready(); await Intro.ensureSound(copy); } catch (e) { }
       cutInsp.exportDialog({ v: 2, items: [{ id: 'introx', kind: 'clip', mod: 'intro', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };   // the tests drive the editor through this
+    if (typeof Character !== 'undefined') Character.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Character.prepare(copy); } catch (e) { }
+      cutInsp.exportDialog({ v: 2, items: [{ id: 'charx', kind: 'clip', mod: 'char', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };
     Object.assign(Video.hooks, { inspect: (...a) => cutInsp.inspect(...a), scene: (...a) => cutInsp.scene(...a), time: () => player.t, cfg: () => state.cfg.video });
     const gBuild = ed.build; ed.build = () => { gBuild(); if (cutUI.active) cutUI.build(); };
     const gSel = ed.select; ed.select = (id, q) => { gSel(id, q); if (cutUI.active) cutUI.markSel(); };
@@ -439,6 +443,7 @@
     if (exportBtn.disabled) return;
     if (state.module === 'video' && cutInsp) { cutInsp.exportDialog(); return; }
     if (state.module === 'intro' && cutInsp && typeof Intro !== 'undefined') { Intro.exportWithSound(cfg()); return; }
+    if (state.module === 'char' && cutInsp && typeof Character !== 'undefined' && Character.exportWithSound && cfg().voice) { Character.exportWithSound(cfg()); return; }
     const fps = +$('fps').value, blur = ['smart', 'off', 'full'].includes($('blur').value) ? $('blur').value : 'smart', look = JSON.parse(JSON.stringify(state.look)), c = JSON.parse(JSON.stringify(cfg())), m = mod(), range = $('rangeOn').checked ? getRange() : null;
     abort = new AbortController(); exportBtn.disabled = true; cancelBtn.hidden = false; fill.style.width = '0%';
     player.pause(); player.freeze(true); if (SP) SP.hold(true); const t0 = performance.now(); say('Getting ready to render…');
