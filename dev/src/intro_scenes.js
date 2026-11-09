@@ -178,44 +178,48 @@ const IntroScenes = (() => {
     const rr = rng(seed + 3); g.lineCap = 'round';
     g.strokeStyle = 'rgba(235,235,255,0.35)'; g.lineWidth = Math.max(2, H / 180); for (let i = 0; i < 7; i++) { const x = W * (cx + (rr() - 0.5) * 0.7), y = H * (cy + (rr() - 0.5) * 0.6); g.beginPath(); g.arc(x, y, H * (0.03 + rr() * 0.05), 3.6, 4.5); g.stroke(); } g.restore(); }
 
-  // The end card, like a broadcast title: the ink settles into a deep, glossy background; his logo lands in the middle,
-  // slides left as PatterSquid draws out from behind it; a gold rule runs out under the lockup; the episode comes up in a
-  // serif italic under a wee letterspaced label; a slow sheen crosses the name; and the cone drops onto the squid's heid.
-  const WM = '"Big Shoulders", "Bricolage Grotesque", Impact, sans-serif', SERIF = '"Instrument Serif", Georgia, serif', LBLF = '"Instrument Sans", "Bricolage Grotesque", sans-serif', GOLD = '#d9ad52';
-  let TL = null; function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-    // the background: ink going deep navy at the middle, a slow sheen drifting across, fine grain
-    g.globalAlpha = sm(k / 0.5); const bg = g.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, W * 0.7); bg.addColorStop(0, '#1a2140'); bg.addColorStop(0.55, '#0d0f1c'); bg.addColorStop(1, '#050509'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
-    const sx = lerp(-0.4, 1.4, (k * 0.12) % 1) * W, sg = g.createLinearGradient(sx - W * 0.3, 0, sx + W * 0.3, H * 0.6); sg.addColorStop(0, 'rgba(150,160,230,0)'); sg.addColorStop(0.5, 'rgba(150,160,230,0.05)'); sg.addColorStop(1, 'rgba(150,160,230,0)'); g.fillStyle = sg; g.fillRect(0, 0, W, H);
-    const gr = rng(77 + Math.floor(t * 24)); g.globalAlpha = 0.05 * sm(k / 0.5); for (let i = 0; i < 700; i++) { g.fillStyle = gr() < 0.5 ? '#000' : '#fff'; g.fillRect(gr() * W, gr() * H, 1.5 * u + 0.5, 1.5 * u + 0.5); } g.globalAlpha = 1;
-    // measure the lockup: logo, a gap, the name
-    let fs = 190 * u; g.font = `700 ${fs}px ${WM}`; let wm = g.measureText(name).width; const D = H * 0.24, gap = H * 0.05; if (D + gap + wm > W * 0.84) { fs *= (W * 0.84 - D - gap) / wm; g.font = `700 ${fs}px ${WM}`; wm = g.measureText(name).width; }
-    const yL = H * (ep ? 0.39 : 0.47), x0 = (W - (D + gap + wm)) / 2, slide = eo(cl((k - 0.32) / 0.55)), lx = lerp(W / 2, x0 + D / 2, 1 - Math.pow(1 - slide, 4)), bonk = bump(t - B.bonk, 0.2);
-    // the name, drawn out from behind the logo
-    const nk = cl((k - 0.36) / 0.5), ne = 1 - Math.pow(1 - nk, 4); if (nk > 0) { const tx = x0 + D + gap; g.save(); g.beginPath(); g.rect(lx + D * 0.5, 0, W, H); g.clip(); g.translate(tx - (1 - ne) * wm * 0.55, yL); g.globalAlpha = sm(nk / 0.3);
-      // the name on its own layer so the sheen only touches the letters
-      const tw = Math.ceil(wm + 40 * u), th = Math.ceil(fs * 1.6); if (!TL || TL.width < tw || TL.height < th) TL = mk(tw, th); const tc = TL.getContext('2d'); tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, TL.width, TL.height);
-      tc.textAlign = 'left'; tc.textBaseline = 'middle'; tc.font = `700 ${fs}px ${WM}`; const tg = tc.createLinearGradient(0, th / 2 - fs * 0.4, 0, th / 2 + fs * 0.4); tg.addColorStop(0, '#ffffff'); tg.addColorStop(1, '#e9dfca'); tc.fillStyle = tg; tc.fillText(name, 20 * u, th / 2 + fs * 0.04);
-      const shk = (k - 1.0) / 0.7; if (shk > 0 && shk < 1) { tc.globalCompositeOperation = 'source-atop'; const bx = lerp(-wm * 0.3, wm * 1.3, ease(shk)), sh = tc.createLinearGradient(bx - fs * 0.5, 0, bx + fs * 0.5, th); sh.addColorStop(0, 'rgba(255,236,190,0)'); sh.addColorStop(0.5, 'rgba(255,236,190,0.8)'); sh.addColorStop(1, 'rgba(255,236,190,0)'); tc.fillStyle = sh; tc.fillRect(0, 0, tw, th); tc.globalCompositeOperation = 'source-over'; }
-      g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 30 * u; g.shadowOffsetY = 10 * u; g.drawImage(TL, 0, 0, tw, th, -20 * u, -th / 2, tw, th); g.shadowColor = 'transparent';
-      g.restore(); }
-    // the logo: lands with a settle and a ring of light, then slides left into the lockup
-    const lk = cl(k / 0.32), ls = lk < 1 ? eb(lk) : 1, ry = yL + D / 2; g.save(); g.translate(lx, ry); g.scale(ls / Math.sqrt(1 - 0.1 * bonk), ls * (1 - 0.1 * bonk)); g.translate(0, -D / 2);
-    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 40 * u; g.shadowOffsetY = 14 * u; g.fillStyle = '#0a0b12'; g.beginPath(); g.arc(0, 0, D / 2 + 4 * u, 0, TAU); g.fill(); g.shadowColor = 'transparent';
-    g.save(); g.beginPath(); g.arc(0, 0, D / 2, 0, TAU); g.clip(); if (logo) g.drawImage(logo, -D / 2, -D / 2, D, D); else { g.fillStyle = '#16264a'; g.fillRect(-D / 2, -D / 2, D, D); } g.restore();
-    g.lineWidth = 3 * u; g.strokeStyle = GOLD; g.beginPath(); g.arc(0, 0, D / 2 + 1.5 * u, 0, TAU); g.stroke();
-    if (k > 0.18 && k < 0.8) { const rk = (k - 0.18) / 0.62; g.globalAlpha = 1 - rk; g.lineWidth = 2 * u; g.strokeStyle = '#ffe6b0'; g.beginPath(); g.arc(0, 0, D / 2 * (1 + 0.7 * eo(rk)), 0, TAU); g.stroke(); g.globalAlpha = 1; }
+  // The title lands WITH the splat, as part of it: his logo, PatterSquid and the episode smack onto the lens all at once
+  // in wet cream ink, with spatters round them, then drips run down off the bottoms of the letters and slow to a stop.
+  // The cone drops onto the squid's heid in the logo once it has all settled.
+  const WM = '"Big Shoulders", "Bricolage Grotesque", Impact, sans-serif', SERIF = '"Instrument Serif", Georgia, serif', LBLF = '"Instrument Sans", "Bricolage Grotesque", sans-serif', CREAM = '#f2e9d6';
+  let TC = null; // the title layer, its drips and spatters, made once per size and wording
+  function titleLayer(W, H, name, ep, kick) { const key = [W, H, name, ep, kick, !!logo].join('|'); if (TC && TC.key === key) return TC; const u = H / 1080, c = mk(W, H), g = c.getContext('2d');
+    let fs = 200 * u; g.font = `700 ${fs}px ${WM}`; let wm = g.measureText(name).width; const D = H * 0.25, gap = H * 0.045; if (D + gap + wm > W * 0.84) { fs *= (W * 0.84 - D - gap) / wm; g.font = `700 ${fs}px ${WM}`; wm = g.measureText(name).width; }
+    const yL = H * (ep ? 0.38 : 0.46), x0 = (W - (D + gap + wm)) / 2, lx = x0 + D / 2, r = rng(91);
+    // the logo in a splat shaped rim of cream ink
+    const blob = (cx, cy, R, n, amp) => { g.beginPath(); for (let i = 0; i <= 72; i++) { const a = i / 72 * TAU, rr = R * (1 + amp * (Math.sin(a * n + 1.3) * 0.5 + Math.sin(a * (n + 3) + 0.4) * 0.3 + Math.sin(a * 17) * 0.2)); i ? g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.closePath(); };
+    g.fillStyle = CREAM; blob(lx, yL, D * 0.56, 5, 0.06); g.fill();
+    g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillStyle = CREAM; g.font = `700 ${fs}px ${WM}`; g.fillText(name, x0 + D + gap, yL + fs * 0.04);
+    let ey = 0; if (ep) { ey = yL + D / 2 + H * (kick ? 0.17 : 0.13); if (kick) { g.save(); g.font = `700 ${26 * u}px ${LBLF}`; g.letterSpacing = `${8 * u}px`; g.textAlign = 'center'; g.fillText(kick.toUpperCase(), W / 2, yL + D / 2 + H * 0.085); g.restore(); }
+      let es = 92 * u; g.font = `italic 400 ${es}px ${SERIF}`; while (g.measureText(ep).width > W * 0.8) { es -= 2; g.font = `italic 400 ${es}px ${SERIF}`; } g.textAlign = 'center'; g.fillText(ep, W / 2, ey); }
+    // where the drips come from: the bottoms of the letters (lowest ink in a column), and spatters flung round the words
+    const im = g.getImageData(0, 0, W, H).data, A = (x, y) => im[(Math.round(y) * W + Math.round(x)) * 4 + 3], drips = [], spat = [];
+    const scan = (xa, xb, ya, yb, n, len) => { for (let i = 0; i < n; i++) { const x = lerp(xa, xb, (i + 0.15 + r() * 0.7) / n); let yy = -1; for (let y = Math.min(H - 1, yb); y > ya; y -= 1) if (A(x, y) > 160) { yy = y; break; } if (yy > 0 && r() < 0.75) drips.push({ x, y: yy - 2 * u, w: (4 + r() * 9) * u, L: len * (0.25 + r() * r() * 1.4), sp: 0.6 + r() * 1.6, d: r() * 0.5 }); } };
+    scan(x0 + D + gap, x0 + D + gap + wm, yL - fs * 0.6, Math.round(yL + fs * 0.75), 26, H * 0.16); scan(lx - D * 0.5, lx + D * 0.5, yL, Math.round(yL + D * 0.62), 6, H * 0.12); if (ep) { const ew = g.measureText(ep).width; scan(W / 2 - ew / 2, W / 2 + ew / 2, ey - 30 * u, Math.round(ey + 60 * u), 14, H * 0.1); }
+    for (let c2 = 0; c2 < 9; c2++) { const ang = r() * TAU, ox = x0 + D * 0.3 + r() * (D + gap + wm - D * 0.6), oy = yL + (r() - 0.5) * fs * 0.6, dist = fs * (0.55 + r() * 0.5); for (let i = 0; i < 6; i++) { const dd = dist * (0.6 + i * 0.12 + r() * 0.15), rr = (10 - i * 1.4 + r() * 3) * u; spat.push({ x: ox + Math.cos(ang) * dd * 1.6, y: oy + Math.sin(ang) * dd, r: Math.max(1.5 * u, rr), e: 1 + r() * 0.6 }); } }
+    // wet: light along the tops of the letters
+    g.globalCompositeOperation = 'source-atop'; for (let i = 0; i < 3; i++) { const yy = [yL - fs * 0.32, yL - D * 0.42, ey - 30 * u][i]; const gg = g.createLinearGradient(0, yy - 10 * u, 0, yy + 26 * u); gg.addColorStop(0, 'rgba(255,255,255,0.9)'); gg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gg; g.fillRect(0, yy - 10 * u, W, 36 * u); }
+    const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(70,55,40,0.35)'); g.fillStyle = sh; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over';
+    g.save(); g.beginPath(); g.arc(lx, yL, D / 2, 0, TAU); g.clip(); if (logo) g.drawImage(logo, lx - D / 2, yL - D / 2, D, D); else { g.fillStyle = '#16264a'; g.fillRect(lx - D / 2, yL - D / 2, D, D); } g.restore();
+    return (TC = { key, c, drips, spat, lx, yL, D, u }); }
+  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const T = titleLayer(W, H, name, ep, kick), u = T.u; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    // the smack: comes in big and squashes onto the glass, a wee wobble, a shake
+    const s = k < 0.1 ? lerp(1.5, 0.93, ei(k / 0.1)) : 1 - 0.07 * Math.exp(-(k - 0.1) * 9) * Math.cos((k - 0.1) * 30), sy = k < 0.1 ? 1 : 1 + 0.05 * Math.exp(-(k - 0.1) * 10) * Math.sin((k - 0.1) * 34), jx = bump(k, 0.15) * 8 * u * Math.sin(k * 120);
+    g.translate(W / 2 + jx, H * 0.48); g.scale(s / Math.sqrt(sy), s * sy); g.translate(-W / 2, -H * 0.48); g.globalAlpha = cl(k / 0.03);
+    g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 16 * u; g.shadowOffsetY = 6 * u;
+    // spatters, flung out with the hit
+    g.fillStyle = CREAM; T.spat.forEach(p => { const e = eo(cl(k / 0.12)), cx = W / 2 + (p.x - W / 2) * lerp(0.6, 1, e), cy = H * 0.48 + (p.y - H * 0.48) * lerp(0.6, 1, e); g.beginPath(); g.ellipse(cx, cy, p.r * p.e * 1.3, p.r, 0, 0, TAU); g.fill(); });
+    g.drawImage(T.c, 0, 0);
+    // drips running down off the letters, slowing as they go, a bulb on the end of each
+    T.drips.forEach(d => { const kk = Math.max(0, k - 0.12 - d.d), L = d.L * (1 - Math.exp(-kk * d.sp)); if (L < 1) return; const x = d.x, y = d.y, w = d.w * (1 - 0.25 * Math.min(1, L / d.L));
+      g.fillStyle = CREAM; g.beginPath(); g.moveTo(x - d.w / 2 - 2 * u, y); g.quadraticCurveTo(x - w / 2, y + 6 * u, x - w / 2, y + 10 * u); g.lineTo(x - w / 2, y + L); g.arc(x, y + L, w * 0.72, Math.PI, 0, true); g.lineTo(x + w / 2, y + 10 * u); g.quadraticCurveTo(x + w / 2, y + 6 * u, x + d.w / 2 + 2 * u, y); g.closePath(); g.fill(); });
+    g.shadowColor = 'transparent'; g.fillStyle = 'rgba(255,255,255,0.6)'; T.drips.forEach(d => { const kk = Math.max(0, k - 0.12 - d.d), L = d.L * (1 - Math.exp(-kk * d.sp)); if (L < 8 * u) return; g.fillRect(d.x - d.w * 0.22, d.y + 8 * u, Math.max(1, d.w * 0.16), L - 10 * u); g.beginPath(); g.arc(d.x - d.w * 0.2, d.y + L - d.w * 0.15, d.w * 0.18, 0, TAU); g.fill(); });
     // the cone: drops out the top of the screen onto his heid, a wee hop, settles squint
-    if (t > B.cone) { const hy = -D * 0.36, ch = D * 0.32; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = lerp(D * 0.2, 0, f); y = lerp(-ry - ch, hy, ei(f)); rot = lerp(-3.6, -0.3, eo(f)); }
-      else { const kk = t - B.bonk, hop = kk < 0.26 ? Math.sin(Math.PI * kk / 0.26) * D * 0.08 : 0; x = D * 0.01; y = hy - hop; rot = -0.3 + (kk < 0.26 ? -0.3 * Math.sin(Math.PI * kk / 0.26) : 0.1 * Math.exp(-(kk - 0.26) * 6) * Math.sin((kk - 0.26) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
-      cone(g, x, y, ch, rot, sq); }
+    if (t > B.cone) { const D = T.D, hy = T.yL - D * 0.36, ch = D * 0.34; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = T.lx + lerp(D * 0.2, 0, f); y = lerp(-ch, hy, ei(f)); rot = lerp(-3.6, -0.3, eo(f)); }
+      else { const kk = t - B.bonk, hop = kk < 0.26 ? Math.sin(Math.PI * kk / 0.26) * D * 0.08 : 0; x = T.lx + D * 0.01; y = hy - hop; rot = -0.3 + (kk < 0.26 ? -0.3 * Math.sin(Math.PI * kk / 0.26) : 0.1 * Math.exp(-(kk - 0.26) * 6) * Math.sin((kk - 0.26) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
+      g.globalAlpha = 1; cone(g, x, y, ch, rot, sq); }
     g.restore();
-    // the gold rule out from the middle, the label, the episode in a serif italic
-    const rk = eo(cl((k - 0.8) / 0.45)), ryL = yL + D / 2 + H * 0.085; if (ep && rk > 0) { const rw = W * 0.2 * rk, rg = g.createLinearGradient(W / 2 - rw, 0, W / 2 + rw, 0); rg.addColorStop(0, 'rgba(217,173,82,0)'); rg.addColorStop(0.5, GOLD); rg.addColorStop(1, 'rgba(217,173,82,0)'); g.fillStyle = rg; g.fillRect(W / 2 - rw, ryL, rw * 2, 2.5 * u); }
-    const kk2 = cl((k - 0.95) / 0.5); if (ep && kick && kk2 > 0) { g.save(); g.globalAlpha = sm(kk2); g.font = `700 ${24 * u}px ${LBLF}`; g.letterSpacing = `${lerp(14, 7, eo(kk2)) * u}px`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = GOLD; g.fillText(kick.toUpperCase(), W / 2, ryL + H * 0.045); g.restore(); }
-    const ek = cl((t - B.ep - 0.35) / 0.55); if (ep && ek > 0) { let es = 84 * u; g.font = `italic 400 ${es}px ${SERIF}`; while (g.measureText(ep).width > W * 0.78) { es -= 2; g.font = `italic 400 ${es}px ${SERIF}`; }
-      g.save(); g.globalAlpha = sm(ek); g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 20 * u; g.fillStyle = '#f3ecdd'; g.fillText(ep, W / 2, ryL + H * (kick ? 0.12 : 0.085) + (1 - eo(ek)) * 18 * u); g.restore(); }
-    const lk2 = cl((t - (ep ? B.ep + 0.7 : B.name + 0.6)) / 0.5); if (line && lk2 > 0) { let ls2 = 24 * u; g.save(); g.font = `700 ${ls2}px ${LBLF}`; g.letterSpacing = `${5 * u}px`; while (g.measureText(line.toUpperCase()).width > W * 0.7) { ls2 -= 1; g.font = `700 ${ls2}px ${LBLF}`; } g.globalAlpha = sm(lk2) * 0.8; g.textAlign = 'center'; g.fillStyle = '#cfc6b4'; g.fillText(line.toUpperCase(), W / 2, H * 0.9); g.restore(); }
-    g.restore(); }
+    const lk2 = cl((t - B.logo - 0.6) / 0.5); if (line && lk2 > 0) { g.save(); let ls2 = 24 * u; g.font = `700 ${ls2}px ${LBLF}`; g.letterSpacing = `${5 * u}px`; while (g.measureText(line.toUpperCase()).width > W * 0.7) { ls2 -= 1; g.font = `700 ${ls2}px ${LBLF}`; } g.globalAlpha = sm(lk2) * 0.8; g.textAlign = 'center'; g.fillStyle = '#cfc6b4'; g.fillText(line.toUpperCase(), W / 2, H * 0.92); g.restore(); } }
 
   /* ---------- "Chucked oot" ---------- */
   // beats (seconds). Every moving value is a smooth curve through these, so nothing pops between frames.
@@ -230,7 +234,7 @@ const IntroScenes = (() => {
   B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
   B.flop = B.stop + 0.34; B.capRest = B.land + 0.75; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.reach = B.up + 0.12; B.grab = B.up + 0.5; B.capOn = B.up + 0.85; B.bout = B.up + 1.0; B.bin = B.up + 1.35; B.finger = B.up + 1.5; B.ned = B.finger + 0.1;
   B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.5; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.2;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.06; B.name = B.logo; B.ep = B.logo; B.cone = B.logo + 1.0; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.3;
   // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
