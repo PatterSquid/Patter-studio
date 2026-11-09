@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.09.1",
+  "version": "2026.11.09.2",
   "file": "app/patter-studio.html",
-  "notes": "The intro is now in the Video tab: + Add intro puts the PatterSquid cut scene at the start, and its panel on the right changes the pub name, episode and the rest. Exports at any size now frame the intro right."
+  "notes": "Tidier layout: three tabs (Video, Graphics, Animator); the graphics makers sit in a strip down the left"
 }
