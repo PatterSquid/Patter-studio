@@ -278,14 +278,14 @@ const IntroScenes = (() => {
   // the squid's back for the shove, then his leg comes straight out, boots him, follows through and slides back in.
   const SIL = '#0d0c11', EDGE = 'rgba(255,175,95,0.75)';
   function sil(g, P) { g.fillStyle = SIL; g.fill(P); g.save(); g.clip(P); g.fillStyle = EDGE; g.fill(sh2(P, 2.5, 3), 'evenodd'); g.restore(); }
-  function bouncer(g, t, Wh) { const hk = key(t, [[B.push - 0.15, 0], [B.push + 0.1, 1], [B.shove, 1], [B.shove + 0.2, 0]]);
-    if (hk > 0.01) { const sx = Wh.cx - 0.26 * Wh.h; [[600, 0], [672, 1]].forEach(([yy, i]) => { const hand = [lerp(250, sx, hk) + 3 * Math.sin(t * 7 + i * 2), yy + 2 * Math.sin(t * 9 + i)], el = [lerp(246, (252 + hand[0]) / 2 - 6, hk), yy + 14];
-      sil(g, tube([[236, yy - 6], el, hand], 30, 24, 28)); sil(g, path(P => P.ellipse(hand[0] + 4, hand[1], 15, 13, 0, 0, TAU))); }); }
-    // the leg: out in one smooth movement into his back, carries on as he goes, a wee hold, back in
-    const L = 0.24, e = t < B.kick - L ? 0 : t < B.kick ? 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L) : t < B.kick + 0.14 ? 1 + 0.14 * Math.sin(0.5 * Math.PI * (t - B.kick) / 0.14) : t < B.kick + 0.3 ? 1.14 : 1.14 * (1 - sm((t - B.kick - 0.3) / 0.5));
-    if (e <= 0.01) return; const hip = [244, 606], knee = [lerp(246, 296, e), lerp(668, 618, e)], foot = [lerp(244, 318, e), lerp(700, 642, e)];
-    sil(g, tube([hip, knee, foot], 44, 34, 42)); g.save(); g.translate(foot[0], foot[1]); g.rotate(-0.2 * cl(e)); g.scale(1.25, 1.25);
-    const shoe = path(P => { P.moveTo(-12, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-14, 11); P.closePath(); }); sil(g, shoe); g.fillStyle = 'rgba(255,220,180,0.35)'; g.beginPath(); g.ellipse(34, -11, 9, 3, -0.2, 0, TAU); g.fill(); g.restore(); }
+  function bouncer(g, t, Wh) {
+    // one straight leg shoots out of the doorway from inside the pub, boots him, carries on a touch, and goes back in
+    const L = 0.16, e = t < B.kick - L ? 0 : t < B.kick ? 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L) : t < B.kick + 0.1 ? 1 + 0.12 * Math.sin(0.5 * Math.PI * (t - B.kick) / 0.1) : t < B.kick + 0.28 ? 1.12 : 1.12 * (1 - sm((t - B.kick - 0.28) / 0.35));
+    if (e <= 0.005) return; const DX = 262, y = 640, fx = lerp(DX - 40, 336, e);
+    g.save(); g.beginPath(); g.rect(DX, 0, PW, PH); g.clip();
+    vol(g, tube([[fx - 170, y - 6], [fx, y]], 42, 38), '#23252d', { sh: '#121318', hl: '#363a45', rim: 'rgba(255,170,90,0.8)', k: 12 });
+    g.translate(fx, y); g.scale(1.25, 1.25); vol(g, path(P => { P.moveTo(-10, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-12, 11); P.closePath(); }), '#17171c', { sh: '#08080b', hl: '#3a3b44', k: 8 });
+    line(g, 3, c => { c.moveTo(-12, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(34, -11, 9, 3, -0.2, 0, TAU); g.fill(); g.restore(); }
   // skid: a grubby streak where his face went along the road, scuffs and dust
   function skid(g, t) { if (t < B.land) return; const k = t - B.land, hx = scrapeX(t);
     g.save(); g.fillStyle = 'rgba(16,12,22,0.5)'; g.beginPath(); g.moveTo(IMP - 10, ROAD); g.quadraticCurveTo((IMP + hx) / 2, ROAD - 12, hx, ROAD - 5); g.lineTo(hx, ROAD + 7); g.quadraticCurveTo((IMP + hx) / 2, ROAD + 10, IMP - 10, ROAD + 3); g.closePath(); g.fill();
