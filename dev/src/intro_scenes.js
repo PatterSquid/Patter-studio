@@ -279,12 +279,13 @@ const IntroScenes = (() => {
   const SIL = '#0d0c11', EDGE = 'rgba(255,175,95,0.75)';
   function sil(g, P) { g.fillStyle = SIL; g.fill(P); g.save(); g.clip(P); g.fillStyle = EDGE; g.fill(sh2(P, 2.5, 3), 'evenodd'); g.restore(); }
   function bouncer(g, t, Wh) {
-    // one straight leg shoots out of the doorway from inside the pub, boots him, carries on a touch, and goes back in
-    const L = 0.16, e = t < B.kick - L ? 0 : t < B.kick ? 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L) : t < B.kick + 0.1 ? 1 + 0.12 * Math.sin(0.5 * Math.PI * (t - B.kick) / 0.1) : t < B.kick + 0.28 ? 1.12 : 1.12 * (1 - sm((t - B.kick - 0.28) / 0.35));
-    if (e <= 0.005) return; const DX = 262, y = 640, fx = lerp(DX - 40, 336, e);
-    g.save(); g.beginPath(); g.rect(DX, 0, PW, PH); g.clip();
-    vol(g, tube([[fx - 170, y - 6], [fx, y]], 42, 38), '#23252d', { sh: '#121318', hl: '#363a45', rim: 'rgba(255,170,90,0.8)', k: 12 });
-    g.translate(fx, y); g.scale(1.25, 1.25); vol(g, path(P => { P.moveTo(-10, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-12, 11); P.closePath(); }), '#17171c', { sh: '#08080b', hl: '#3a3b44', k: 8 });
+    // one straight leg swings out of the doorway from the hip, like a pendulum, boots him, follows through, swings back in
+    const L = 0.22, A0 = Math.PI / 2, AK = 0.16, AF = -0.18;
+    const an = t < B.kick - L ? A0 : t < B.kick ? lerp(A0, AK, 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L * 0.999) * 1) : t < B.kick + 0.12 ? lerp(AK, AF, eo((t - B.kick) / 0.12)) : t < B.kick + 0.26 ? AF : lerp(AF, A0, sm((t - B.kick - 0.26) / 0.45));
+    if (an >= A0 - 0.01) return; const hip = [250, 604], LEN = 100, ank = [hip[0] + Math.cos(an) * LEN, hip[1] + Math.sin(an) * LEN];
+    g.save(); g.beginPath(); g.rect(262, 0, PW, PH); g.clip();
+    vol(g, tube([[hip[0] - Math.cos(an) * 30, hip[1] - Math.sin(an) * 30], ank], 44, 38), '#23252d', { sh: '#121318', hl: '#363a45', rim: 'rgba(255,170,90,0.8)', k: 12 });
+    g.translate(ank[0], ank[1]); g.rotate(an); g.scale(1.25, 1.25); vol(g, path(P => { P.moveTo(-10, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-12, 11); P.closePath(); }), '#17171c', { sh: '#08080b', hl: '#3a3b44', k: 8 });
     line(g, 3, c => { c.moveTo(-12, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(34, -11, 9, 3, -0.2, 0, TAU); g.fill(); g.restore(); }
   // skid: a grubby streak where his face went along the road, scuffs and dust
   function skid(g, t) { if (t < B.land) return; const k = t - B.land, hx = scrapeX(t);
