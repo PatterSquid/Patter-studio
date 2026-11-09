@@ -29,10 +29,10 @@ const Character = (() => {
   /* Hand gestures. Values are for his left hand (on the right of the screen, clear of the mic): where the wrist goes as
      [across, up] in head heights, and how far the hand turns (radians). His right hand mirrors them. art: the hand
      drawing from the puppet. Found by drawing each one (the hands are drawn lying on the desk, so they turn to point). */
-  const GEST = {   // fy: the drawing mirrored top to bottom (a hand lifted off the desk turns over, it does not spin round)
-    point: { art: 'point', at: [-0.06, -0.3, 0.4], fy: 1, side: 'L', len: 1.5, label: 'Point' },
-    'finger up': { art: 'point', at: [-0.02, -0.34, 0.9], fy: 1, side: 'L', len: 1.4, label: 'Finger up (listen)' },
-    'point aside': { art: 'point', at: [0.1, -0.28, 1.5], fy: 1, side: 'L', len: 1.5, label: 'Point over there' },
+  const GEST = {   // checked by him: turned, never mirrored (mirrored hands read back to front)
+    point: { art: 'point', at: [-0.03, -0.32, 1.95], side: 'L', len: 1.5, label: 'Point' },
+    'finger up': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, label: 'Finger up (listen)' },
+    'point aside': { art: 'point', at: [-0.02, -0.3, 1.45], side: 'L', len: 1.5, label: 'Point over there' },
     wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
     explain: { art: 'wave', at: [0.05, -0.17, 2.6], side: 'L', len: 2, sway: 1, label: 'Explaining hand' },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
