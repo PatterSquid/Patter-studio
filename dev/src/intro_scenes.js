@@ -196,14 +196,15 @@ const IntroScenes = (() => {
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(name, 8 * u, 12 * u); g.lineWidth = fs * 0.14; g.strokeStyle = '#08070c'; g.strokeText(name, 0, 0); g.fillStyle = '#f7f1e3'; g.fillText(name, 0, 0); g.restore(); }
     const ek = t - B.ep; if (ep && ek > 0) { let es = 68 * u; g.font = `400 ${es}px ${TALL}`; while (g.measureText(ep).width > W * 0.72) { es -= 2; g.font = `400 ${es}px ${TALL}`; }
       if (kick) { g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(SPL(ek), SPL(ek)); g.globalAlpha = cl(ek / 0.03); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 1.3); g.restore(); }
-      // the episode rains down a letter at a time, each landing with a squash and a wee bounce; one straggler turns up late,
-      // lands squint with a bonk, wobbles, and stays squint
-      g.save(); g.font = `400 ${es}px ${TALL}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; const chars = [...ep], wid = chars.map(c => g.measureText(c).width), tot = wid.reduce((a2, b2) => a2 + b2, 0);
-      const live = chars.map((c, i) => c.trim() ? i : -1).filter(i => i >= 0), strag = live.length > 3 ? live[Math.floor(live.length * 0.62)] : -1, base = H * 0.84 + es * 0.36; let x = cx - tot / 2;
-      chars.forEach((c, i) => { const w = wid[i], lx = x + w / 2; x += w; if (!c.trim()) return; const n = live.indexOf(i), d = B.epFall - B.logo + n * 0.045 + (i === strag ? 0.55 : 0) + (n % 3) * 0.012, lk = ek - d; if (lk <= 0) return;
-        const fall = 0.26, f = cl(lk / fall), y = f < 1 ? -(1 - f * f) * (base + es) : 0, kk = lk - fall, sq = kk > 0 ? 1 - 0.42 * Math.exp(-kk * 14) * Math.cos(kk * 30) : 1.1, hop = kk > 0 && kk < 0.2 ? Math.sin(Math.PI * kk / 0.2) * es * 0.14 * (i === strag ? 1.8 : 1) : 0;
-        const rot = f < 1 ? (1 - f) * ((n % 2 ? 1 : -1) * 0.8) : i === strag ? 0.32 + 0.22 * Math.exp(-kk * 5) * Math.sin(kk * 26) : 0.04 * Math.exp(-kk * 6) * Math.sin(kk * 24);
-        g.save(); g.translate(lx, base + y - hop); g.rotate(rot - 0.02); g.scale(1 / Math.sqrt(Math.max(0.3, sq)), sq); g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(c, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(c, 0, 0); g.restore(); });
+      // the episode drops in as one line from above, lands with a squash and a bounce; one word is loose: it bounces
+      // higher, comes down late and squint, wobbles, and stays squint
+      g.save(); g.font = `400 ${es}px ${TALL}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; const words = ep.split(' '), sp = g.measureText(' ').width, wid = words.map(w => g.measureText(w).width), tot = wid.reduce((a2, b2) => a2 + b2, 0) + sp * (words.length - 1);
+      const loose = words.length > 1 ? Math.floor(words.length * 0.6) : -1, base = H * 0.84 + es * 0.36, lk = ek - (B.epFall - B.logo), fall = 0.3;
+      if (lk > 0) { let x = cx - tot / 2; words.forEach((w, i) => { const ww = wid[i], wx = x + ww / 2; x += ww + sp; if (!w) return; const f = cl(lk / fall), y = f < 1 ? -(1 - f * f) * (base + es * 1.5) : 0, kk = lk - fall, L = i === loose;
+        const sq = kk > 0 ? 1 - 0.4 * Math.exp(-kk * 13) * Math.cos(kk * 28) : 1.12, hop = kk > 0 && kk < (L ? 0.36 : 0.18) ? Math.sin(Math.PI * kk / (L ? 0.36 : 0.18)) * es * (L ? 0.9 : 0.12) : 0;
+        const rot = f < 1 ? 0 : L ? (kk < 0.36 ? -0.5 * Math.sin(Math.PI * kk / 0.36) : 0.26 + 0.2 * Math.exp(-(kk - 0.36) * 5) * Math.sin((kk - 0.36) * 24)) : 0.03 * Math.exp(-kk * 6) * Math.sin(kk * 22);
+        const sq2 = L && kk > 0.36 ? 1 - 0.3 * Math.exp(-(kk - 0.36) * 14) * Math.cos((kk - 0.36) * 30) : sq;
+        g.save(); g.translate(wx, base + y - hop); g.rotate(rot - 0.02); g.scale(1 / Math.sqrt(Math.max(0.3, sq2)), sq2); g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(w, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(w, 0, 0); g.restore(); }); }
       g.restore(); }
     const lk = t - (ep ? B.ep + 0.3 : B.name + 0.35); if (line && lk > 0) { let ls = 38 * u; g.font = `700 ${ls}px ${BODY}`; while (g.measureText(line).width > W * 0.6) { ls -= 2; g.font = `700 ${ls}px ${BODY}`; } g.globalAlpha = cl(lk / 0.3); g.textAlign = 'center'; g.fillStyle = '#e9e2d2'; g.fillText(line, cx, H * (ep ? 0.94 : 0.86)); }
     g.restore(); }
