@@ -207,7 +207,7 @@ const Puppet = (() => {
         const A = rig.arms[nd.side], q = P.arms[nd.side], c1 = [A.cuff[0] + (q.dx || 0), A.cuff[1] + (q.dy || 0)];
         if (nd.role === 'sleeve') { const v0 = [A.cuff[0] - A.shoulder[0], A.cuff[1] - A.shoulder[1]], v1 = [c1[0] - A.shoulder[0], c1[1] - A.shoulder[1]], a0 = Math.atan2(v0[1], v0[0]), ang = Math.atan2(v1[1], v1[0]) - a0, k = Math.max(0.72, Math.min(1.35, Math.hypot(v1[0], v1[1]) / Math.hypot(v0[0], v0[1])));
           g.translate(A.shoulder[0], A.shoulder[1]); g.rotate(ang); g.rotate(a0); g.scale(k, 1 + (k - 1) * 0.25); g.rotate(-a0); g.translate(-A.shoulder[0], -A.shoulder[1]); }
-        else { g.translate(c1[0], c1[1]); g.rotate(q.rot || 0); if (q.sc) g.scale(q.sc, q.sc); g.translate(-A.cuff[0], -A.cuff[1]); } }
+        else { g.translate(c1[0], c1[1]); g.rotate(q.rot || 0); if (q.sc) g.scale(q.sc, q.sc); if (q.fx || q.fy) g.scale(q.fx ? -1 : 1, q.fy ? -1 : 1); g.translate(-A.cuff[0], -A.cuff[1]); } }
       if (nd.role === 'brow' && P.brow && P.brow[nd.side] && nd.box) { const b = nd.box, [dx, dy, r] = P.brow[nd.side], cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2; g.translate(cx + dx * (b[2] - b[0]), cy + dy * (b[3] - b[1])); g.rotate(r || 0); g.translate(-cx, -cy); }
       if (nd.role === 'pupil' && P.pupil && nd.box) { const par = N[nd.parent], eb = par && par.box, w = eb ? eb[2] - eb[0] : 20, h = eb ? eb[3] - eb[1] : 20; g.translate(P.pupil[0] * w * 0.28, P.pupil[1] * h * 0.2); }
       if (nd.role === 'dangle' && P.dangle && nd.box) { const b = nd.box, cx = (b[0] + b[2]) / 2; g.translate(cx, b[1]); g.rotate(P.dangle * (nd.id % 2 ? 1 : -0.8)); g.translate(-cx, -b[1]); }

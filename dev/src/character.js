@@ -29,18 +29,18 @@ const Character = (() => {
   /* Hand gestures. Values are for his left hand (on the right of the screen, clear of the mic): where the wrist goes as
      [across, up] in head heights, and how far the hand turns (radians). His right hand mirrors them. art: the hand
      drawing from the puppet. Found by drawing each one (the hands are drawn lying on the desk, so they turn to point). */
-  const GEST = {
-    point: { art: 'point', at: [-0.08, -0.32, 1.95], side: 'L', len: 1.5, label: 'Point' },
-    'finger up': { art: 'point', at: [-0.05, -0.38, 2.5], side: 'L', len: 1.4, label: 'Finger up (listen)' },
-    'point aside': { art: 'point', at: [0.08, -0.3, 1.3], side: 'L', len: 1.5, label: 'Point over there' },
-    wave: { art: 'wave', at: [0, -0.48, 1.2], side: 'L', len: 1.8, wag: 0.22, label: 'Wave' },
-    explain: { art: 'wave', at: [-0.05, -0.24, 0.5], side: 'L', len: 2, sway: 1, label: 'Explaining hand' },
-    stop: { art: 'wave', at: [0.1, -0.2, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
-    shrug: { art: 'wave', at: [0.12, -0.13, 2.2], side: 'both', len: 1.5, label: 'Shrug' },
+  const GEST = {   // fy: the drawing mirrored top to bottom (a hand lifted off the desk turns over, it does not spin round)
+    point: { art: 'point', at: [-0.06, -0.3, 0.4], fy: 1, side: 'L', len: 1.5, label: 'Point' },
+    'finger up': { art: 'point', at: [-0.02, -0.34, 0.9], fy: 1, side: 'L', len: 1.4, label: 'Finger up (listen)' },
+    'point aside': { art: 'point', at: [0.1, -0.28, 1.5], fy: 1, side: 'L', len: 1.5, label: 'Point over there' },
+    wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
+    explain: { art: 'wave', at: [0.05, -0.17, 2.6], side: 'L', len: 2, sway: 1, label: 'Explaining hand' },
+    stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
+    shrug: { art: 'wave', at: [0.14, -0.12, 2.35], side: 'both', len: 1.5, label: 'Shrug' },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
     fist: { art: 'fist', at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Bang the desk' },
     'fist shake': { art: 'fist', at: [0, -0.33, 0.3], side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
-    beat: { art: null, at: [0, -0.07, 0.15], side: 'L', len: 0.7, label: 'Wee hand beat' },
+    beat: { art: null, at: [0, -0.07, 0.12], side: 'L', len: 0.7, label: 'Wee hand beat' },
   };
   Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'explain', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', 'shake fist': 'fist shake', 'fists': 'fist', dunno: 'shrug' });
   // words that bring a gesture with them; the common ones only when he leans on them
@@ -215,10 +215,10 @@ const Character = (() => {
         if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
         if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
         if (!G.bang && !G.wag && !G.shake) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }
-        want[sd].push({ w, dx: ax * hh2 * mir, dy: ay * hh2, rot: ar * mir, art: G.art }); });
+        want[sd].push({ w, dx: ax * hh2 * mir, dy: ay * hh2, rot: ar * mir, art: G.art, fy: G.fy || 0 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd]; if (!L2.length) return; let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null; L2.forEach(q => { tw += q.w; mx = Math.max(mx, q.w); dx += q.dx * q.w; dy += q.dy * q.w; rot += q.rot * q.w; if (!best || q.w > best.w) best = q; });
-      if (tw <= 0) return; pose.arms[sd] = { dx: dx / tw * mx, dy: dy / tw * mx, rot: rot / tw * mx }; if (best.art && mx > 0.3) apply(best.art, sd); });
+      if (tw <= 0) return; pose.arms[sd] = { dx: dx / tw * mx, dy: dy / tw * mx, rot: rot / tw * mx, fy: best.art && mx > 0.3 ? best.fy : 0 }; if (best.art && mx > 0.3) apply(best.art, sd); });
     // the hoodie strings swing a little with the head
     pose.dangle = (wave(t, s[0], 0.55) - wave(t - 0.2, s[0], 0.55)) * 0.15 * E + hr * 0.4;
     return pose;
