@@ -178,26 +178,43 @@ const IntroScenes = (() => {
     const rr = rng(seed + 3); g.lineCap = 'round';
     g.strokeStyle = 'rgba(235,235,255,0.35)'; g.lineWidth = Math.max(2, H / 180); for (let i = 0; i < 7; i++) { const x = W * (cx + (rr() - 0.5) * 0.7), y = H * (cy + (rr() - 0.5) * 0.6); g.beginPath(); g.arc(x, y, H * (0.03 + rr() * 0.05), 3.6, 4.5); g.stroke(); } g.restore(); }
 
-  // his logo pops up in the ink, PatterSquid under it, the episode, and a cone lands on the squid's heid in the logo
-  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
-    const rL = H * 0.2, cx = W / 2, cy = H * (ep ? 0.29 : 0.32), bonk = bump(t - B.bonk, 0.22), ps = eb(k / 0.32) * (1 - 0.12 * bonk);
-    g.save(); g.translate(cx, cy + rL); g.scale(eb(k / 0.32) / Math.sqrt(1 - 0.12 * bonk), ps); g.translate(0, -rL); g.rotate(-0.05 * Math.sin(Math.min(k, 0.6) * 10) * Math.exp(-k * 3));
-    g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.arc(10 * u, 14 * u, rL * 1.06, 0, TAU); g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.08, 0, TAU); g.fillStyle = INK; g.fill(); g.beginPath(); g.arc(0, 0, rL * 1.04, 0, TAU); g.fillStyle = '#f4efe2'; g.fill();
-    g.save(); g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.clip(); if (logo) g.drawImage(logo, -rL, -rL, rL * 2, rL * 2); else { g.fillStyle = '#16264a'; g.fillRect(-rL, -rL, rL * 2, rL * 2); } g.restore(); g.lineWidth = rL * 0.035; g.strokeStyle = INK; g.beginPath(); g.arc(0, 0, rL * 0.97, 0, TAU); g.stroke();
-    // the cone: falls spinning out the top of the screen, bonks on his heid, hops, settles squint
-    if (t > B.cone) { const hy = -rL * 0.72, ch = rL * 0.62; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = lerp(rL * 0.5, 0, f); y = lerp(-H * 0.5 - ch, hy, ei(f)); rot = lerp(-4.4, -0.3, eo(f)); }
-      else { const kk = t - B.bonk, hop = kk < 0.3 ? Math.sin(Math.PI * kk / 0.3) * rL * 0.18 : 0; x = rL * 0.03; y = hy - hop; rot = -0.3 + (kk < 0.3 ? -0.35 * Math.sin(Math.PI * kk / 0.3) : 0.12 * Math.exp(-(kk - 0.3) * 6) * Math.sin((kk - 0.3) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
+  // The end card, like a broadcast title: the ink settles into a deep, glossy background; his logo lands in the middle,
+  // slides left as PatterSquid draws out from behind it; a gold rule runs out under the lockup; the episode comes up in a
+  // serif italic under a wee letterspaced label; a slow sheen crosses the name; and the cone drops onto the squid's heid.
+  const WM = '"Big Shoulders", "Bricolage Grotesque", Impact, sans-serif', SERIF = '"Instrument Serif", Georgia, serif', LBLF = '"Instrument Sans", "Bricolage Grotesque", sans-serif', GOLD = '#d9ad52';
+  let TL = null; function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const u = H / 1080; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    // the background: ink going deep navy at the middle, a slow sheen drifting across, fine grain
+    g.globalAlpha = sm(k / 0.5); const bg = g.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, W * 0.7); bg.addColorStop(0, '#1a2140'); bg.addColorStop(0.55, '#0d0f1c'); bg.addColorStop(1, '#050509'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    const sx = lerp(-0.4, 1.4, (k * 0.12) % 1) * W, sg = g.createLinearGradient(sx - W * 0.3, 0, sx + W * 0.3, H * 0.6); sg.addColorStop(0, 'rgba(150,160,230,0)'); sg.addColorStop(0.5, 'rgba(150,160,230,0.05)'); sg.addColorStop(1, 'rgba(150,160,230,0)'); g.fillStyle = sg; g.fillRect(0, 0, W, H);
+    const gr = rng(77 + Math.floor(t * 24)); g.globalAlpha = 0.05 * sm(k / 0.5); for (let i = 0; i < 700; i++) { g.fillStyle = gr() < 0.5 ? '#000' : '#fff'; g.fillRect(gr() * W, gr() * H, 1.5 * u + 0.5, 1.5 * u + 0.5); } g.globalAlpha = 1;
+    // measure the lockup: logo, a gap, the name
+    let fs = 190 * u; g.font = `700 ${fs}px ${WM}`; let wm = g.measureText(name).width; const D = H * 0.24, gap = H * 0.05; if (D + gap + wm > W * 0.84) { fs *= (W * 0.84 - D - gap) / wm; g.font = `700 ${fs}px ${WM}`; wm = g.measureText(name).width; }
+    const yL = H * (ep ? 0.39 : 0.47), x0 = (W - (D + gap + wm)) / 2, slide = eo(cl((k - 0.32) / 0.55)), lx = lerp(W / 2, x0 + D / 2, 1 - Math.pow(1 - slide, 4)), bonk = bump(t - B.bonk, 0.2);
+    // the name, drawn out from behind the logo
+    const nk = cl((k - 0.36) / 0.5), ne = 1 - Math.pow(1 - nk, 4); if (nk > 0) { const tx = x0 + D + gap; g.save(); g.beginPath(); g.rect(lx + D * 0.5, 0, W, H); g.clip(); g.translate(tx - (1 - ne) * wm * 0.55, yL); g.globalAlpha = sm(nk / 0.3);
+      // the name on its own layer so the sheen only touches the letters
+      const tw = Math.ceil(wm + 40 * u), th = Math.ceil(fs * 1.6); if (!TL || TL.width < tw || TL.height < th) TL = mk(tw, th); const tc = TL.getContext('2d'); tc.setTransform(1, 0, 0, 1, 0, 0); tc.clearRect(0, 0, TL.width, TL.height);
+      tc.textAlign = 'left'; tc.textBaseline = 'middle'; tc.font = `700 ${fs}px ${WM}`; const tg = tc.createLinearGradient(0, th / 2 - fs * 0.4, 0, th / 2 + fs * 0.4); tg.addColorStop(0, '#ffffff'); tg.addColorStop(1, '#e9dfca'); tc.fillStyle = tg; tc.fillText(name, 20 * u, th / 2 + fs * 0.04);
+      const shk = (k - 1.0) / 0.7; if (shk > 0 && shk < 1) { tc.globalCompositeOperation = 'source-atop'; const bx = lerp(-wm * 0.3, wm * 1.3, ease(shk)), sh = tc.createLinearGradient(bx - fs * 0.5, 0, bx + fs * 0.5, th); sh.addColorStop(0, 'rgba(255,236,190,0)'); sh.addColorStop(0.5, 'rgba(255,236,190,0.8)'); sh.addColorStop(1, 'rgba(255,236,190,0)'); tc.fillStyle = sh; tc.fillRect(0, 0, tw, th); tc.globalCompositeOperation = 'source-over'; }
+      g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 30 * u; g.shadowOffsetY = 10 * u; g.drawImage(TL, 0, 0, tw, th, -20 * u, -th / 2, tw, th); g.shadowColor = 'transparent';
+      g.restore(); }
+    // the logo: lands with a settle and a ring of light, then slides left into the lockup
+    const lk = cl(k / 0.32), ls = lk < 1 ? eb(lk) : 1, ry = yL + D / 2; g.save(); g.translate(lx, ry); g.scale(ls / Math.sqrt(1 - 0.1 * bonk), ls * (1 - 0.1 * bonk)); g.translate(0, -D / 2);
+    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 40 * u; g.shadowOffsetY = 14 * u; g.fillStyle = '#0a0b12'; g.beginPath(); g.arc(0, 0, D / 2 + 4 * u, 0, TAU); g.fill(); g.shadowColor = 'transparent';
+    g.save(); g.beginPath(); g.arc(0, 0, D / 2, 0, TAU); g.clip(); if (logo) g.drawImage(logo, -D / 2, -D / 2, D, D); else { g.fillStyle = '#16264a'; g.fillRect(-D / 2, -D / 2, D, D); } g.restore();
+    g.lineWidth = 3 * u; g.strokeStyle = GOLD; g.beginPath(); g.arc(0, 0, D / 2 + 1.5 * u, 0, TAU); g.stroke();
+    if (k > 0.18 && k < 0.8) { const rk = (k - 0.18) / 0.62; g.globalAlpha = 1 - rk; g.lineWidth = 2 * u; g.strokeStyle = '#ffe6b0'; g.beginPath(); g.arc(0, 0, D / 2 * (1 + 0.7 * eo(rk)), 0, TAU); g.stroke(); g.globalAlpha = 1; }
+    // the cone: drops out the top of the screen onto his heid, a wee hop, settles squint
+    if (t > B.cone) { const hy = -D * 0.36, ch = D * 0.32; let x, y, rot, sq = 1; if (t < B.bonk) { const f = (t - B.cone) / (B.bonk - B.cone); x = lerp(D * 0.2, 0, f); y = lerp(-ry - ch, hy, ei(f)); rot = lerp(-3.6, -0.3, eo(f)); }
+      else { const kk = t - B.bonk, hop = kk < 0.26 ? Math.sin(Math.PI * kk / 0.26) * D * 0.08 : 0; x = D * 0.01; y = hy - hop; rot = -0.3 + (kk < 0.26 ? -0.3 * Math.sin(Math.PI * kk / 0.26) : 0.1 * Math.exp(-(kk - 0.26) * 6) * Math.sin((kk - 0.26) * 30)); sq = 1 - 0.18 * bump(kk, 0.1); }
       cone(g, x, y, ch, rot, sq); }
     g.restore();
-    // the name
-    const nk = t - B.name; if (nk > 0) { const s = nk < 0.14 ? lerp(1.6, 0.94, ei(nk / 0.14)) : 1 - 0.06 * Math.exp(-(nk - 0.14) * 10) * Math.cos((nk - 0.14) * 34); let fs = 150 * u; g.font = `400 ${fs}px ${TITLE}`; while (g.measureText(name).width > W * 0.82) { fs -= 4; g.font = `400 ${fs}px ${TITLE}`; }
-      g.save(); g.translate(cx, H * (ep ? 0.66 : 0.72)); g.rotate(-0.03); g.scale(s, s); g.globalAlpha = cl(nk / 0.05); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-      g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(name, 8 * u, 12 * u); g.lineWidth = fs * 0.14; g.strokeStyle = '#08070c'; g.strokeText(name, 0, 0); g.fillStyle = '#f7f1e3'; g.fillText(name, 0, 0); g.restore(); }
-    const ek = t - B.ep; if (ep && ek > 0) { let es = 68 * u; g.font = `400 ${es}px ${TALL}`; while (g.measureText(ep).width > W * 0.72) { es -= 2; g.font = `400 ${es}px ${TALL}`; }
-      g.save(); g.translate(cx, H * 0.84); g.rotate(-0.02); g.scale(eb(ek / 0.22), eb(ek / 0.22)); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-      if (kick) { g.font = `400 ${es * 0.42}px ${TALL}`; g.fillStyle = '#ffd23b'; g.fillText(kick.toUpperCase(), 0, -es * 0.92); g.font = `400 ${es}px ${TALL}`; }
-      g.lineWidth = es * 0.16; g.strokeStyle = '#08070c'; g.strokeText(ep, 0, 0); g.fillStyle = '#ffd23b'; g.fillText(ep, 0, 0); g.restore(); }
-    const lk = t - (ep ? B.ep + 0.3 : B.name + 0.35); if (line && lk > 0) { let ls = 38 * u; g.font = `700 ${ls}px ${BODY}`; while (g.measureText(line).width > W * 0.6) { ls -= 2; g.font = `700 ${ls}px ${BODY}`; } g.globalAlpha = cl(lk / 0.3); g.textAlign = 'center'; g.fillStyle = '#e9e2d2'; g.fillText(line, cx, H * (ep ? 0.94 : 0.86)); }
+    // the gold rule out from the middle, the label, the episode in a serif italic
+    const rk = eo(cl((k - 0.8) / 0.45)), ryL = yL + D / 2 + H * 0.085; if (ep && rk > 0) { const rw = W * 0.2 * rk, rg = g.createLinearGradient(W / 2 - rw, 0, W / 2 + rw, 0); rg.addColorStop(0, 'rgba(217,173,82,0)'); rg.addColorStop(0.5, GOLD); rg.addColorStop(1, 'rgba(217,173,82,0)'); g.fillStyle = rg; g.fillRect(W / 2 - rw, ryL, rw * 2, 2.5 * u); }
+    const kk2 = cl((k - 0.95) / 0.5); if (ep && kick && kk2 > 0) { g.save(); g.globalAlpha = sm(kk2); g.font = `700 ${24 * u}px ${LBLF}`; g.letterSpacing = `${lerp(14, 7, eo(kk2)) * u}px`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = GOLD; g.fillText(kick.toUpperCase(), W / 2, ryL + H * 0.045); g.restore(); }
+    const ek = cl((t - B.ep - 0.35) / 0.55); if (ep && ek > 0) { let es = 84 * u; g.font = `italic 400 ${es}px ${SERIF}`; while (g.measureText(ep).width > W * 0.78) { es -= 2; g.font = `italic 400 ${es}px ${SERIF}`; }
+      g.save(); g.globalAlpha = sm(ek); g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 20 * u; g.fillStyle = '#f3ecdd'; g.fillText(ep, W / 2, ryL + H * (kick ? 0.12 : 0.085) + (1 - eo(ek)) * 18 * u); g.restore(); }
+    const lk2 = cl((t - (ep ? B.ep + 0.7 : B.name + 0.6)) / 0.5); if (line && lk2 > 0) { let ls2 = 24 * u; g.save(); g.font = `700 ${ls2}px ${LBLF}`; g.letterSpacing = `${5 * u}px`; while (g.measureText(line.toUpperCase()).width > W * 0.7) { ls2 -= 1; g.font = `700 ${ls2}px ${LBLF}`; } g.globalAlpha = sm(lk2) * 0.8; g.textAlign = 'center'; g.fillStyle = '#cfc6b4'; g.fillText(line.toUpperCase(), W / 2, H * 0.9); g.restore(); }
     g.restore(); }
 
   /* ---------- "Chucked oot" ---------- */
@@ -213,7 +230,7 @@ const IntroScenes = (() => {
   B.land = B.fly + FT; B.stop = B.land + TS; const STOP = IMP + VX * TS / 2, HOME = { x: STOP - 10, y: ROAD };
   B.flop = B.stop + 0.34; B.capRest = B.land + 0.75; B.peel = B.stop + 0.7; B.up = B.peel + 0.5; B.reach = B.up + 0.12; B.grab = B.up + 0.5; B.capOn = B.up + 0.85; B.bout = B.up + 1.0; B.bin = B.up + 1.35; B.finger = B.up + 1.5; B.ned = B.finger + 0.1;
   B.splash = B.ned + NED_DUR * (8 - 236 / (800 - 610)) / 7.55; B.fingerOff = B.splash + 0.45; B.glare = B.splash + 0.8; B.lift = B.glare + 0.45; B.glug = B.lift + 0.3; B.down = B.glug + 0.9; B.ahh = B.down + 0.1;
-  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.05; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.4;
+  B.green = B.ahh + 0.15; B.hurk1 = B.green + 0.4; B.hurk2 = B.hurk1 + 0.35; B.spew = B.hurk2 + 0.45; B.splat = B.spew + 0.2; B.logo = B.splat + 0.25; B.name = B.logo + 0.25; B.ep = B.name + 0.35; B.cone = B.ep + 0.5; B.bonk = B.cone + 0.3; B.end = B.bonk + 1.2;
   // the flight is real: thrown from the boot, falling under gravity, his body turning to dive along the way he is going
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
