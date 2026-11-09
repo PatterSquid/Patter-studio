@@ -210,14 +210,24 @@ const IntroScenes = (() => {
     // 5. where the drips come from: the bottoms of the splat (lowest ink in a column)
     const drips = []; const scan = (xa, xb, ya, yb, n, len) => { for (let i = 0; i < n; i++) { const x = Math.round(lerp(xa, xb, (i + 0.15 + r() * 0.7) / n)); let yy = -1; for (let y = Math.min(H - 1, Math.round(yb)); y > ya; y--) if (at(x, y) > 160) { yy = y; break; } if (yy > 0 && r() < 0.8) drips.push({ x, y: yy - 3 * u, w: (5 + r() * 10) * u, L: len * (0.25 + r() * r() * 1.4), sp: 0.6 + r() * 1.6, d: r() * 0.5 }); } };
     scan(x0 + D + gap, x0 + D + gap + wm, yL - fs * 0.6, yL + fs * 0.8, 26, ep ? H * 0.075 : H * 0.15); scan(lx - D * 0.5, lx + D * 0.5, yL, yL + D * 0.7, 6, H * 0.12); if (ep) scan(W / 2 - ew / 2, W / 2 + ew / 2, ey - 30 * u, ey + es * 0.8, 14, H * 0.1);
-    return (TC = { key, c, drips, spat: [], lx, yL, D, u }); }
-  function titleCard(g, W, H, t, name, ep, kick, line) { const k = t - B.logo; if (k <= 0) return; const T = titleLayer(W, H, name, ep, kick), u = T.u; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    // the splash when it hits the glass: tongues of ink shooting out from the edges, and blobs thrown further
+    const spat = [], cxm = W / 2, cym = yL + (ep ? H * 0.08 : 0); for (let i = 0, n = 0; i < 20000 && n < 46; i++) { const x = Math.round(lerp(bx0, bx1, r())), y = Math.round(lerp(by0, by1, r())); if (at(x, y) < 200) continue; let dx = x - cxm, dy = (y - cym) * 1.6; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; const ja = (r() - 0.5) * 0.7, nx = dx * Math.cos(ja) - dy * Math.sin(ja), ny = dx * Math.sin(ja) + dy * Math.cos(ja);
+      const L = (24 + r() * r() * 110) * u; let clear = true; for (let q = 12 * u; q < L * 1.5; q += 6 * u) if (at(Math.round(x + nx * q), Math.round(y + ny * q)) > 30) { clear = false; break; } if (!clear) continue; n++; spat.push({ x, y, nx, ny, L, w: (9 + r() * 14) * u, blob: r() < 0.7 ? (5 + r() * 9) * u : 0, bd: 1.25 + r() * 0.4 }); }
+    return (TC = { key, c, drips, spat, lx, yL, D, u }); }
+  const FLY = 0.3;
+  function titleCard(g, W, H, t, name, ep, kick, line, from) { const k = t - B.logo; if (k <= -FLY) return; const T = titleLayer(W, H, name, ep, kick), u = T.u;
+    if (k < 0) { // in flight: out of his gob, tumbling, swelling as it comes at us (perspective), a smear behind it
+      const f = (k + FLY) / FLY, m = from || [W / 2, H * 0.55], at = ff => { const sc = 1 / lerp(14, 1, Math.pow(ff, 1.6)); return { x: lerp(m[0], W / 2, eo(ff)), y: lerp(m[1], H * 0.48, eo(ff)) - Math.sin(Math.PI * ff) * H * 0.06, sc, rot: lerp(-0.9, 0, ff) }; };
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); [0.12, 0.06, 0].forEach((lag, i) => { const q = at(Math.max(0, f - lag)); g.save(); g.globalAlpha = [0.18, 0.35, 1][i]; g.translate(q.x, q.y); g.rotate(q.rot); g.scale(q.sc * 1.05, q.sc * 0.95); g.translate(-W / 2, -H * 0.48); g.drawImage(T.c, 0, 0); g.restore(); }); g.restore(); return; }
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
     // the smack: comes in big and squashes onto the glass, a wee wobble, a shake
-    const s = k < 0.1 ? lerp(1.5, 0.93, ei(k / 0.1)) : 1 - 0.07 * Math.exp(-(k - 0.1) * 9) * Math.cos((k - 0.1) * 30), sy = k < 0.1 ? 1 : 1 + 0.05 * Math.exp(-(k - 0.1) * 10) * Math.sin((k - 0.1) * 34), jx = bump(k, 0.15) * 8 * u * Math.sin(k * 120);
+    const s = 1 + 0.1 * Math.exp(-k * 9) * Math.cos(k * 30), sy = 1 - 0.14 * Math.exp(-k * 11) * Math.cos(k * 26), jx = bump(k, 0.15) * 10 * u * Math.sin(k * 120);
     g.translate(W / 2 + jx, H * 0.48); g.scale(s / Math.sqrt(sy), s * sy); g.translate(-W / 2, -H * 0.48); g.globalAlpha = cl(k / 0.03);
     g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 16 * u; g.shadowOffsetY = 6 * u;
     // spatters, flung out with the hit
-    g.fillStyle = CREAM; T.spat.forEach(p => { const e = eo(cl(k / 0.12)), cx = W / 2 + (p.x - W / 2) * lerp(0.6, 1, e), cy = H * 0.48 + (p.y - H * 0.48) * lerp(0.6, 1, e); g.beginPath(); g.ellipse(cx, cy, p.r * p.e * 1.3, p.r, 0, 0, TAU); g.fill(); });
+    g.fillStyle = CREAM; T.spat.forEach(p => { const e = eo(cl(k / 0.09)), L = p.L * e, ex = p.x + p.nx * L, ey = p.y + p.ny * L, px = -p.ny, py = p.nx;
+      g.beginPath(); g.moveTo(p.x + px * p.w, p.y + py * p.w); const tw = p.w * 0.32; g.quadraticCurveTo(p.x + p.nx * L * 0.45 + px * p.w * 0.35, p.y + p.ny * L * 0.45 + py * p.w * 0.35, ex + px * tw, ey + py * tw); g.arc(ex, ey, tw, Math.atan2(py, px), Math.atan2(py, px) + Math.PI, true); g.quadraticCurveTo(p.x + p.nx * L * 0.45 - px * p.w * 0.35, p.y + p.ny * L * 0.45 - py * p.w * 0.35, p.x - px * p.w, p.y - py * p.w); g.closePath(); g.fill();
+      if (p.blob) { const bx = p.x + p.nx * p.L * p.bd * e, by = p.y + p.ny * p.L * p.bd * e; g.beginPath(); g.ellipse(bx, by, p.blob * 1.25, p.blob, Math.atan2(p.ny, p.nx), 0, TAU); g.fill(); } });
     g.drawImage(T.c, 0, 0);
     // drips running down off the letters, slowing as they go, a bulb on the end of each
     T.drips.forEach(d => { const kk = Math.max(0, k - 0.12 - d.d), L = d.L * (1 - Math.exp(-kk * d.sp)); if (L < 1) return; const x = d.x, y = d.y, w = d.w * (1 - 0.25 * Math.min(1, L / d.L));
@@ -381,9 +391,9 @@ const IntroScenes = (() => {
         const ff = eo(cl(f)), x = lerp(mouthS[0], tx, ff), y = lerp(mouthS[1], ty, ff) - Math.sin(Math.PI * cl(f)) * H * 0.05; g.beginPath(); g.ellipse(x, y, rad * 1.1, rad, 0, 0, TAU); g.fill(); g.beginPath(); g.arc(x - rad * 0.3, y - rad * 0.3, rad * 0.5, 3.6, 4.6); g.stroke(); } g.restore(); }
     }
     // SPLAT: the ink takes the whole screen, then the logo, the name, the episode and the cone
-    if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); titleCard(g, W, H, t, name, o.episode, o.kicker, o.line); }
+    if (mouthS) LASTM = mouthS; if (t > B.splat) { const sk = t - B.splat; inkSplat(g, W, H, sk + 0.04, 8, 0.5, 0.5); } if (t > B.logo - FLY) titleCard(g, W, H, t, name, o.episode, o.kicker, o.line, LASTM);
     if (t < 0.25) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = `rgba(0,0,0,${1 - t / 0.25})`; g.fillRect(0, 0, W, H); g.restore(); }
     return true; }
-  const L0 = () => B.land;
+  const L0 = () => B.land; let LASTM = null;
   return { ready, swally, B, PW, PH, TITLE, useLabel };
 })();
