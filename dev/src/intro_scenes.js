@@ -218,15 +218,17 @@ const IntroScenes = (() => {
   const flightHead = tau => [H0[0] + VX * tau, H0[1] + VY * tau + 0.5 * GRAV * tau * tau], flightAng = tau => Math.atan2(VY + GRAV * tau, VX);
   const rotLand = flightAng(FT) + Math.PI / 2, ROT_SLIDE = 1.86;
   const scrapeX = t => { const k = cl(t - B.land, 0, TS); return IMP + VX * k - 0.5 * (VX / TS) * k * k; };
-  const scrapeRot = k => ROT_SLIDE + (rotLand - ROT_SLIDE) * Math.exp(-k * 9) * (1 + 9 * k);
+  const TOP = 0.3, scrapeRot = k => k < TOP ? lerp(rotLand, ROT_SLIDE - 0.08, ei(k / TOP) * 0.85 + sm(k / TOP) * 0.15) : ROT_SLIDE - 0.08 * Math.exp(-(k - TOP) * 8) * Math.cos((k - TOP) * 20);
   const spring = (k, w, z) => Math.exp(-z * w * k) * Math.sin(w * Math.sqrt(1 - z * z) * k);
   // where he is: head (his anchor while he flies and slides) or feet, turn, size, and the squash and stretch on him
   function where(t) { let h = 300, rot = 0, ss = null, x, y, hd = null;
     if (t < B.fly) { h = KH; rot = pushRot(t); x = pushFeet(t); y = 772; if (t > B.kick) { const k = t - B.kick; x += 6 * sm(k / 0.1); ss = { ang: 0, s: 1 - 0.3 * Math.sin(Math.PI * cl(k / 0.1)), px: x + 0.3 * h, py: y - 0.5 * h }; } else if (t > B.shove) x += 6 * sm((t - B.kick + 0.1) / 0.1); }
     else if (t < B.land) { const tau = t - B.fly; h = lerp(KH, 300, sm(tau / FT)); hd = flightHead(tau); rot = lerp(pushRot(B.kick), flightAng(tau) + Math.PI / 2, sm(tau / 0.24)); const sp = Math.hypot(VX, VY + GRAV * tau);
       ss = { ang: rot - Math.PI / 2, s: 1 + 0.26 * sm(tau / 0.1) * cl(sp / 1500), px: hd[0], py: hd[1] }; }
-    else if (t < B.stop) { const k = t - B.land, sp0 = Math.hypot(VX, VY + GRAV * FT), sEnd = 1 + 0.26 * cl(sp0 / 1500); hd = [scrapeX(t), ROAD]; rot = scrapeRot(k) + 0.03 * Math.sin(k * 55) * Math.exp(-k * 4);
-      ss = { ang: rot - Math.PI / 2, s: (1 + (sEnd - 1) * Math.exp(-k * 30)) * (1 - 0.82 * spring(k, 30, 0.38)) * (1 + 0.05 * (1 - k / TS)), px: hd[0], py: hd[1] }; }
+    else if (t < B.stop) { const k = t - B.land, sp0 = Math.hypot(VX, VY + GRAV * FT), sEnd = 1 + 0.26 * cl(sp0 / 1500); hd = [scrapeX(t), ROAD - 9 * bump(k - 0.06, 0.2)]; rot = scrapeRot(k) + 0.025 * Math.sin(k * 55) * Math.exp(-k * 4) * sm(k / 0.1);
+      // the head takes the hit: the stretch from the fall runs into a soft squash and back, then the body lands flat on top of it
+      const hit = 1 - 0.55 * spring(k, 17, 0.42), slap = 1 - 0.3 * (k > TOP ? spring(k - TOP, 26, 0.45) : 0);
+      ss = { ang: rot - Math.PI / 2, s: (1 + (sEnd - 1) * Math.exp(-k * 18)) * hit * slap * (1 + 0.04 * sm(k / 0.15) * (1 - k / TS)), px: hd[0], py: hd[1] }; }
     else if (t < B.peel) { const k = t - B.stop, r0 = scrapeRot(TS); hd = [STOP, ROAD];
       // follow through: his legs carry on, swing up over him, then he slaps down flat
       rot = k < 0.34 ? r0 + 0.62 * Math.sin(Math.PI * k / 0.34) * (1 - 0.3 * k / 0.34) : lerp(r0, 1.6, ei(cl((k - 0.34) / 0.14)));
@@ -280,13 +282,20 @@ const IntroScenes = (() => {
   function sil(g, P) { g.fillStyle = SIL; g.fill(P); g.save(); g.clip(P); g.fillStyle = EDGE; g.fill(sh2(P, 2.5, 3), 'evenodd'); g.restore(); }
   function bouncer(g, t, Wh) {
     // one straight leg swings out of the doorway from the hip, like a pendulum, boots him, follows through, swings back in
-    const L = 0.22, A0 = Math.PI / 2, AK = 0.16, AF = -0.18;
-    const an = t < B.kick - L ? A0 : t < B.kick ? lerp(A0, AK, 0.5 - 0.5 * Math.cos(Math.PI * (t - B.kick + L) / L * 0.999) * 1) : t < B.kick + 0.12 ? lerp(AK, AF, eo((t - B.kick) / 0.12)) : t < B.kick + 0.26 ? AF : lerp(AF, A0, sm((t - B.kick - 0.26) / 0.45));
+    const L = 0.1, A0 = Math.PI / 2, AK = 0.16, AF = -0.22;
+    const an = t < B.kick - L ? A0 : t < B.kick ? lerp(A0, AK, ei((t - B.kick + L) / L) * 0.7 + sm((t - B.kick + L) / L) * 0.3) : t < B.kick + 0.08 ? lerp(AK, AF, eo((t - B.kick) / 0.08)) : t < B.kick + 0.2 ? AF : lerp(AF, A0, sm((t - B.kick - 0.2) / 0.35));
     if (an >= A0 - 0.01) return; const hip = [250, 604], LEN = 100, ank = [hip[0] + Math.cos(an) * LEN, hip[1] + Math.sin(an) * LEN];
     g.save(); g.beginPath(); g.rect(262, 0, PW, PH); g.clip();
-    vol(g, tube([[hip[0] - Math.cos(an) * 30, hip[1] - Math.sin(an) * 30], ank], 44, 38), '#23252d', { sh: '#121318', hl: '#363a45', rim: 'rgba(255,170,90,0.8)', k: 12 });
-    g.translate(ank[0], ank[1]); g.rotate(an); g.scale(1.25, 1.25); vol(g, path(P => { P.moveTo(-10, -18); P.lineTo(18, -20); P.quadraticCurveTo(50, -18, 54, 2); P.quadraticCurveTo(54, 11, 42, 11); P.lineTo(-12, 11); P.closePath(); }), '#17171c', { sh: '#08080b', hl: '#3a3b44', k: 8 });
-    line(g, 3, c => { c.moveTo(-12, 6); c.lineTo(52, 6); }); g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(34, -11, 9, 3, -0.2, 0, TAU); g.fill(); g.restore(); }
+    vol(g, tube([[hip[0] - Math.cos(an) * 30, hip[1] - Math.sin(an) * 30], [hip[0] + Math.cos(an) * (LEN - 8), hip[1] + Math.sin(an) * (LEN - 8)]], 44, 40), '#23252d', { sh: '#121318', hl: '#363a45', rim: 'rgba(255,170,90,0.8)', k: 12 });
+    // in the leg's own frame: x along the leg, the shoe at right angles to it, sole forward, toe up
+    g.translate(ank[0], ank[1]); g.rotate(an); vol(g, path(P => P.rect(-8, -16, 12, 32)), '#3a3a42', { sh: '#26262c', k: 4, lw: 3 }); // the sock at the ankle
+    const up = path(P => { P.moveTo(-4, 20); P.lineTo(-6, -10); P.bezierCurveTo(-8, -30, -6, -54, 4, -64); P.quadraticCurveTo(14, -72, 22, -62); P.lineTo(22, 24); P.quadraticCurveTo(10, 26, -4, 20); P.closePath(); });
+    vol(g, up, '#1b1b21', { sh: '#0b0b0e', hl: '#40414b', k: 8, rim: 'rgba(255,170,90,0.7)' });
+    vol(g, path(P => { P.moveTo(20, 26); P.lineTo(20, -60); P.quadraticCurveTo(22, -72, 30, -66); P.lineTo(30, 4); P.lineTo(34, 4); P.lineTo(34, 26); P.closePath(); }), '#2c2a28', { sh: '#151413', k: 4, lw: 3.5 }); // sole and heel
+    line(g, 2.5, c => { for (let i = 0; i < 3; i++) { c.moveTo(-4, -18 - i * 9); c.lineTo(10, -20 - i * 9); } }, '#55565f');
+    g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(6, -50, 3, 9, 0.3, 0, TAU); g.fill();
+    vol(g, path(P => P.rect(-16, -24, 10, 48)), '#23252d', { sh: '#121318', k: 4, lw: 3.5 }); // the trouser hem over the top
+    g.restore(); }
   // skid: a grubby streak where his face went along the road, scuffs and dust
   function skid(g, t) { if (t < B.land) return; const k = t - B.land, hx = scrapeX(t);
     g.save(); g.fillStyle = 'rgba(16,12,22,0.5)'; g.beginPath(); g.moveTo(IMP - 10, ROAD); g.quadraticCurveTo((IMP + hx) / 2, ROAD - 12, hx, ROAD - 5); g.lineTo(hx, ROAD + 7); g.quadraticCurveTo((IMP + hx) / 2, ROAD + 10, IMP - 10, ROAD + 3); g.closePath(); g.fill();
