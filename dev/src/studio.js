@@ -47,9 +47,16 @@ const Studio = (() => {
       neon: { on: true, x: 0.70, y: 0.651, s: 1, text: false, style: 'logo', q: SIGN_Q.map(p => p.slice()) }, avatar: null, stings: [], shows: [], events: [], tower: 'standing', sound: { on: true, vol: 0.8, thunder: true, cars: true }, mark: false, pics: [] };
   }
   const loopOf = cfg => cl(+cfg.loop || 20, 4, 120);
+  // The avatar is a video (Media) or his character (kind 'char': the Character tab's puppet, voice and script)
+  const charCfg = () => (hooks.char && hooks.char()) || null;
+  function avInfo(A) {
+    if (!A) return null;
+    if (A.kind === 'char') { if (typeof Character === 'undefined' || typeof Puppet === 'undefined') return null; const cc = charCfg(), rig = cc && cc.puppet ? Puppet.get(cc.puppet) : null; if (!rig) return null; return { dur: Character.duration(cc), w: rig.W, h: rig.H, fw: rig.W, fh: rig.H, box: rig.bounds.map(Math.round), char: cc }; }
+    return typeof Media !== 'undefined' ? Media.info(A.id) : null;
+  }
   function duration(cfg) {
     const L = loopOf(cfg); if (+cfg.len > 0) return cl(+cfg.len, 1, 1800);
-    const A = cfg.avatar, inf = A && typeof Media !== 'undefined' ? Media.info(A.id) : null;
+    const A = cfg.avatar, inf = avInfo(A);
     if (inf) return Math.max(1, inf.dur - (+A.inPt || 0));
     return L;
   }
@@ -266,8 +273,9 @@ const Studio = (() => {
     drawLight(ctx, cfg, M, v, t, lamps, fl, room, false);
     if (dth) { const pw = v.EL ? 1 - cl(v.EL.roomOff, 0, 1) * 0.8 : 1; if (pw > 0.05) { ctx.save(); ctx.globalAlpha = pw; Dc.lightPass(ctx, dth, DX, room); ctx.restore(); }
       const wa = Dc.wash(dth); if (wa) windowGlow(ctx, DX.Q, v, wa.slice(0, 3), wa[3] * pw); const fw = Dc.flash(dth, t, L); if (fw) windowGlow(ctx, DX.Q, v, fw.rgb, fw.e); }
-    drawAvatar(ctx, cfg, v, tAv, lamps, fl, room);
-    drawLight(ctx, cfg, M, v, t, lamps, fl, room, true);
+    const asChar = cfg.avatar && cfg.avatar.kind === 'char';
+    if (asChar) { drawLight(ctx, cfg, M, v, t, lamps, fl, room, true); drawAvatar(ctx, cfg, v, tAv, lamps, fl, room, M); }
+    else { drawAvatar(ctx, cfg, v, tAv, lamps, fl, room, M); drawLight(ctx, cfg, M, v, t, lamps, fl, room, true); }
     if (look && look.preview && cfg.mark) guides(ctx, M, v);
     ctx.restore();
   }
@@ -444,15 +452,15 @@ const Studio = (() => {
   /* ---------- Your avatar: their own video, keyed or see-through, lit to sit in the room ---------- */
   const avBuf = {};
   const buf = (k, w, h) => { let c = avBuf[k]; if (!c || c.width !== Math.ceil(w) || c.height !== Math.ceil(h)) { c = avBuf[k] = mk(w, h); } return c; };
-  function avatarRect(cfg, v) { const A = cfg.avatar, inf = A && typeof Media !== 'undefined' ? Media.info(A.id) : null; if (!A || !inf) return null; const fw = inf.fw || inf.w, fh = inf.fh || inf.h, h = cl(+A.h || 1, 0.05, 3) * v.ih, w = h * fw / fh;
+  function avatarRect(cfg, v) { const A = cfg.avatar, inf = avInfo(A); if (!A || !inf) return null; const fw = inf.fw || inf.w, fh = inf.fh || inf.h, h = cl(+A.h || 1, 0.05, 3) * v.ih, w = h * fw / fh;
     return { x: A.x * v.iw - w / 2, y: A.y * v.ih - h / 2, w, h, fw, fh, box: inf.box || [0, 0, fw, fh] }; }
-  function drawAvatar(ctx, cfg, v, tAv, lamps, fl, room) {
-    const A = cfg.avatar; if (!A || typeof Media === 'undefined') return; const R = avatarRect(cfg, v); if (!R) return;
-    const fr = Media.frame(A.id, cl(tAv, 0, 1e6)); if (!fr) return;
+  function drawAvatar(ctx, cfg, v, tAv, lamps, fl, room, M) {
+    const A = cfg.avatar; if (!A) return; const R = avatarRect(cfg, v); if (!R) return; const isChar = A.kind === 'char';
+    const fr = isChar ? null : typeof Media !== 'undefined' ? Media.frame(A.id, cl(tAv, 0, 1e6)) : null; if (!fr && !isChar) return;
     const kx = R.w / R.fw, ky = R.h / R.fh, bx = R.x + R.box[0] * kx, by = R.y + R.box[1] * ky, bw = (R.box[2] - R.box[0]) * kx, bh = (R.box[3] - R.box[1]) * ky, flip = !!A.mirror;
     // Work at the size it appears on screen so the extra passes stay cheap
     const px = v.px || v.s, sc = Math.min(1, 1100 / Math.max(1, bh * px)), cw = Math.max(2, bw * px * sc), ch = Math.max(2, bh * px * sc), a = buf('a', cw, ch), ag = a.getContext('2d');
-    ag.setTransform(1, 0, 0, 1, 0, 0); ag.clearRect(0, 0, cw, ch); if (flip) { ag.translate(cw, 0); ag.scale(-1, 1); } ag.drawImage(fr, 0, 0, cw, ch); ag.setTransform(1, 0, 0, 1, 0, 0);
+    ag.setTransform(1, 0, 0, 1, 0, 0); ag.clearRect(0, 0, cw, ch); if (flip) { ag.translate(cw, 0); ag.scale(-1, 1); } if (isChar) { const b = R.box; ag.scale(cw / (b[2] - b[0]), ch / (b[3] - b[1])); ag.translate(-b[0], -b[1]); ag.imageSmoothingQuality = 'high'; Character.drawRig(ag, charCfg(), cl(tAv, 0, 1e6)); } else ag.drawImage(fr, 0, 0, cw, ch); ag.setTransform(1, 0, 0, 1, 0, 0);
     const grade = cl(A.grade == null ? 0.6 : +A.grade, 0, 1), warm = cl(A.warm == null ? 0.5 : +A.warm, 0, 1), cool = cl(A.cool == null ? 0.45 : +A.cool, 0, 1), shadow = cl(A.shadow == null ? 0.5 : +A.shadow, 0, 1);
     const lampAvg = lamps.length ? lamps.reduce((s, x) => s + Math.min(1.2, x.f), 0) / lamps.length : 1, dim = Math.min(room, lerp(1, lampAvg, 0.6));
     // Match the room: darker and a touch warmer in the shadows, then the edges catch the lamps and the window
@@ -461,11 +469,36 @@ const Studio = (() => {
     ag.globalCompositeOperation = 'source-over';
     const rim = (key, col, dx, dy, k) => { if (k <= 0.01) return; const m = buf(key, cw, ch), mg = m.getContext('2d'); mg.setTransform(1, 0, 0, 1, 0, 0); mg.globalCompositeOperation = 'copy'; mg.drawImage(m0, 0, 0); mg.globalCompositeOperation = 'source-in'; mg.fillStyle = col; mg.fillRect(0, 0, cw, ch); mg.globalCompositeOperation = 'destination-out'; mg.drawImage(m0, dx, dy); mg.globalCompositeOperation = 'source-over';
       ag.save(); ag.globalCompositeOperation = 'lighter'; ag.globalAlpha = k; ag.drawImage(m, 0, 0); ag.restore(); };
+    if (isChar) {
+      /* His character is lit from where the lights really are: the window (lightning, whatever is going on outside, the
+         cool night) on one side, the lamps on the other. Thin rims only on the side facing each light, a flash that is
+         brightest on the window side and fades across him, and his shadow thrown on the wall away from the window. */
+      const cx = bx + bw / 2, cy = by + bh * 0.4, Gl = M && M.glass ? M.glass.map(m => P(m, v)) : null;
+      const wdir = Gl ? (() => { const wx = Gl.reduce((a2, q) => a2 + q[0], 0) / 4, wy = Gl.reduce((a2, q) => a2 + q[1], 0) / 4, dx = wx - cx, dy = wy - cy, n = Math.hypot(dx, dy) || 1; return [dx / n, dy / n]; })() : [1, -0.2];
+      const Ls = (M && M.lamps || []).map((m, i) => [m[0] * v.iw, m[1] * v.ih, Math.min(1.2, lamps[i] ? lamps[i].f : 1)]), lw = Ls.reduce((a2, q) => a2 + q[2], 0);
+      const ldir = lw > 0 ? (() => { const lx = Ls.reduce((a2, q) => a2 + q[0] * q[2], 0) / lw, ly = Ls.reduce((a2, q) => a2 + q[1] * q[2], 0) / lw, dx = lx - cx, dy = ly - cy, n = Math.hypot(dx, dy) || 1; return [dx / n, dy / n]; })() : [-wdir[0], wdir[1]];
+      let glow = null; if (v.EL && v.EL.glow && v.EL.glow.length) { let e = 0; const c = [0, 0, 0]; v.EL.glow.forEach(([rgb, x]) => { if (x <= 0) return; e += x; rgb.forEach((q, i) => { c[i] += q * x; }); }); if (e > 0.015) glow = { c: c.map(q => q / e), e }; }
+      const fe = cl(fl.e, 0, 1.2), d = Math.max(1.5, cw * 0.006);
+      rim('w', 'rgba(255,170,90,0.9)', -ldir[0] * d, -ldir[1] * d, warm * 0.55 * cl(lampAvg, 0, 1.2) * room);
+      rim('c', 'rgba(140,165,255,0.9)', -wdir[0] * d, -wdir[1] * d, cool * 0.4 + fe * 0.9);
+      if (glow) rim('g', `rgba(${glow.c.map(Math.round).join(',')},0.9)`, -wdir[0] * d * 1.4, -wdir[1] * d * 1.4, cl(glow.e, 0, 1) * 0.8);
+      const wash = (rgb, k) => { if (k <= 0.01) return; const g2 = ag.createLinearGradient(cw / 2 + wdir[0] * cw * 0.55, ch * 0.4 + wdir[1] * ch * 0.55, cw / 2 - wdir[0] * cw * 0.55, ch * 0.4 - wdir[1] * ch * 0.55);
+        g2.addColorStop(0, `rgba(${rgb.join(',')},${cl(0.55 * k, 0, 0.75)})`); g2.addColorStop(0.55, `rgba(${rgb.join(',')},${cl(0.18 * k, 0, 0.4)})`); g2.addColorStop(1, `rgba(${rgb.join(',')},${cl(0.04 * k, 0, 0.2)})`);
+        const lb = buf('lit', cw, ch), lg = lb.getContext('2d'); lg.setTransform(1, 0, 0, 1, 0, 0); lg.globalCompositeOperation = 'copy'; lg.fillStyle = g2; lg.fillRect(0, 0, cw, ch); lg.globalCompositeOperation = 'destination-in'; lg.drawImage(m0, 0, 0); lg.globalCompositeOperation = 'source-over';
+        ag.save(); ag.globalCompositeOperation = 'screen'; ag.drawImage(lb, 0, 0); ag.restore(); };
+      if (dim < 0.99) { ag.save(); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = `rgba(4,6,14,${cl((1 - dim) * 0.85, 0, 0.85)})`; ag.fillRect(0, 0, cw, ch); ag.restore(); }
+      wash([175, 190, 255], fe); if (glow) wash(glow.c.map(Math.round), cl(glow.e, 0, 1) * 0.7);
+      // his shadow on the wall, away from the window, while the window is lit
+      const se = Math.max(fe, glow ? cl(glow.e, 0, 1) * 0.6 : 0);
+      if (se > 0.02) { const sb = buf('sh', cw, ch), sg = sb.getContext('2d'); sg.setTransform(1, 0, 0, 1, 0, 0); sg.globalCompositeOperation = 'copy'; sg.drawImage(m0, 0, 0); sg.globalCompositeOperation = 'source-in'; sg.fillStyle = 'rgb(3,5,14)'; sg.fillRect(0, 0, cw, ch); sg.globalCompositeOperation = 'source-over';
+        ctx.save(); ctx.globalAlpha = cl(0.7 * se, 0, 0.7); const ox = -wdir[0] * bw * 0.11, oy = -wdir[1] * bh * 0.06 - bh * 0.01; ctx.drawImage(sb, bx + ox - bw * 0.02, by + oy - bh * 0.02, bw * 1.04, bh * 1.04); ctx.restore(); }
+    } else {
     const d = Math.max(2, cw * 0.012);
     rim('w', 'rgba(255,170,90,0.9)', d, d * 0.25, warm * 0.7 * cl(lampAvg, 0, 1.2));
     rim('c', 'rgba(130,160,255,0.9)', -d, d * 0.15, cool * 0.6 + cl(fl.e, 0, 1.2) * 0.8);
     if (fl.e > 0.01) { ag.save(); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = `rgba(170,185,255,${0.28 * cl(fl.e, 0, 1)})`; ag.fillRect(0, 0, cw, ch); ag.restore(); }
     if (dim < 0.99) { ag.save(); ag.globalCompositeOperation = 'source-atop'; ag.fillStyle = `rgba(4,6,14,${cl((1 - dim) * 0.85, 0, 0.85)})`; ag.fillRect(0, 0, cw, ch); ag.restore(); }
+    }
     // A soft shadow on the floor under the desk
     if (shadow > 0) { ctx.save(); const cx = bx + bw / 2, cy = by + bh * 0.985, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, bw * 0.6); g.addColorStop(0, `rgba(0,0,0,${0.55 * shadow})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.translate(cx, cy); ctx.scale(1, 0.16); ctx.translate(-cx, -cy); ctx.fillStyle = g; ctx.fillRect(cx - bw * 0.6, cy - bw * 0.6, bw * 1.2, bw * 1.2); ctx.restore(); }
     ctx.drawImage(a, bx, by, bw, bh);
@@ -712,7 +745,7 @@ const Studio = (() => {
   const frameName = (cfg, id) => { const f = ((cfg.marks || {}).frames || []).find(x => x.id === id); return f ? f.name || 'Frame' : 'Frame'; };
   const editor = { formIsScene: true,
     tracks(cfg, look) { const d = duration(cfg), T = [];
-      if (cfg.avatar) { const inf = typeof Media !== 'undefined' && Media.info(cfg.avatar.id); T.push({ id: 'av', name: 'Avatar', colour: '#a03a6a', items: [{ id: 'AV', start: 0, end: inf ? Math.max(0.3, inf.dur - (+cfg.avatar.inPt || 0)) : d, label: '🎙 ' + (cfg.avatar.name || 'Avatar'), colour: '#a03a6a', move: false, trim: 'none', title: 'Your avatar video' }] }); }
+      if (cfg.avatar) { const inf = avInfo(cfg.avatar); T.push({ id: 'av', name: 'Avatar', colour: '#a03a6a', items: [{ id: 'AV', start: 0, end: inf ? Math.max(0.3, inf.dur - (+cfg.avatar.inPt || 0)) : d, label: '🎙 ' + (cfg.avatar.name || 'Avatar'), colour: '#a03a6a', move: false, trim: 'none', title: 'Your avatar video' }] }); }
       T.push({ id: 'room', name: 'Room', colour: '#4f6fd0', items: (cfg.stings || []).map(s2 => ({ id: 'S:' + s2.id, start: +s2.start || 0, end: (+s2.start || 0) + Math.max(0.2, +s2.dur || 1), label: (STINGS.find(x => x[0] === s2.k) || [, s2.k])[1], colour: s2.k === 'thunder' || s2.k === 'lightning' ? '#5b6fd8' : '#b0703a', move: true, trim: 'both', minLen: 0.2 })) });
       if (Ev) T.push({ id: 'out', name: 'Outside', colour: '#c0603a', items: (cfg.events || []).filter(e => Ev.LEN[e.k]).map(e => ({ id: 'X:' + e.id, start: +e.start || 0, end: (+e.start || 0) + Ev.durOf(e), label: e.k === 'spell' ? '💡 ' + (Ev.cleanWord(e.text) || 'Word') : Ev.nameOf(e.k), colour: Ev.TINT[e.k] || '#c0603a', move: true, trim: 'both', minLen: 1 })) });
       const fr = (cfg.marks && cfg.marks.frames) || []; fr.forEach(f => { const its = (cfg.shows || []).filter(sh => sh.frame === f.id); if (!its.length) return; T.push({ id: 'f:' + f.id, name: f.name || 'Frame', colour: '#b0458f', items: its.map(sh => ({ id: 'W:' + sh.id, start: +sh.start || 0, end: (+sh.start || 0) + Math.max(0.3, +sh.dur || 5), label: sh.kind === 'text' ? '“' + (sh.text || 'Headline') + '”' : sh.kind === 'clip' ? '🎞 ' + (NAMES[sh.mod] || 'Clip') : '🖼 ' + (sh.name || 'Picture'), colour: '#b0458f', move: true, trim: 'both', minLen: 0.3 })) }); });
@@ -834,7 +867,8 @@ const Studio = (() => {
         H('p', { className: 'hint', textContent: 'Add thunder, lightning, flickers and lights off at a moment with + Sting on the timeline. Camera moves, captions, name titles and a subscribe reminder are under Layers.' })));
     }
     function avatarCard() {
-      const A = cfg.avatar, note = H('p', { className: 'hint' }), inf = A && typeof Media !== 'undefined' ? Media.info(A.id) : null, opts = keyOpts;   // how to read the next avatar file: a panel setting, not part of the clip
+      const A = cfg.avatar, note = H('p', { className: 'hint' }), inf = avInfo(A), opts = keyOpts;
+      const cc = charCfg(), canChar = typeof Character !== 'undefined' && cc && cc.puppet, useChar = () => { cfg.avatar = Object.assign({ x: 0.5, y: 0.5, h: 1, inPt: 0, grade: 0.6, warm: 0.5, cool: 0.45, shadow: 0.5 }, A && A.kind === 'char' ? A : {}, { kind: 'char', name: 'My character' }); delete cfg.avatar.id; changed(); redo(); };   // how to read the next avatar file: a panel setting, not part of the clip
       const load = (src, what) => { if (typeof Media === 'undefined' || !Media.importAvatar) { note.textContent = 'Videos can only be added in the app itself.'; return; } note.textContent = 'Reading ' + what + '…';
         Media.importAvatar(src, { key: opts.key, tol: opts.tol, fps: opts.fps }, q => { note.textContent = 'Reading ' + what + ': ' + Math.round(q * 100) + '%'; })
           .then(m => { cfg.avatar = Object.assign({ x: 0.5, y: 0.5, h: 1, inPt: 0, grade: 0.6, warm: 0.5, cool: 0.45, shadow: 0.5 }, A || {}, { id: m.id, name: m.name }); delete cfg._key; Object.assign(keyOpts, { key: 'auto', tol: 0.5, fps: 30 }); changed(); redo(); const n2 = root.querySelector('.av-note'); if (n2) n2.textContent = (m.key === 'green' || m.key === 'blue' ? 'The ' + m.key + ' screen was taken out. ' : '') + (m.cut ? 'Only the first 10 minutes were read. ' : '') + (m.unsaved ? 'There was no room to keep it on this computer, so add it again after closing the app.' : ''); })
@@ -845,14 +879,14 @@ const Studio = (() => {
       if (!A || !inf) { root.append(card('Your avatar', H('p', { className: 'hint', textContent: A && !inf ? 'Your avatar video is not on this computer. Add it again.' : 'From Character Animator, export a PNG sequence (File, Export, PNG Sequence and WAV) or a video on a green screen. A see-through WebM works too. Up to 10 minutes.' }),
           grid2(field('Background', sel(opts.key, [['auto', 'Find it myself'], ['green', 'Green screen'], ['blue', 'Blue screen'], ['none', 'Already see-through']], v => { opts.key = v; }, 'Background')), field('PNG frames a second', num(opts.fps, v => { opts.fps = v; }, 1, 60, 1, 'Frames a second'))),
           field('Green screen strength', range(opts.tol, 0, 1, 0.05, v => { opts.tol = v; }, 'Key strength')),
-          H('div', { className: 'btnrow' }, btn('Add avatar video', pickVid, 'primary'), btn('Add a PNG sequence', pickPng)), note)); return; }
+          H('div', { className: 'btnrow' }, ...(canChar ? [btn('Use my character', useChar, 'primary')] : []), btn('Add avatar video', pickVid, canChar ? '' : 'primary'), btn('Add a PNG sequence', pickPng)), canChar ? '' : H('p', { className: 'hint', textContent: 'Or load your puppet in Animator, Character, and he can sit here himself, talking from your voice.' }), note)); return; }
       const set = (key, v) => { A[key] = r2(v); };
-      root.append(card('Your avatar', H('p', { className: 'hint', textContent: '🎙 ' + (A.name || 'Avatar') + ', ' + inf.dur.toFixed(1) + ' s. Drag yourself on the preview to move, or a corner to change your size.' }),
+      root.append(card('Your avatar', H('p', { className: 'hint', textContent: (A.kind === 'char' ? '🗣 Your character, from the Character tab (puppet, voice and script), ' : '🎙 ' + (A.name || 'Avatar') + ', ') + inf.dur.toFixed(1) + ' s. Drag yourself on the preview to move, or a corner to change your size.' }),
         grid2(field('Size', range(cl(+A.h || 1, 0.1, 2), 0.1, 2, 0.01, v => set('h', v), 'Avatar size', x => Math.round(x * 100) + '%')), field('Start from (seconds into your video)', num(+A.inPt || 0, v => { A.inPt = r2(v); changed(); }, 0, 600, 0.1, 'Start from'))),
         field('Match the room', range(A.grade == null ? 0.6 : +A.grade, 0, 1, 0.05, v => set('grade', v), 'Match the room')),
         grid2(field('Lamp light on your edge', range(A.warm == null ? 0.5 : +A.warm, 0, 1, 0.05, v => set('warm', v), 'Warm edge')), field('Window light on your edge', range(A.cool == null ? 0.45 : +A.cool, 0, 1, 0.05, v => set('cool', v), 'Cool edge'))),
         grid2(field('Shadow on the floor', range(A.shadow == null ? 0.5 : +A.shadow, 0, 1, 0.05, v => set('shadow', v), 'Shadow')), field('Flip left to right', seg([['0', 'No'], ['1', 'Yes']], A.mirror ? '1' : '0', v => { A.mirror = v === '1'; ch(); }))),
-        H('div', { className: 'btnrow' }, btn('Fill the frame with the video', () => { A.x = 0.5; A.y = 0.5; A.h = 1; ch(); }), btn('Change video', pickVid), btn('Change to PNG sequence', pickPng), btn('Remove', () => { cfg.avatar = null; ch(); })), note, done ? foot() : ''));
+        H('div', { className: 'btnrow' }, btn('Fill the frame', () => { A.x = 0.5; A.y = 0.5; A.h = 1; ch(); }), ...(A.kind !== 'char' && canChar ? [btn('Use my character instead', useChar)] : []), btn(A.kind === 'char' ? 'Use a video instead' : 'Change video', pickVid), btn('Change to PNG sequence', pickPng), btn('Remove', () => { cfg.avatar = null; ch(); })), note, done ? foot() : ''));
     }
     // The flats across the road: what state they are in at the start (so the damage carries on from video to video), and
     // a quick way to add something happening out there
@@ -916,5 +950,7 @@ const Studio = (() => {
     }
   }
 
-  return { id: 'studio', name: 'Studio', ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _dbg: DBG, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
+  const mainThread = cfg => !!(cfg && cfg.avatar && cfg.avatar.kind === 'char');
+  async function prepare(cfg) { if (cfg && cfg.avatar && cfg.avatar.kind === 'char' && typeof Character !== 'undefined') { const cc = charCfg(); if (cc) await Character.prepare(cc); } }
+  return { id: 'studio', name: 'Studio', mainThread, prepare, ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _dbg: DBG, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
 })();

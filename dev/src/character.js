@@ -335,5 +335,7 @@ const Character = (() => {
     scene(root, cfg, changed) { form(root, cfg, changed); },
   };
   const soundId = cfg => cfg && cfg.voice || null;
-  return { id: 'char', name: 'Character', defaults, duration, draw, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
+  // Just the puppet at a moment, in its own pixels (no background, no framing): for the Studio to place and light
+  function drawRig(g, cfg, t) { const rig = cfg && cfg.puppet ? Puppet.get(cfg.puppet) : null; if (!rig) return null; const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d); Puppet.draw(g, rig, poseAt(cfg, A, rig, p, Math.max(0, t))); return rig; }
+  return { id: 'char', name: 'Character', mainThread: () => true, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
 })();

@@ -84,6 +84,7 @@ const Render = (() => {
     } catch (e) { return usesWebFonts() ? null : []; }
   }
   async function makePool(mod, cfg, look, W, H, fps, blur, n, t0 = 0) {
+    if (mod.mainThread && mod.mainThread(cfg)) return null;   // some clips only draw on the page (his puppet's pictures live there)
     if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined' || typeof VideoFrame === 'undefined') return null;
     const el = document.getElementById('patter-js'), src = el && el.textContent; if (!src) return null;
     const d3src = [...document.scripts].map(s => s.src).find(s => /d3(\.min)?\.js/.test(s || ''));
@@ -111,6 +112,7 @@ const Render = (() => {
   async function renderFrames(mod, cfg, look, { fps, blur, onFrame, signal, onInfo, frames, t0 = 0 }) {
     const { W, H } = E.dims(look.format), n = frames;
     if (mod.mediaFor && typeof Media !== 'undefined') await Media.ensure(mod.mediaFor(cfg));
+    if (mod.prepare) await mod.prepare(cfg);
     const pool = await makePool(mod, cfg, look, W, H, fps, blur, cores(), t0);
     if (!pool) {
       const isGlobe = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover';
