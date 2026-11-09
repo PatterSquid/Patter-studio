@@ -11,9 +11,9 @@
    Like every tab it is a pure function of time. Its sound is made here from the same moments (Intro.sound), saved
    as a WAV, and played under the clip when it is used in the Video tab. */
 const Intro = (() => {
-  const STYLES = [['swally', 'A wee swally']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
+  const STYLES = [['swally', 'Chucked oot']]; // the old ink, battered, neon and epic openers are kept below only so nothing breaks; he rejected them
   const LINES = { swally: '', ink: 'QUALITY PATTER. NAE PISH.', battered: 'ABSOLUTELY BATTERED.', neon: 'Open till late. Unfortunately.', epic: 'AWRIGHT. THAT’LL DAE.' };
-  const BASE = { swally: 7.7, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
+  const BASE = { swally: 10.9, ink: 5.2, battered: 6.0, neon: 5.8, epic: 5.8 }, EP = 1.6;
   const cl = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, f) => a + (b - a) * f, sm = x => { x = cl(x, 0, 1); return x * x * (3 - 2 * x); };
   const eo = x => 1 - Math.pow(1 - cl(x, 0, 1), 3), eo5 = x => 1 - Math.pow(1 - cl(x, 0, 1), 5), ei = x => Math.pow(cl(x, 0, 1), 2), eio = x => { x = cl(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const spring = (k, amp, w, d) => k < 0 ? 0 : amp * Math.exp(-k * d) * Math.cos(k * w);
@@ -849,32 +849,40 @@ void main(){
     const click = (t0, f, amp, pan) => { let lp = 0; add(t0, 0.06, pan == null ? 0.5 : pan, x => { lp += 0.35 * (nz() - lp); return (Math.sin(TAU * f * x) * 0.6 + lp * 0.6) * amp * Math.exp(-x * 70) * Math.min(1, x / 0.0015); }); };
     const pad = (t0, len, freqs, amp, att) => add(t0, len, 0.5, x => { const env = Math.min(1, x / att) * Math.min(1, (len - x) / 0.6); let v = 0; freqs.forEach((f, i) => { const ph = TAU * f * x + i; v += Math.sin(ph) + 0.35 * Math.sin(2 * ph + 0.3) + 0.15 * Math.sin(3 * ph); }); return v * amp * env / freqs.length; });
     if (st === 'swally') { const S = IntroScenes.B;
-      // a quiet street: wind, a dog somewhere
-      { let a = 0, b = 0; add(0, D, 0.5, x => { a += 0.015 * (nz() - a); b += 0.0015 * (nz() - b); return (a * 0.6 + b * 2) * 0.35 * Math.min(1, x / 0.4); }); }
-      add(0.3, 0.16, 0.12, x => (Math.sin(TAU * (520 - 900 * x) * x) * 0.6 + nz() * 0.3) * 0.05 * Math.sin(Math.PI * x / 0.16));
-      // the cap off, then glug glug glug
-      add(S.lift + 0.2, 0.08, 0.6, x => (nz() * 0.5 + Math.sin(TAU * 1800 * x)) * 0.25 * Math.exp(-x * 60));
+      // the pub: a muffled thump of music through the wall, loud when the door flies open, a wee bit wind outside
+      { let a = 0, b = 0; add(0, D, 0.5, x => { a += 0.015 * (nz() - a); b += 0.0015 * (nz() - b); return (a * 0.6 + b * 2) * 0.25 * Math.min(1, x / 0.4); }); }
+      const beat = 60 / 124; for (let i = 0; i * beat < S.splash + 0.4; i++) { const t0 = i * beat, op = t0 > S.open && t0 < S.splash + 0.3, v = (op ? 0.55 : 0.22) * (t0 > S.splash ? 0.5 : 1); add(t0, 0.25, 0.3, x => Math.sin(TAU * (55 + 60 * Math.exp(-x * 30)) * x) * v * Math.exp(-x * 9)); if (op && i % 2) add(t0, 0.12, 0.3, x => nz() * 0.06 * Math.exp(-x * 30)); if (op) add(t0 + beat / 2, 0.3, 0.32, x => Math.sin(TAU * [220, 247, 196, 262][i % 4] * x) * 0.05 * Math.exp(-x * 6)); }
+      add(S.open, 0.3, 0.3, x => (nz() * 0.6 + Math.sin(TAU * 90 * x)) * 0.6 * Math.exp(-x * 14)); // door bangs open
+      swish(S.throw, S.land - S.throw, 300, 1800, 0.35, 0.4);
+      add(S.land, 0.4, 0.55, x => { const ph = TAU * (45 * x + 50 * (1 - Math.exp(-x * 8)) / 8); return Math.sin(ph) * 0.9 * Math.exp(-x * 9) + nz() * 0.3 * Math.exp(-x * 60); }); // splat on the road
+      add(S.land + 0.05, 0.15, 0.6, x => (Math.sin(TAU * 2900 * x) * 0.4 + Math.sin(TAU * 4100 * x) * 0.2) * Math.exp(-x * 30)); // the bottle clinks but survives
+      // gruff shout, the squid's raspberry back
+      add(S.land + 0.05, 0.55, 0.35, x => { const f = 110 + 20 * Math.sin(TAU * 3 * x); let v = 0; [1, 2, 3, 4, 6].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.12) * Math.sin(Math.PI * x / 0.55) * (0.6 + 0.4 * Math.abs(Math.sin(TAU * 7 * x))); });
+      add(S.maw, 0.45, 0.6, x => { const f = 260 - 80 * x; let v = 0; [1, 2, 3].forEach(hh => { v += Math.sin(TAU * f * hh * x + 3 * Math.sin(TAU * 31 * x)) / hh; }); return (v * 0.3 + nz() * 0.2) * Math.sin(Math.PI * x / 0.45); });
+      // the bike: freewheel ticking closer, the splash, the whoosh past, a cackle
+      { const L = S.splash - S.ned + 0.2; add(S.ned, L, 0.4, x => { const u = x / L, tick = Math.pow(Math.max(0, Math.sin(TAU * (12 + 14 * u) * x)), 40); return tick * Math.sin(TAU * 3200 * x) * 0.4 * u * u; }); }
+      add(S.ned + 0.5, 0.6, 0.45, x => (Math.sin(TAU * 2400 * x) * 0.5 + Math.sin(TAU * 3570 * x) * 0.3) * Math.exp(-x * 7) * 0.25);
+      { let a = 0; add(S.splash - 0.02, 0.9, 0.55, x => { a += 0.45 * (nz() - a); return (a * 1.1 + nz() * 0.3 * Math.exp(-x * 20)) * Math.min(1, x / 0.01) * Math.exp(-x * 4.5); }); }
+      for (let k = 0; k < 10; k++) add(S.splash + 0.25 + k * 0.09, 0.07, 0.4 + (k % 4) * 0.12, x => Math.sin(TAU * (900 - 2600 * x) * x) * 0.1 * Math.exp(-x * 35));
+      swish(S.splash, 0.35, 400, 2500, 0.4, 0.2);
+      for (let k = 0; k < 4; k++) add(S.splash - 0.35 + k * 0.13, 0.11, 0.3, x => { const f = 320 + 20 * k; let v = 0; [1, 2, 3].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.25 + nz() * 0.15) * Math.sin(Math.PI * x / 0.11) * 0.7; });
+      // the bouncers laughing
+      for (let k = 0; k < 6; k++) add(S.splash + 0.3 + k * 0.16, 0.13, 0.2, x => { const f = 120 + 10 * (k % 2); let v = 0; [1, 2, 3, 4].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.2 + nz() * 0.12) * Math.sin(Math.PI * x / 0.13) * 0.6; });
+      // drips
+      for (let k = 0; k < 8; k++) add(S.splash + 0.5 + k * 0.17, 0.06, 0.4 + (k % 3) * 0.15, x => Math.sin(TAU * (1200 - 3000 * x) * x) * 0.06 * Math.exp(-x * 40));
+      // the cap off, then glug glug glug, ahh
+      add(S.lift + 0.15, 0.08, 0.6, x => (nz() * 0.5 + Math.sin(TAU * 1800 * x)) * 0.25 * Math.exp(-x * 60));
       for (let k = 0; k < 3; k++) { const t0 = S.glug + 0.08 + k * (S.down - S.glug) / 3; add(t0, 0.32, 0.55, x => { const f = 140 + 260 * Math.exp(-x * 9) + 40 * Math.sin(TAU * 22 * x); return Math.sin(TAU * f * x) * 0.5 * Math.exp(-x * 6) * Math.min(1, x / 0.01) + nz() * 0.06 * Math.exp(-x * 12); }); }
-      // ahh, a wee hiccup
-      add(S.ahh, 0.55, 0.5, x => { const f = 180 - 60 * x; let v = 0; [1, 2, 3, 4].forEach(h => { v += Math.sin(TAU * f * h * x) / h; }); return (v * 0.25 + nz() * 0.15) * Math.sin(Math.PI * x / 0.55); });
-      add(S.hic, 0.14, 0.5, x => (Math.sin(TAU * (500 + 900 * x) * x) * 0.6 + nz() * 0.2) * Math.exp(-x * 25));
-      // the stagger: squelchy wee steps
-      for (let k = 0; k < 7; k++) add(S.walk + 0.1 + k * 0.17, 0.09, 0.35 + (k % 2) * 0.3, x => (nz() * 0.4 + Math.sin(TAU * 160 * x) * 0.5) * Math.exp(-x * 40) * 0.5);
-      // the neds: freewheels ticking closer, a ding ding, "HAW!", whoosh past
-      [-0.25, -0.55].forEach(d => { const L = 1.3; add(S.neds + d, L, 0.6, x => { const u = x / L, near = Math.pow(u, 2.2), tick = Math.pow(Math.max(0, Math.sin(TAU * (14 + 10 * u) * x)), 40); return (tick * Math.sin(TAU * 3200 * x) * 0.5 + nz() * 0.05 * tick) * near * 0.6 * Math.min(1, (1 - u) * 6); }); add(S.neds + d + 0.9, 0.4, 0.85, x => { return nz() * 0.25 * Math.sin(Math.PI * x / 0.4) ** 2; }); });
-      [0, 0.18].forEach(d => add(S.neds + 0.25 + d, 0.6, 0.65, x => (Math.sin(TAU * 2400 * x) * 0.5 + Math.sin(TAU * 3570 * x) * 0.3 + Math.sin(TAU * 5900 * x) * 0.15) * Math.exp(-x * 7) * 0.35));
-      add(S.finger - 0.15, 0.32, 0.7, x => { const f = 230 - 90 * x; let v = 0; [1, 2, 3, 4, 5].forEach(h => { v += Math.sin(TAU * f * h * x) * (h === 3 ? 1.2 : 1) / h; }); return (v * 0.35 + nz() * 0.18) * Math.min(1, x / 0.02) * Math.exp(-x * 4); });
-      // the bottle goes: clink, then a roll along the road
-      add(S.drop + 0.3, 0.25, 0.65, x => (Math.sin(TAU * 2900 * x) * 0.5 + Math.sin(TAU * 4100 * x) * 0.3) * Math.exp(-x * 18)); add(S.drop + 0.35, 1.0, 0.7, x => (Math.sin(TAU * 900 * x) * 0.2 + nz() * 0.3) * 0.12 * (0.5 + 0.5 * Math.sin(TAU * 9 * x)) * Math.exp(-x * 2.5));
-      // the belly rumbles, hurk, hurk
+      add(S.ahh, 0.5, 0.5, x => { const f = 180 - 60 * x; let v = 0; [1, 2, 3, 4].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.25 + nz() * 0.15) * Math.sin(Math.PI * x / 0.5); });
+      // the belly rumbles, hurk, hurk, BLEURGH, splat on the lens
       add(S.green, 0.8, 0.5, x => Math.sin(TAU * (70 + 20 * Math.sin(TAU * 5 * x)) * x) * 0.25 * Math.sin(Math.PI * x / 0.8));
-      [S.hurk1, S.hurk2].forEach((t0, i) => add(t0, 0.28, 0.5, x => { const f = 120 + 60 * Math.sin(Math.PI * x / 0.28); let v = 0; [1, 2, 3, 5].forEach(h => { v += Math.sin(TAU * f * h * x) / h; }); return (v * 0.3 + nz() * 0.25) * Math.sin(Math.PI * x / 0.28) * (0.8 + i * 0.2); }));
-      // BLEURGH: a wet roar, then the splat on the lens
+      [S.hurk1, S.hurk2].forEach((t0, i) => add(t0, 0.28, 0.5, x => { const f = 120 + 60 * Math.sin(Math.PI * x / 0.28); let v = 0; [1, 2, 3, 5].forEach(hh => { v += Math.sin(TAU * f * hh * x) / hh; }); return (v * 0.3 + nz() * 0.25) * Math.sin(Math.PI * x / 0.28) * (0.8 + i * 0.2); }));
       { let a = 0; add(S.spew - 0.02, 0.45, 0.5, x => { a += 0.3 * (nz() - a); const f = 95 + 40 * Math.sin(TAU * 11 * x); return (a * 1.2 + Math.sin(TAU * f * x) * 0.5) * Math.min(1, x / 0.02) * Math.exp(-x * 2.5); }); }
       boom(S.splat, 150, 45, 0.9, 0.9); { let a = 0; add(S.splat, 0.7, 0.5, x => { a += 0.5 * (nz() - a); return a * 0.8 * Math.exp(-x * 7); }); }
-      for (let k = 0; k < 8; k++) add(S.splat + 0.35 + k * 0.17, 0.08, 0.3 + (k % 3) * 0.2, x => Math.sin(TAU * (700 - 2000 * x) * x) * 0.12 * Math.exp(-x * 30));
-      // the title lands
-      boom(S.splat + 0.12, 90, 50, 0.5, 0.5); if (epOf(cfg)) add(S.splat + 0.42, 0.2, 0.5, x => (nz() * 0.4 + Math.sin(TAU * 200 * x) * 0.4) * Math.exp(-x * 25));
+      // the logo lands, the name stamps, the episode, the cone whistles down and bonks
+      boom(S.logo, 110, 50, 0.6, 0.7); boom(S.name, 90, 50, 0.5, 0.5); if (epOf(cfg)) add(S.ep, 0.2, 0.5, x => (nz() * 0.4 + Math.sin(TAU * 200 * x) * 0.4) * Math.exp(-x * 25));
+      add(S.cone, S.bonk - S.cone, 0.55, x => { const p = x / (S.bonk - S.cone); return Math.sin(TAU * (1500 * x - 450 * x * p)) * 0.1 * Math.sin(Math.PI * p); });
+      add(S.bonk, 0.45, 0.5, x => (Math.sin(TAU * 520 * x) * 0.6 + Math.sin(TAU * 790 * x) * 0.35 + Math.sin(TAU * 1310 * x) * 0.15) * Math.exp(-x * 16) + nz() * 0.35 * Math.exp(-x * 110) + Math.sin(TAU * 140 * x) * 0.4 * Math.exp(-x * 20));
     } else if (st === 'ink') {
       add(INK.drop, INK.hit - INK.drop, 0.5, x => Math.sin(TAU * (900 + 1600 * x) * x) * 0.06 * Math.sin(Math.PI * x / (INK.hit - INK.drop)));
       boom(INK.hit, 110, 38, 2.2, 0.9); swish(INK.hit, 1.1, 300, 2400, 0.35); swish(INK.hit + 0.05, 1.4, 120, 700, 0.3, 0.35);
