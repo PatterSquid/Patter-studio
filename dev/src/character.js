@@ -38,17 +38,18 @@ const Character = (() => {
     'finger up': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, label: 'Finger up (listen)' },
     'point aside': { art: 'point', at: [-0.02, -0.3, 1.45], side: 'L', len: 1.5, label: 'Point over there' },
     wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
-    explain: { art: 'wave', at: [0.05, -0.17, 2.6], side: 'L', len: 2, sway: 1, label: 'Explaining hand' },
+    explain: { art: 'talk', at: [0.02, -0.15, 0.3], side: 'L', len: 2, sway: 1, label: 'Talking hand' },   // our relaxed hand, seen from the thumb side (Puppet adds it)
+    offer: { art: 'palm up', at: [0.06, -0.14, -0.3], side: 'L', len: 1.5, label: 'Palm up (here\u2019s the thing)' },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
-    shrug: { art: 'wave', at: [0.14, -0.12, 2.35], side: 'both', len: 1.5, label: 'Shrug' },
+    shrug: { art: 'palm up', at: [0.1, -0.08, -0.5], side: 'both', len: 1.5, label: 'Shrug' },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
     fist: { art: 'back fist', at: [0, 0, 0.5], sc: 1.1, side: 'both', len: 1.1, bang: 1, label: 'Bang the desk' },   // back fist: made by Puppet from the thumbs up (his fist drawing shows only its front)
     'fist shake': { art: 'back fist', at: [0, -0.3, 0.5], sc: 1.1, side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
     slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
-    beat: { art: null, at: [0, -0.07, 0.12], side: 'L', len: 0.7, label: 'Wee hand beat' },
+    beat: { art: 'talk', at: [0, -0.07, 0.1], side: 'L', len: 0.7, label: 'Wee hand beat' },
   };
-  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'explain', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
+  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', talking: 'explain', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
   // words that bring a gesture with them; the common ones only when he leans on them
   const LEX = {}; const lex = (k, words, strong) => words.split(' ').forEach(w => { LEX[w] = { k, strong }; });
   // weak: everyday words, a gesture only when he leans on them; the rest always
@@ -206,7 +207,7 @@ const Character = (() => {
       // the word that calls for a bigger gesture (the common ones only when he leans on them)
       const cross = P.ex || P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage';   // fists only when he is worked up
       P.trig = null; P.ids.forEach((i, j) => { const L0 = LEX[W[i][4]]; if (!L0) return; if (!cross && GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake)) return; if (j > 0 && LEX[W[P.ids[j - 1]][4]] && LEX[W[P.ids[j - 1]][4]].k === 'wave') return; if (L0.strong && pk[i].v < Math.max(P.med, medAll) + 0.03 && P.ids.length > 2) return; const sc = (L0.strong ? 1 : 2) + pk[i].v; if (!P.trig || sc > P.trig.sc) P.trig = { k: L0.k, i, sc, why: W[i][4] }; });
-      if (!P.trig && P.q) P.trig = { k: 'shrug', i: P.ids[P.ids.length - 1], sc: 1.2, why: '?' };
+      if (!P.trig && P.q) P.trig = { k: 'offer', i: P.ids[P.ids.length - 1], sc: 1.2, why: '?' };
       if (P.ex && (P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage')) P.trig = { k: 'fist', i: P.peak, sc: 2.5, why: '!' };
       const len = P.b - P.a, throwaway = len < 0.7 || P.ids.length <= 2;
       P.pri = (P.trig ? 0.8 + P.trig.sc * 0.3 : 0) + (pk[P.peak].v - medAll) * 3 + Math.min(len, 3) / 3 + (P.ex ? 0.4 : 0) + R() * 0.35 - (throwaway && !P.trig ? 2 : 0) - (laughing(P.a, P.b) ? 5 : 0);
@@ -232,11 +233,12 @@ const Character = (() => {
       moves.push({ id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side, start, end, auto: true, plan: true, pri: 1, tag: base === 'beat' ? 'Hand beats' : 'Talking hand' });
       // at most one bigger gesture in the unit, on its word's stressed syllable, never the same one twice running
       const best = u.ph.map(P => P.trig && Object.assign({ P }, P.trig)).filter(Boolean).sort((x, y) => y.sc - x.sc)[0];
-      if (!best || !GEST[best.k] || best.k === lastBig || pk[best.i].t - (lastT[best.k] != null ? lastT[best.k] : -99) < 8) return;
+      const fam = k => GEST[k] && GEST[k].art === 'palm up' ? 'palm' : k;   // a shrug and an offered palm count as the same move
+      if (!best || !GEST[best.k] || fam(best.k) === lastBig || pk[best.i].t - (lastT[fam(best.k)] != null ? lastT[fam(best.k)] : -99) < 8) return;
       const G = GEST[best.k], s0 = Math.max(start, pk[best.i].t - 0.45), e0 = Math.min(Math.max(end, s0 + 1) + 0.2, s0 + G.len * 0.85 + 0.4), sd = G.side === 'both' ? 'both' : 'L';
       if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
       moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
-      lastBig = best.k; lastT[best.k] = pk[best.i].t;
+      lastBig = fam(best.k); lastT[fam(best.k)] = pk[best.i].t;
     });
   }
   const easeWin = (t, a, b, i, o) => sm((t - a) / i) * (1 - sm((t - b) / o));
