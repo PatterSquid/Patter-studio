@@ -2,7 +2,7 @@
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null), audio: (typeof AudioTab !== 'undefined' ? AudioTab : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
   const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio' };
   const KEY = 'patter-studio-v1';
@@ -126,7 +126,7 @@
   window.PatterUndo = { sizes: () => ({ back: hist.length, forward: fut.length, quiet }) };   // for the tests
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
+  function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); if (typeof AudioTab !== 'undefined') AudioTab.activate(state.module === 'audio'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button[data-mod], .rail button[data-mod]');
   const GFX = ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll'], ANIM = ['studio', 'char'];
   const isGfx = m => GFX.includes(m), isAnim = m => ANIM.includes(m);
@@ -145,6 +145,12 @@
   function drawBanner() { const el = $('editBanner'); if (!el) return; const e = state.edit, it = e && vItem(e.id), on = !!(e && it && state.module === e.mod); el.hidden = !on; el.innerHTML = ''; if (!on) return; const n = (Video.allPlaced ? Video.allPlaced(state.cfg.video, state.look).findIndex(p => p.it === it) : state.cfg.video.items.indexOf(it)) + 1;
     el.append(H('span', { textContent: 'Editing clip ' + n + ' of your video' + (it.name ? ': ' + it.name : '') + '.' }), UI.btn('Back to the video', () => switchTab('video'), 'primary')); }
   if (typeof Studio !== 'undefined' && Studio.ready) Studio.ready().then(() => { if (Layers.hooks.onAsset) Layers.hooks.onAsset(Studio.BUILTIN); });
+  // The Audio tab sends its cleaned voice to the Character tab or onto a video audio track
+  if (typeof AudioTab !== 'undefined') AudioTab.hooks.send = (where, id, name) => {
+    if (where === 'char' && MODULES.char) { const c = state.cfg.char || (state.cfg.char = MODULES.char.defaults()); c.voice = id; c.voiceName = name; }
+    if (where === 'video' && MODULES.video) { const v = state.cfg.video || (state.cfg.video = MODULES.video.defaults()); v.tracks = v.tracks || []; let T = v.tracks.find(q => q.kind === 'audio' && q.talk) || v.tracks.find(q => q.kind === 'audio');
+      if (!T) { T = { id: Video.nid('t'), kind: 'audio', name: 'Voice', talk: true, items: [] }; v.tracks.push(T); } T.items.push({ id: Video.nid('c'), kind: 'audio', asset: id, start: 0, name }); }
+    save(); };
   if (typeof Studio !== 'undefined') Object.assign(Studio.hooks, { char: () => state.cfg.char || null, cfg: () => state.cfg.studio || Studio.defaults(), select: id => { if (ed) ed.select(id); buildInspector(); } });
   if (typeof Video !== 'undefined') Object.assign(Video.hooks, { look: () => state.look, studio: () => state.cfg.studio || (typeof Studio !== 'undefined' ? (state.cfg.studio = Studio.defaults()) : null), tabCfg: k => state.cfg[k] || (MODULES[k] && MODULES[k].defaults()), openItem, select: id => { if (ed) ed.select(id); buildInspector(); } });
   drawTabs(); syncLook(); buildForm(); commit();
@@ -276,6 +282,7 @@
     if (ctrl && k === 's') { e.preventDefault(); autosave('version').then(() => say('Saved, with a version kept in History.')); return; }
     if (ctrl && k === 'e') { e.preventDefault(); if (state.module === 'video' && cutInsp) cutInsp.exportDialog(); else if (state.module === 'intro' && cutInsp && typeof Intro !== 'undefined') Intro.exportWithSound(cfg()); else $('exportBtn').click(); return; }
     if (typing) return;
+    if (state.module === 'audio' && typeof AudioTab !== 'undefined' && !ctrl && AudioTab.key(e)) return;
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (ctrl && k === 'y') { e.preventDefault(); redo(); return; }

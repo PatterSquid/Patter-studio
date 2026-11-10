@@ -1,0 +1,2 @@
+RNNoise (Jean-Marc Valin, Xiph.Org, BSD licence) compiled to WebAssembly by Jitsi: @jitsi/rnnoise-wasm 0.2.1 (Apache 2.0, see LICENSE).
+Unchanged copies of dist/rnnoise.js and dist/rnnoise.wasm. build.py turns the loader into a plain script (the "export default" line removed) and embeds the WebAssembly as src/rnnoise_lib.js.
