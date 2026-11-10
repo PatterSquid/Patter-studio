@@ -209,11 +209,10 @@ const Puppet = (() => {
     const refs = []; for (const [set] of sets) { for (const w of set.kids.filter(k => /^(wave|default)$/i.test(k.name))) { const b = rig.bm[w.li]; if (!b) continue; const c = new OffscreenCanvas(b.width, b.height), g = c.getContext('2d'); g.drawImage(b, 0, 0); refs.push(g.getImageData(0, 0, b.width, b.height)); } }
     const F = HandSheet.fit(pieces, roles, refs); rig.sheet = { pieces, roles, fit: F }; if (!F) return;
     for (const [set, arm] of sets) {
-      const c = cuffOf(arm); if (!c) continue; const side = /^\+?r/i.test(arm.name) ? 'R' : 'L', D = rig.layers[set.kids.find(k => /^default$/i.test(k.name)).li]; (rig.wrist = rig.wrist || {})[side] = c.open;
+      const c = cuffOf(arm); if (!c) continue; const side = /^\+?r/i.test(arm.name) ? 'R' : 'L', D = rig.layers[set.kids.find(k => /^default$/i.test(k.name)).li];
       for (const o of F.list.filter(q => q.side === side)) {
         const li = rig.layers.length; rig.layers.push(Object.assign({}, D, { x: c.open[0] - o.anchor[0], y: c.open[1] - o.anchor[1], w: o.w, h: o.h, name: o.role })); rig.bm.push(await createImageBitmap(o.canvas));
         set.kids = set.kids.filter(k => k.name !== o.role); set.kids.push({ name: o.role, li, vis: false, op: 255, made: true });
-        if (o.role === 'steeple') rig.steeple = { other: o.other, half: o.anchor[0] - o.w / 2 };   // where his left wrist sits from the middle of the drawing
       }
     }
   }

@@ -1,6 +1,6 @@
 async(opt)=>{ const N=opt&&opt.n||40; let seed=opt&&opt.seed||7; const R=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
  GeoData.load(); for(let i=0;i<60&&GeoData.state.status!=='ready';i++) await new Promise(r=>setTimeout(r,250));
- const mods={charts:Charts,timeline:Timeline,map:MapMod,flights:Flights,flyover:Flyover,picto:Picto,news:News,story:Story,broll:Broll,video:Video,studio:Studio};
+ const mods={charts:Charts,timeline:Timeline,map:MapMod,flights:Flights,flyover:Flyover,picto:Picto,news:News,story:Story,broll:Broll,video:Video,studio:Studio,intro:Intro,char:Character,audio:AudioTab};
  if(Studio.ready) await Studio.ready();
  const only=opt&&opt.mods; const c=document.createElement('canvas'); c.width=480; c.height=270; const g=c.getContext('2d'); const out={};
  const paths=o=>{ const L=[]; const w=(v,p)=>{ if(p.length) L.push(p); if(v&&typeof v==='object'&&p.length<6) for(const k of Object.keys(v)) w(v[k],p.concat(k)); }; w(o,[]); return L; };

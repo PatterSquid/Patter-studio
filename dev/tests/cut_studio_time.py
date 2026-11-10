@@ -25,7 +25,7 @@ async def main():
     bb=await pg.locator('[data-id="C:sc"]').bounding_box(); await pg.mouse.move(bb['x']+bb['width']-3,bb['y']+bb['height']-8); await pg.mouse.down(); await pg.mouse.move(bb['x']+bb['width']+150,bb['y']+bb['height']-8,steps=6); await pg.mouse.up(); await pg.wait_for_timeout(300)
     print('after stretch', await pg.evaluate("()=>{ const it=Video.hooks.cfg().items[2]; return {outPt:it.outPt, hold:it.hold, len:+Video.lenOf(it,{format:'16:9'}).toFixed(2)}; }"))
     # update from tab: broll
-    await pg.click('button[data-mod=broll]'); await pg.wait_for_timeout(600); await pg.click('button[data-mod=video]'); await pg.wait_for_timeout(600)
+    await pg.evaluate("document.querySelector('button[data-mod=broll]').click()"); await pg.wait_for_timeout(600); await pg.click('button[data-mod=video]'); await pg.wait_for_timeout(600)
     await pg.evaluate("""()=>{ const c=Video.hooks.cfg(); const t=Video.hooks.tabCfg('broll'); t.scenes[0].screens[0].media={id:'zzz',name:'dog'}; c.items.push({id:'br',kind:'clip',mod:'broll',cfg:Broll.defaults(),inPt:0.5,hold:0}); PatterCut.ui.build(); PatterCut.select('C:br'); }""")
     await pg.wait_for_timeout(400)
     await pg.locator('.cs-body button', has_text='tab now').click(); await pg.wait_for_timeout(300)

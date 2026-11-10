@@ -453,7 +453,8 @@ const Studio = (() => {
   const avBuf = {};
   const buf = (k, w, h) => { let c = avBuf[k]; if (!c || c.width !== Math.ceil(w) || c.height !== Math.ceil(h)) { c = avBuf[k] = mk(w, h); } return c; };
   function avatarRect(cfg, v) { const A = cfg.avatar, inf = avInfo(A); if (!A || !inf) return null; const fw = inf.fw || inf.w, fh = inf.fh || inf.h, h = cl(+A.h || 1, 0.05, 3) * v.ih, w = h * fw / fh;
-    return { x: A.x * v.iw - w / 2, y: A.y * v.ih - h / 2, w, h, fw, fh, box: inf.box || [0, 0, fw, fh] }; }
+    const ax = isFinite(+A.x) && A.x !== null && A.x !== '' ? +A.x : 0.5, ay = isFinite(+A.y) && A.y !== null && A.y !== '' ? +A.y : 0.5;   // a damaged or half made avatar still sits in the middle
+    return { x: ax * v.iw - w / 2, y: ay * v.ih - h / 2, w, h, fw, fh, box: inf.box || [0, 0, fw, fh] }; }
   function drawAvatar(ctx, cfg, v, tAv, lamps, fl, room, M) {
     const A = cfg.avatar; if (!A) return; const R = avatarRect(cfg, v); if (!R) return; const isChar = A.kind === 'char';
     const fr = isChar ? null : typeof Media !== 'undefined' ? Media.frame(A.id, cl(tAv, 0, 1e6)) : null; if (!fr && !isChar) return;

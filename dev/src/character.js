@@ -42,7 +42,6 @@ const Character = (() => {
     talk: { art: 'relaxed', at: [-0.05, -0.16, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
     explain: { art: 'open', at: [-0.05, -0.22, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Explaining hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
     offer: { art: 'palm up', at: [0.02, -0.2, 0], side: 'L', len: 1.5, plain: 1, label: 'Palm up (here\u2019s the thing)', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
-    steeple: { art: 'steeple', at: [0.24, -0.1, 0], side: 'both', len: 2.4, plain: 1, steeple: 1, label: 'Steeple (thinking)' },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
     shrug: { art: 'palm up', at: [0.02, -0.18, 0], side: 'both', len: 1.5, plain: 1, label: 'Shrug', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
@@ -52,7 +51,7 @@ const Character = (() => {
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
     beat: { art: 'relaxed', at: [-0.03, -0.07, 0], side: 'L', len: 0.7, plain: 1, label: 'Wee hand beat', old: { art: null, at: [0, -0.07, 0.12], plain: 0 } },
   };
-  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', talking: 'talk', explaining: 'explain', thinking: 'steeple', think: 'steeple', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
+  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', talking: 'talk', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
   // words that bring a gesture with them; the common ones only when he leans on them
   const LEX = {}; const lex = (k, words, strong) => words.split(' ').forEach(w => { LEX[w] = { k, strong }; });
   // weak: everyday words, a gesture only when he leans on them; the rest always
@@ -115,7 +114,7 @@ const Character = (() => {
   const rng = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const perfMemo = new Map();
   function perfOf(cfg, A, rig, dur) {
-    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, rig && rig.steeple ? 1 : 0, dur.toFixed(2)]);
+    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, dur.toFixed(2)]);
     let box = perfMemo.get(A || 'none'); if (box && box.key === key) return box.p;
     const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E };
     const env = A ? A.env : new Float32Array(0), fps = A ? A.fps : 100, envAt = t => { const f = t * fps, i = Math.floor(f); if (i < 0 || i >= env.length - 1) return 0; return env[i] + (env[i + 1] - env[i]) * (f - i); };
@@ -136,7 +135,7 @@ const Character = (() => {
     const blinks = []; for (let t = 0.6 + R() * 1.5; t < dur; t += 2.1 + R() * 3.4) { blinks.push(t); if (R() < 0.14) blinks.push(t + 0.26); }
     // moves: the script's tags, then the ones added on the timeline
     const moves = []; (A && A.tags || []).forEach((g, i) => { const m = readTag(g.tag, rig); if (m) moves.push(Object.assign({ id: 'tag' + i, start: g.t, auto: true, tag: g.tag, word: g.word }, m)); });
-    (cfg.moves || []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
+    (Array.isArray(cfg.moves) ? cfg.moves : []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
     moves.forEach(m => { if (m.kind === 'gesture') m.start = Math.max(0, m.start - 0.45); });   // the hand gets there on the word
     planBursts(cfg, A, p, moves, rig, dur);
     if (cfg.hands !== 'tags' && A && A.words && A.words.length) planHands(cfg, A, p, moves, R, E, dur, rig);
@@ -232,9 +231,8 @@ const Character = (() => {
       const fx = fixed.find(q => q.a > start && q.a < end); if (fx) end = Math.max(start + 0.6, fx.a);   // stop where a tag takes over
       const hot = u.ph.some(P => P.mood === 'rage' || P.mood === 'furious' || P.mood === 'angry'), side = hot && u.ph.some(P => P.ex) && R() < 0.5 ? 'both' : 'L';
       if (end - start < 0.6 || clash(start, end, side)) return;
-      const k4 = n++ % 4, base = !hot && end - start > 2.2 && k4 === 3 && rig && rig.steeple ? 'steeple' : target0 <= 0.3 && !hot ? 'beat' : k4 === 1 ? 'explain' : k4 === 2 ? 'beat' : 'talk';   // mostly the relaxed hand, sometimes the open one, now and then a steeple on a long calm thought
+      const k4 = n++ % 4, base = target0 <= 0.3 && !hot ? 'beat' : k4 === 1 ? 'explain' : k4 === 2 ? 'beat' : 'talk';   // mostly the relaxed hand, sometimes the open one
       moves.push({ id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, auto: true, plan: true, pri: 1, tag: GEST[base].label });
-      if (base === 'steeple') return;   // the hands stay together for the thought
       // at most one bigger gesture in the unit, on its word's stressed syllable, never the same one twice running
       const best = u.ph.map(P => P.trig && Object.assign({ P }, P.trig)).filter(Boolean).sort((x, y) => y.sc - x.sc)[0];
       const fam = k => GEST[k] && (GEST[k].art === 'palm up' || k === 'shrug' || k === 'offer') ? 'palm' : k;   // a shrug and an offered palm count as the same move
@@ -288,18 +286,14 @@ const Character = (() => {
     for (const m of p.moves) {
       if (m.kind !== 'gesture' || t < m.start || t >= m.end) continue;
       let G = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (G.art && !rig.triggers[G.art]) { if (!G.old) continue; G = Object.assign({}, G, G.old); }   // his own drawings when loaded, else the old ones
-      const u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.48, 0.4), sides = m.side === 'both' || G.steeple ? ['L', 'R'] : [m.side || 'L'];
+      const u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.48, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
       sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = G.at;
         if (G.wag) ar += Math.sin(u * (G.wagHz || 14)) * G.wag * sm((u - 0.2) / 0.25);
         if (G.shake) { const on = sm((u - 0.3) / 0.2); ax += Math.sin(u * 27) * 0.014 * on; ay += Math.sin(u * 31 + 1) * 0.016 * on; }
         if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
         if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
-        if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; if (!G.steeple) ar += 0.07 * k; } }   // the steeple's two halves move as one
-        let art = G.art, dx0 = ax * hh2 * mir;
-        let dy0 = ay * hh2;
-        if (G.steeple && rig.steeple && rig.wrist && rig.wrist.L && rig.wrist.R) { const S = rig.steeple, oL = rig.wrist.L, oR = rig.wrist.R, tL = [(oL[0] + oR[0]) / 2 + S.half + ax * hh2, oL[1] + ay * hh2];   // both hands meet in front of him (to the right of the mic), each half on its own arm, wrist to wrist as drawn
-          if (sd === 'L') dx0 = tL[0] - oL[0]; else { dx0 = tL[0] + S.other[0] - oR[0]; dy0 = tL[1] + S.other[1] - oR[1]; } }
-        want[sd].push({ w, pri: m.pri || 2, dx: dx0, dy: dy0, rot: ar * mir, art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
+        if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }
+        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: ay * hh2, rot: ar * mir, art: G.art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd]; if (!L2.length) return; let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
       let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; if (!best || q.ww > best.ww) best = q; });
@@ -380,10 +374,10 @@ const Character = (() => {
       const sh = rig.sheet, kids = [];
       if (sh && sh.pieces.length) { const roles = sh.roles.map(r => r.slice());
         sh.pieces.forEach((pc, i) => { const cv = H('canvas', { width: 72, height: 72, className: 'ch-hand' }), g = cv.getContext('2d'), tmp = new OffscreenCanvas(pc.w, pc.h); tmp.getContext('2d').putImageData(pc.data, 0, 0); const k = Math.min(72 / pc.w, 72 / pc.h); g.drawImage(tmp, (72 - pc.w * k) / 2, (72 - pc.h * k) / 2, pc.w * k, pc.h * k);
-          const opts = HandSheet.ROLES.flatMap(([v, l]) => v === 'steeple' || v === '' ? [[v + '|both', l]] : [[v + '|L', l + ', his left'], [v + '|R', l + ', his right']]);
-          kids.push(H('div', { className: 'ch-handrow' }, cv, sel((roles[i][0] || '') + '|' + (roles[i][0] === 'steeple' || !roles[i][0] ? 'both' : roles[i][1]), opts, v => { const [r, sd] = v.split('|'); roles[i] = [r, sd]; Puppet.setHands(rig.id, null, roles).then(() => redo()); }, 'What this hand is'))); }); }
+          const opts = HandSheet.ROLES.flatMap(([v, l]) => v === '' ? [[v + '|both', l]] : [[v + '|L', l + ', his left'], [v + '|R', l + ', his right']]);
+          kids.push(H('div', { className: 'ch-handrow' }, cv, sel((roles[i][0] || '') + '|' + (!roles[i][0] ? 'both' : roles[i][1]), opts, v => { const [r, sd] = v.split('|'); roles[i] = [r, sd]; Puppet.setHands(rig.id, null, roles).then(() => redo()); }, 'What this hand is'))); }); }
       root.append(card('Your talking hands', ...kids, H('div', { className: 'btnrow' }, btn(sh ? 'Load another sheet' : 'Load my hand drawings', () => hpick.click(), sh ? '' : 'primary'), sh ? btn('Take them out', () => Puppet.setHands(rig.id, null, null).then(() => redo())) : null), hpick, hnote,
-        H('p', { className: 'hint', textContent: sh ? 'Matched to his own hands in size and colour. He uses them for talking, explaining, palms up, pointing at you and the steeple; without them he uses his puppet\u2019s hands.' : 'A picture of your hand drawings on green (each with a bit of sleeve). They are cut out, matched to his hands in size and colour, and kept on this computer with the puppet.' })));
+        H('p', { className: 'hint', textContent: sh ? 'Matched to his own hands in size and colour. He uses them for talking, explaining, palms up, and pointing at you; without them he uses his puppet\u2019s hands.' : 'A picture of your hand drawings on green (each with a bit of sleeve). They are cut out, matched to his hands in size and colour, and kept on this computer with the puppet.' })));
     }
     // the voice
     const vpick = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm' }); vpick.style.display = 'none'; const vnote = H('p', { className: 'hint', 'aria-live': 'polite' });
@@ -425,13 +419,13 @@ const Character = (() => {
       const p = rig ? perfOf(cfg, A, rig, d) : null, ms = p ? p.moves : [];
       T.push({ id: 'moves', name: 'Moves', colour: '#b0458f', items: ms.map(m => ({ id: m.auto ? 'G:' + m.id : 'M:' + m.id, start: m.start, end: Math.min(d, Math.max(m.start + 0.2, m.end)), label: (m.auto ? '[' + m.tag + ']' : '') + (m.auto ? '' : (EMO_NAMES[m.k] || FRIENDLY[m.k] || m.k)) + (m.off ? ' off' : ''), colour: COL[m.kind] || '#666', move: !m.auto, trim: m.auto ? 'none' : 'both', minLen: 0.2, title: m.auto ? 'From the script: move the tag in the script to change it' : undefined })) });
       return T; },
-    update(cfg, id, ch) { const [k, x] = id.split(':'); if (k !== 'M') return; const mv = (cfg.moves || []).find(q => q.id === x); if (!mv) return; mv.start = r2(Math.max(0, ch.start)); mv.dur = r2(Math.max(0.2, ch.end - ch.start)); },
+    update(cfg, id, ch) { const [k, x] = id.split(':'); if (k !== 'M') return; const mv = (Array.isArray(cfg.moves) ? cfg.moves : []).find(q => q.id === x); if (!mv) return; mv.start = r2(Math.max(0, ch.start)); mv.dur = r2(Math.max(0.2, ch.end - ch.start)); },
     adds: [{ label: 'Move', title: 'Make him do something at the playhead: an emotion, a look, a hand gesture, a pose', choices: cfg0 => catalogue(cfg0 && cfg0.puppet ? Puppet.get(cfg0.puppet) : null).map(c => ({ label: c.label, key: c.k })),
       fn(cfg, t, sel2, ch) { const k = (ch && ch.key) || 'angry', rig = cfg.puppet ? Puppet.get(cfg.puppet) : null, m = readTag(k, rig), mv = { id: nid(), k, start: r2(Math.max(0, t)), dur: (m && (m.dur || LEN[m.kind])) || 3 }; cfg.moves = cfg.moves || []; cfg.moves.push(mv); return 'M:' + mv.id; } }],
-    remove(cfg, id) { const [k, x] = id.split(':'); if (k === 'M') cfg.moves = (cfg.moves || []).filter(q => q.id !== x); },
-    duplicate(cfg, id) { const [k, x] = id.split(':'); const it = k === 'M' && (cfg.moves || []).find(q => q.id === x); if (!it) return null; const c = Object.assign({}, it, { id: nid(), start: r2(it.start + (it.dur || 1)) }); cfg.moves.push(c); return 'M:' + c.id; },
+    remove(cfg, id) { const [k, x] = id.split(':'); if (k === 'M') cfg.moves = (Array.isArray(cfg.moves) ? cfg.moves : []).filter(q => q.id !== x); },
+    duplicate(cfg, id) { const [k, x] = id.split(':'); const it = k === 'M' && (Array.isArray(cfg.moves) ? cfg.moves : []).find(q => q.id === x); if (!it) return null; const c = Object.assign({}, it, { id: nid(), start: r2(it.start + (it.dur || 1)) }); cfg.moves.push(c); return 'M:' + c.id; },
     inspect(root, cfg, id, changed, done) { const [k, x] = id.split(':'); const { H, card, field, sel, btn } = UI; root.innerHTML = '';
-      if (k === 'M') { const mv = (cfg.moves || []).find(q => q.id === x); if (!mv) return form(root, cfg, changed); const rig = cfg.puppet ? Puppet.get(cfg.puppet) : null;
+      if (k === 'M') { const mv = (Array.isArray(cfg.moves) ? cfg.moves : []).find(q => q.id === x); if (!mv) return form(root, cfg, changed); const rig = cfg.puppet ? Puppet.get(cfg.puppet) : null;
         root.append(card('Move', field('What he does', sel(mv.k, catalogue(rig).map(c => [c.k, c.label]), v => { mv.k = v; changed(); }, 'Move')), H('p', { className: 'hint', textContent: 'Drag it on the timeline to move it; drag its ends to make it longer or shorter.' }),
           H('div', { className: 'btnrow' }, btn('Delete this move', () => { cfg.moves = cfg.moves.filter(q => q !== mv); changed(); done && done(); }), btn('Done', () => done && done()))));
         return; }

@@ -1,6 +1,6 @@
 import asyncio, json, sys
 from playwright.async_api import async_playwright
-TABS=['video','charts','timeline','map','flights','flyover','picto','news','story','broll','studio']
+TABS=['video','charts','timeline','map','flights','flyover','picto','news','story','broll','studio','char','audio']
 ROUNDS=int(sys.argv[1]) if len(sys.argv)>1 else 8
 async def main():
     async with async_playwright() as p:

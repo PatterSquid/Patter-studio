@@ -44,5 +44,7 @@ async def main():
       n = await pg.evaluate("""async()=>{ const c=window.__sc; const v={v:2,items:[{id:'x',kind:'clip',mod:'studio',cfg:c,inPt:0,hold:0}],tracks:[]}; const res=await CutExport.run(v,{scheme:'saltire',format:'16:9'},{fps:30,res:'1080',quality:'high'}); window.__v=res.blob; return res.frames; }""")
       s = await pg.evaluate("async()=>{ const u=new Uint8Array(await window.__v.arrayBuffer()); let s=''; for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768)); return btoa(s); }")
       open(OUT + '/studio.mp4', 'wb').write(base64.b64decode(s)); print('exported', n)
+    ms = await pg.evaluate("""()=>{ const c=window.__sc, cv=document.createElement('canvas'); cv.width=1920; cv.height=1080; const g=cv.getContext('2d'), d=Studio.duration(c), ts=[]; for (let i=0;i<30;i++){ const a=performance.now(); Studio.draw(g, d*(i+0.5)/30, c, {format:'16:9',scheme:'saltire'}, 1920, 1080); g.getImageData(0,0,1,1); ts.push(performance.now()-a); } ts.sort((a,b)=>a-b); return {med:+ts[15].toFixed(1), max:+ts[29].toFixed(1)}; }""")
+    print('studio with the character, 1080p frame ms:', ms)
     print('errors:', errs); await b.close()
 asyncio.run(main())

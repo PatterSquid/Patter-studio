@@ -22,7 +22,7 @@ async def main():
     await pg.locator('#inspector textarea[aria-label=Script]').fill(SCRIPT); await pg.wait_for_timeout(2500)
     await pg.locator('#inspector .st-seg button', has_text='Rhubarb').click(); await pg.wait_for_timeout(500)
     print('state before:', await pg.evaluate("()=>Rhubarb.state"))
-    await pg.locator('#inspector button', has_text='Download Rhubarb').click()
+    if await pg.evaluate("()=>Rhubarb.state") != 'ready': await pg.locator('#inspector button', has_text='Download Rhubarb').click()   # already kept in this browser: nothing to download
     for i in range(120):
       await pg.wait_for_timeout(1000)
       if await pg.evaluate("()=>Rhubarb.state==='ready'"): break

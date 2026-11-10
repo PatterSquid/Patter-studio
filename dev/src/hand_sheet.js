@@ -1,12 +1,12 @@
 /* His own hand drawings for talking (a green screen sheet he draws: an open explaining hand, a relaxed half curled hand,
-   palms up, pointing at you, a steeple), cut off the green and fitted to his puppet: one size and one colour for the
+   palms up, pointing at you), cut off the green and fitted to his puppet: one size and one colour for the
    whole sheet, measured against his puppet's own open palm, so every pose matches his hands. Any sleeve drawn with a hand is taken off: only the
    hand is used, its wrist fading into the end of the puppet's own sleeve. Puppet keeps the sheet
    with the puppet (never uploaded) and calls fit() when it loads. Also: a plain black copy of each dark sleeve for when
    the forearm turns over (the hoodie's stripes run down the outside of the arm). */
 const HandSheet = (() => {
-  const ROLES = [['relaxed', 'Relaxed talking hand'], ['open', 'Explaining hand'], ['palm up', 'Palm up'], ['point you', 'Pointing at you'], ['steeple', 'Steeple (both hands)'], ['', 'Not used']];
-  const LAYOUT7 = [['open', 'R'], ['open', 'L'], ['steeple', 'both'], ['point you', 'R'], ['relaxed', 'L'], ['palm up', 'R'], ['palm up', 'L']];   // the sheet he drew, read row by row
+  const ROLES = [['relaxed', 'Relaxed talking hand'], ['open', 'Explaining hand'], ['palm up', 'Palm up'], ['point you', 'Pointing at you'], ['', 'Not used']];
+  const LAYOUT7 = [['open', 'R'], ['open', 'L'], ['', 'both'], ['point you', 'R'], ['relaxed', 'L'], ['palm up', 'R'], ['palm up', 'L']];   // the sheet he drew, read row by row
   const mk = (w, h) => typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   const dataOf = (src, w, h) => { const c = mk(w, h), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, w, h); return g.getImageData(0, 0, w, h); };
 
@@ -50,7 +50,7 @@ const HandSheet = (() => {
     return rows.flatMap(r => r.p.sort((a, b) => a.x - b.x));
   }
   // what each drawing is: his sheet's layout when it has seven, else a guess from where the sleeve is
-  const guess = P => P.length === 7 ? LAYOUT7.map(r => r.slice()) : P.map(p => p.wide ? ['steeple', 'both'] : ['open', p.sleeve[0] > p.w / 2 ? 'L' : 'R']);
+  const guess = P => P.length === 7 ? LAYOUT7.map(r => r.slice()) : P.map(p => p.wide ? ['', 'both'] : ['open', p.sleeve[0] > p.w / 2 ? 'L' : 'R']);
 
   /* skin: its colour range and how wide the palm is (the biggest circle that fits in the skin) */
   function skin(D) {
@@ -70,7 +70,7 @@ const HandSheet = (() => {
     const R0 = refs.map(skin).filter(s => s.n > 50); if (!R0.length) return null;
     const ref = { r: R0.reduce((s, q) => s + q.r, 0) / R0.length, lo: [0, 1, 2].map(c => R0.reduce((s, q) => s + q.lo[c], 0) / R0.length), hi: [0, 1, 2].map(c => R0.reduce((s, q) => s + q.hi[c], 0) / R0.length), md: [0, 1, 2].map(c => R0.reduce((s, q) => s + q.md[c], 0) / R0.length) };
     const openI = pieces.map((p, i) => i).filter(i => use[i] === 'open'),   // flat open hands against his flat hands (resting and waving)
-      sz = (openI.length ? openI : pieces.map((p, i) => i).filter(i => use[i] && use[i] !== 'steeple')).map(i => S[i].r).filter(r => r > 0);
+      sz = (openI.length ? openI : pieces.map((p, i) => i).filter(i => use[i])).map(i => S[i].r).filter(r => r > 0);
     const k = sz.length ? ref.r / (sz.reduce((a, b) => a + b, 0) / sz.length) : 1;
     const used = pieces.map((p, i) => i).filter(i => use[i] && S[i].n > 50), src = { lo: [0, 1, 2].map(c => used.reduce((s, i) => s + S[i].lo[c], 0) / Math.max(1, used.length)), hi: [0, 1, 2].map(c => used.reduce((s, i) => s + S[i].hi[c], 0) / Math.max(1, used.length)), md: [0, 1, 2].map(c => used.reduce((s, i) => s + S[i].md[c], 0) / Math.max(1, used.length)) };
     const gain = [0, 1, 2].map(c => Math.max(0.55, Math.min(1.3, (ref.hi[c] - ref.lo[c]) / Math.max(1, src.hi[c] - src.lo[c])))), off = [0, 1, 2].map(c => ref.md[c] - src.md[c] * gain[c]);   // his middle skin tone exactly, his flatter shading
@@ -81,9 +81,6 @@ const HandSheet = (() => {
       const w = Math.max(1, Math.round(p.w * k)), h = Math.max(1, Math.round(p.h * k));
       const make = mir => { const c = mk(w, h), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; if (mir) { g.translate(w, 0); g.scale(-1, 1); } g.drawImage(c0, 0, 0, w, h); return c; };
       const [role, side] = roles[i], at = s => [(s[0]) * k, s[1] * k], flip = a => [w - a[0], a[1]];
-      if (role === 'steeple') {   // cut down the middle: each hand on its own arm, so each goes into its own sleeve
-        const [a, b] = p.wrists.map(at), cx = (a[0] + b[0]) / 2, half = keepRight => { const c = make(false), g = c.getContext('2d'); g.clearRect(keepRight ? 0 : cx + 3, 0, keepRight ? cx - 3 : w - cx - 3, h); return c; };
-        out.push({ role, side: 'L', canvas: half(true), w, h, anchor: b, other: [a[0] - b[0], a[1] - b[1]] }); out.push({ role, side: 'R', canvas: half(false), w, h, anchor: a }); return; }
       const a = at(p.wrist), sd = side === 'R' ? 'R' : 'L';
       out.push({ role, side: sd, canvas: make(false), w, h, anchor: a });
       out.push({ role, side: sd === 'L' ? 'R' : 'L', canvas: make(true), w, h, anchor: flip(a), mirror: true });   // the other hand, unless he drew that one too

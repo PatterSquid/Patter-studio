@@ -225,8 +225,22 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   gestures turn them (values in `GEST`, found by drawing each: `tests/char_hands.py`). He checked them: turned, never mirrored
   (mirrored hands read back to front). His fist drawing shows only its front, so `Puppet` makes a 'back fist' from the thumbs
   up (thumb cut off along `FIST_CUT`, edge redrawn) for the desk bang and fist shake. His right hand is behind the mic, so
-  one handed gestures use his left. `planHands` picks natural gestures from the words (LEX), questions (shrug), angry
-  exclamations (bang), and an explaining hand in sentences with none; tags win; `cfg.hands` 'tags' turns it off.
+  one handed gestures use his left. `planHands` plans like gesture research says (McNeill, Kendon): phrases (speech
+  between pauses) get hands in order of strength until the activity share of talking time is reached (`cfg.hands`:
+  calm 0.3, natural 0.5, animated 0.85; more when angry, less when sad; 'tags' turns it off), neighbouring phrases share
+  a gesture unit (the hand held up, beats on nods, down at long pauses), at most one bigger gesture per unit with its
+  stroke on the stressed syllable (`pri` makes it take over the talking hand), never the same one (a shrug and an offer
+  count as one) within 8 s; fists only when worked up; throwaway lines and laughs stay still. Smooth: `tests/char_hands.py`.
+* **His talking hands** (`dev/src/hand_sheet.js` `HandSheet`): he draws hands on green (relaxed half curl, open
+  explaining hand, palms up, pointing at you) and loads the sheet in the "Your talking hands" card; it is kept with the
+  puppet in IndexedDB (`Puppet.setHands`), never in the repo (test copy `dev/tmp_hands/sheet.png`). Each drawing is cut
+  off the green, any sleeve drawn with it taken off (hands only), and the whole sheet gets one scale (his open hands
+  against his puppet's resting and waving hands) and one colour match (his middle skin tone). They become swap kids
+  'relaxed', 'open', 'palm up', 'point you' (mirrored for the other side when he drew only one) with the wrist in the
+  middle of the sleeve's opening, drawn on top of the sleeve. GEST talk, explain, offer, shrug, point, beat use them,
+  with `old` falling back to his puppet's hands when no sheet is loaded. When a palm turns over the forearm shows the
+  plain inside of the sleeve (`HandSheet.plain`, stripes kept on the upper arm; `pose.arms[side].plain`). He rejected
+  hands we drew ourselves ("horrifying") and the steeple (pointless): do not bring either back.
 * **Rhubarb** (`dev/src/rhubarb.js`, `cfg.sync` 'rhubarb'): Rhubarb Lip Sync as WebAssembly (`lip-sync-engine` 1.0.3, MIT,
   PocketSphinx inside), files in `lipsync/rhubarb/` (about 40 MB, credits in NOTICE.md). Downloaded once from the update
   repo when he presses the panel's download button, kept in IndexedDB `patter-lipsync`, run in a worker. Only the mouth
