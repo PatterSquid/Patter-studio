@@ -129,6 +129,7 @@ const Puppet = (() => {
     rig.nodes.forEach(nd => { nd.box = box(nd.id); });
     const fv = rig.views.front != null ? rig.nodes[rig.views.front] : (rig.head != null ? rig.nodes[rig.head] : null), hb = fv && fv.box;
     rig.pivot = { head: hb ? [(hb[0] + hb[2]) / 2, hb[3] - (hb[3] - hb[1]) * 0.08] : [rig.W / 2, rig.H * 0.5], headH: hb ? hb[3] - hb[1] : rig.H * 0.4 };
+    { let hb2 = null; Object.values(rig.views).concat(rig.head != null ? [rig.head] : []).forEach(id => { const q = box(id); if (q) hb2 = hb2 ? [Math.min(hb2[0], q[0]), Math.min(hb2[1], q[1]), Math.max(hb2[2], q[2]), Math.max(hb2[3], q[3])] : q; }); rig.headBox = hb2 ? hb2.map(Math.round) : null; }
     const body = rig.nodes.find(n => n.role === 'body'), bb = body && body.box; rig.pivot.body = bb ? [(bb[0] + bb[2]) / 2, bb[3]] : [rig.W / 2, rig.H];
     const all = box(0); rig.bounds = all || [0, 0, rig.W, rig.H];
     // arms: a sleeve that swings from the shoulder and a hand that turns at the wrist (the cuff of the sleeve)
@@ -216,7 +217,8 @@ const Puppet = (() => {
   /* ---------- drawing one pose ----------
      pose: { view, mouth, blink (0 open .. 1 shut), brow: { L: [dx, dy, rot], R: [...] }, pupil: [dx, dy] (fractions of the eye),
              head: [dx, dy, rot], body: [breath], swaps: { nodeId: kidIndex }, dangle: rot, arms: { R: { dx, dy, rot, sc } } (where the wrist goes, in puppet pixels, and the hand's turn) } */
-  function draw(g, rig, pose) {
+  const scr = {}; const scratch = (k, w, h) => { let c = scr[k]; if (!c || c.width !== w || c.height !== h) { c = scr[k] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); } return c; };
+  function draw(g0, rig, pose) {
     const P = pose || {}, sw = P.swaps || {}, N = rig.nodes, bm = rig.bm, L = rig.layers;
     const visible = nd => {
       const par = N[nd.parent];
@@ -227,6 +229,7 @@ const Puppet = (() => {
       if (nd.role === 'lid' && (P.blink || 0) >= 0.5 && par && par.kids.some(k => k.role === 'blink')) return false;   // the blink covers the eye; only the lid line goes
       return nd.vis;
     };
+    let g = g0; const flush = +P.flush || 0;
     const paint = nd => {
       if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return;
       g.save(); if (op < 1) g.globalAlpha *= op;
@@ -240,7 +243,16 @@ const Puppet = (() => {
       if (nd.role === 'brow' && P.brow && P.brow[nd.side] && nd.box) { const b = nd.box, [dx, dy, r] = P.brow[nd.side], cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2; g.translate(cx + dx * (b[2] - b[0]), cy + dy * (b[3] - b[1])); g.rotate(r || 0); g.translate(-cx, -cy); }
       if (nd.role === 'pupil' && P.pupil && nd.box) { const par = N[nd.parent], eb = par && par.box, w = eb ? eb[2] - eb[0] : 20, h = eb ? eb[3] - eb[1] : 20; g.translate(P.pupil[0] * w * 0.28, P.pupil[1] * h * 0.2); }
       if (nd.role === 'dangle' && P.dangle && nd.box) { const b = nd.box, cx = (b[0] + b[2]) / 2; g.translate(cx, b[1]); g.rotate(P.dangle * (nd.id % 2 ? 1 : -0.8)); g.translate(-cx, -b[1]); }
-      if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
+      if (nd.role === 'head' && flush > 0.01 && rig.headBox) {
+        // red in the face: the head drawn on its own, multiplied with red rising from the neck, then put back
+        const hb = rig.headBox, w = hb[2] - hb[0], h = hb[3] - hb[1], c = scratch('flush', w, h), m = scratch('flushm', w, h), cg = c.getContext('2d'), mg = m.getContext('2d'), outer = g;
+        cg.setTransform(1, 0, 0, 1, 0, 0); cg.clearRect(0, 0, w, h); cg.translate(-hb[0], -hb[1]); g = cg; for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g = outer;
+        cg.setTransform(1, 0, 0, 1, 0, 0); mg.setTransform(1, 0, 0, 1, 0, 0); mg.globalCompositeOperation = 'copy'; mg.drawImage(c, 0, 0);
+        const gr = cg.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, `rgba(230,60,40,${Math.min(1, 0.85 * flush)})`); gr.addColorStop(0.55, `rgba(230,70,50,${Math.min(1, 0.6 * flush)})`); gr.addColorStop(1, `rgba(235,90,70,${Math.min(1, 0.25 * flush)})`);
+        cg.globalCompositeOperation = 'multiply'; cg.fillStyle = gr; cg.fillRect(0, 0, w, h); cg.globalCompositeOperation = 'destination-in'; cg.drawImage(m, 0, 0); cg.globalCompositeOperation = 'source-over';
+        g.drawImage(c, hb[0], hb[1], w, h);
+      }
+      else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
       else { const b = bm[nd.li], q = L[nd.li]; if (b && q) g.drawImage(b, q.x, q.y, q.w, q.h); }
       g.restore();
     };
