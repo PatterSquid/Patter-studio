@@ -52,6 +52,22 @@ const CutExport = (() => {
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       Vw.draw(ctx, t, cfg, Object.assign({}, lookX, { cutEnv: { frames: fr, images, k: scale, fps, blur: o.blur !== 'off', blurN: o.blur !== 'off' ? blurN(fps, base.W, base.H) : null } }), base.W, base.H);
     };
+    /* Helpers on the other cores draw every moment without his own footage or the intro (charts, maps, the studio, his
+       character...) ahead of time; the page draws the footage moments itself and puts everything together in order. */
+    let pool = null; const pending = new Map(); let ahead = 0, scan = 0, poolMs = 0;
+    if (o.workers !== false && typeof Render !== 'undefined' && Render.cutPool && n >= 12) {
+      say(0, 'Starting the helpers…');
+      const want = o.workers > 0 ? o.workers : Render.cores();
+      try { pool = await Render.cutPool(cfg, { look: lookX, W, H, bW: base.W, bH: base.H, scale, fps, blur: o.blur !== 'off', images }, want); } catch (e) { pool = null; }
+      if (pool) ahead = Math.max(2, Math.min(pool.size * 3, Math.floor(240e6 / (W * H * 4))));
+    }
+    const topUp = i => { if (!pool) return; if (scan < i) scan = i;
+      while (scan < n && pending.size < ahead && scan - i < fps * 20) { const k = scan++; if (!Video.pageOnlyAt(cfg, lookX, t0 + k / fps)) pending.set(k, pool.frame(t0 + k / fps).catch(() => null)); } };
+    // Frame i as something to encode: a helper's ImageBitmap, or the page's own canvas
+    const frameAt = async i => { topUp(i); const p = pending.get(i);
+      if (p) { pending.delete(i); const a = performance.now(), bmp = await p; poolMs += performance.now() - a; topUp(i + 1); if (bmp) return bmp; }
+      await drawFrame(i); return canvas; };
+    const release = src => { if (src !== canvas && src && src.close) src.close(); };
     const tStart = performance.now(), prog = (i, extra) => { const p = i / n, el = (performance.now() - tStart) / 1000, left = p > 0.02 ? el / p - el : 0; say(p, `Rendering ${Math.round(p * 100)}%` + (left ? `, about ${left > 90 ? Math.ceil(left / 60) + ' min' : Math.ceil(left) + ' s'} left` : '') + (extra || '')); };
     try {
       /* PNG sequence (see through), for After Effects */
@@ -61,14 +77,14 @@ const CutExport = (() => {
            and packed and saved in the background, up to a few at once, while the next frame is drawn. Saved in frame order. */
         const store = async (i, b) => { const name = 'frame_' + String(i).padStart(5, '0') + '.png'; if (o.dir) { const fh = await o.dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(b); await w.close(); } else zip.add(name, new Uint8Array(await b.arrayBuffer())); };
         const canPipe = typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function'; let chain = Promise.resolve(), pend = [];
-        for (let i = 0; i < n; i++) { if (signal.aborted) throw new Error('Export cancelled.'); await drawFrame(i);
-          if (!canPipe) { await store(i, await toPng(canvas)); if (i % 3 === 0) prog(i); continue; }
-          const bmp = await createImageBitmap(canvas), job = (async () => { const oc = new OffscreenCanvas(bmp.width, bmp.height); oc.getContext('bitmaprenderer').transferFromImageBitmap(bmp); return oc.convertToBlob({ type: 'image/png' }); })();
+        for (let i = 0; i < n; i++) { if (signal.aborted) throw new Error('Export cancelled.'); const src = await frameAt(i);
+          if (!canPipe) { if (src !== canvas) { canvas.getContext('2d').setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); ctx.drawImage(src, 0, 0); release(src); } await store(i, await toPng(canvas)); if (i % 3 === 0) prog(i); continue; }
+          const bmp = src === canvas ? await createImageBitmap(canvas) : src, job = (async () => { const oc = new OffscreenCanvas(bmp.width, bmp.height); oc.getContext('bitmaprenderer').transferFromImageBitmap(bmp); return oc.convertToBlob({ type: 'image/png' }); })();
           chain = chain.then(async () => store(i, await job)); pend.push(chain); if (pend.length > 3) await pend.shift();
           if (i % 3 === 0) prog(i); }
         await chain;
         let wav = null; if (o.wav && CutAudio.hasSound(cfg, lookX)) wav = await wavOnly(cfg, lookX, t0, t1, Object.assign({}, o, { signal })); ok = true;
-        return { zip: zip ? zip.blob() : null, wav, frames: n, W, H };
+        return { zip: zip ? zip.blob() : null, wav, frames: n, W, H, helpers: pool ? pool.size : 0, secs: (performance.now() - tStart) / 1000 };
       }
       /* MP4 */
       if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot encode video. Use Microsoft Edge or Google Chrome.');
@@ -98,8 +114,8 @@ const CutExport = (() => {
         .then(() => { audioDone = true; }).catch(e => { audioErr = e; audioDone = true; }) : (audioDone = true, null);
       for (let i = 0; i < n; i++) {
         if (signal.aborted) throw new Error('Export cancelled.'); if (err) throw err; if (audioErr) throw audioErr;
-        await drawFrame(i); videoT = i / fps;
-        const vf = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
+        const src = await frameAt(i); videoT = i / fps;
+        const vf = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); release(src); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
         while (venc.encodeQueueSize > 6) await sleep(2);
         if (i % 3 === 0) prog(i);
       }
@@ -112,8 +128,9 @@ const CutExport = (() => {
       await mux.finish(); await sink.close();
       if (wavSink) { if (wavSink.patch) await wavSink.patch(0, CutAudio.wavHeader(wavFrames)); await wavSink.close(); }
       ok = true; const blob = sink.blob ? await sink.blob('video/mp4') : null;
-      return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
+      return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, helpers: pool ? pool.size : 0, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
     } finally {
+      if (pool) { pool.close(); pending.forEach(p => p.then(b => b && b.close && b.close())); pending.clear(); }
       readers.forEach(R => { try { R.close(); } catch (e) { } }); readers.clear();
       // A failed or cancelled export lets go of the encoders (his PC has only a few hardware ones), stops the mixing and
       // throws away the half written file rather than leaving it open
@@ -140,5 +157,5 @@ const CutExport = (() => {
       return c.convertToBlob ? await c.convertToBlob({ type: 'image/png' }) : await new Promise(r => c.toBlob(r, 'image/png')); }
     finally { readers.forEach(R => { try { R.close(); } catch (e) { } }); }
   }
-  return { run, wavOnly, still, pickVideo, RES, QUAL };
+  return { run, wavOnly, still, pickVideo, blurN, RES, QUAL };
 })();

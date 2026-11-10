@@ -219,6 +219,7 @@ const Puppet = (() => {
   /* Eyebrows may come down for anger but never into the eye: for each brow, the bottom edge of its drawing (a few points)
      and the bottom edge of the upper lid in the same head view (where the white of the eye starts). Puppet.draw lifts a
      brow that would pass the lid edge (as far as it already overlaps at rest is allowed, no further). */
+  function lidAt(lp, x) { if (!lp || lp.length < 2 || x < lp[0][0] || x > lp[lp.length - 1][0]) return null; let i = 1; while (i < lp.length && lp[i][0] < x) i++; const a = lp[i - 1], b = lp[Math.min(i, lp.length - 1)], u = b[0] > a[0] ? (x - a[0]) / (b[0] - a[0]) : 0; return a[1] + (b[1] - a[1]) * u; }
   function browLimits(rig) {
     const prof = (li, bottom) => { const L = rig.layers[li], b = rig.bm[li]; if (!L || !b) return []; const c = new OffscreenCanvas(b.width, b.height), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(b, 0, 0); const d = g.getImageData(0, 0, b.width, b.height).data, sx = L.w / b.width, sy = L.h / b.height, out = [];
       for (let x = 0; x < b.width; x += Math.max(1, Math.floor(b.width / 40))) { let yy = null; for (let i = 0; i < b.height; i++) { const y = bottom ? b.height - 1 - i : i; if (d[(y * b.width + x) * 4 + 3] > 128) { yy = y; break; } } if (yy != null) out.push([L.x + x * sx, L.y + yy * sy]); } return out; };
@@ -230,7 +231,7 @@ const Puppet = (() => {
       const step = Math.max(1, Math.floor(pts.length / 12)), P = pts.filter((q, i) => i % step === 0);
       const lidY = x => { if (x < lp[0][0] || x > lp[lp.length - 1][0]) return null; let i = 1; while (i < lp.length && lp[i][0] < x) i++; const a = lp[i - 1], b = lp[Math.min(i, lp.length - 1)], u = b[0] > a[0] ? (x - a[0]) / (b[0] - a[0]) : 0; return a[1] + (b[1] - a[1]) * u; };
       let rest = -1e9; P.forEach(([x, y]) => { const ly = lidY(x); if (ly != null) rest = Math.max(rest, y - ly); });
-      br.lim = { pts: P, lid: lp, allow: Math.max(0, rest) }; br.lidY = lidY;
+      br.lim = { pts: P, lid: lp, allow: Math.max(0, rest) };
     });
   }
   /* His mug carries his PatterSquid logo (MUG_LOGO, from his channel picture) instead of the slogan drawn on it: the mug
@@ -352,7 +353,7 @@ const Puppet = (() => {
           g.translate(A.shoulder[0], A.shoulder[1]); g.rotate(ang); g.rotate(a0); g.scale(k, 1 + (k - 1) * 0.25); g.rotate(-a0); g.translate(-A.shoulder[0], -A.shoulder[1]); }
         else { g.translate(c1[0], c1[1]); g.rotate(q.rot || 0); if (q.sc) g.scale(q.sc, q.sc); if (q.fx || q.fy) g.scale(q.fx ? -1 : 1, q.fy ? -1 : 1); g.translate(-A.cuff[0], -A.cuff[1]); } }
       if (nd.role === 'brow' && P.brow && P.brow[nd.side] && nd.box) { const b = nd.box, [dx, dy, r] = P.brow[nd.side], cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2; let ox = dx * (b[2] - b[0]), oy = dy * (b[3] - b[1]);
-        if (nd.lim && nd.lidY) { const cs = Math.cos(r || 0), sn = Math.sin(r || 0); let over = -1e9; nd.lim.pts.forEach(([x, y]) => { const X = cx + ox + (x - cx) * cs - (y - cy) * sn, Y = cy + oy + (x - cx) * sn + (y - cy) * cs, ly = nd.lidY(X); if (ly != null) over = Math.max(over, Y - ly); }); if (over > nd.lim.allow) oy -= over - nd.lim.allow; }   // never down into the eye
+        if (nd.lim) { const cs = Math.cos(r || 0), sn = Math.sin(r || 0); let over = -1e9; nd.lim.pts.forEach(([x, y]) => { const X = cx + ox + (x - cx) * cs - (y - cy) * sn, Y = cy + oy + (x - cx) * sn + (y - cy) * cs, ly = lidAt(nd.lim.lid, X); if (ly != null) over = Math.max(over, Y - ly); }); if (over > nd.lim.allow) oy -= over - nd.lim.allow; }   // never down into the eye
         g.translate(cx + ox, cy + oy); g.rotate(r || 0); g.translate(-cx, -cy); }
       if (nd.role === 'pupil' && P.pupil && nd.box) { const par = N[nd.parent], eb = par && par.box, w = eb ? eb[2] - eb[0] : 20, h = eb ? eb[3] - eb[1] : 20; g.translate(P.pupil[0] * w * 0.28, P.pupil[1] * h * 0.2); }
       if (nd.role === 'dangle' && P.dangle && nd.box) { const b = nd.box, cx = (b[0] + b[2]) / 2; g.translate(cx, b[1]); g.rotate(P.dangle * (nd.id % 2 ? 1 : -0.8)); g.translate(-cx, -b[1]); }
@@ -373,5 +374,7 @@ const Puppet = (() => {
   }
   // names of the things a script can trigger: hands, poses, costumes (as found in the swap sets)
   const triggerNames = rig => Object.keys(rig.triggers || {});
-  return { importFile, setHands, readPSD, unzip, list, load, get, remove, draw, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
+  function forWorkers(id) { const r = mem[id]; if (!r) return null; const { mips, sheet, ...rest } = r; return rest; }
+  function adopt(r) { if (!r || !r.id) return; r.mips = null; mem[r.id] = r; tick++; }
+  return { forWorkers, adopt, importFile, setHands, readPSD, unzip, list, load, get, remove, draw, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
 })();

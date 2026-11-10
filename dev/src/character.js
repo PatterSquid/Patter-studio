@@ -93,6 +93,11 @@ const Character = (() => {
   const last = {}, textMemo = new Map(), waiting = {};
   if (typeof Rhubarb !== 'undefined' && typeof indexedDB !== 'undefined') Rhubarb.ready().then(() => { tick++; });
   const engineOf = cfg => cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state === 'ready' ? 'rhubarb' : 'patter';
+  const durHint = {};
+  /* The export helpers draw him too: they get a copy of his puppet and the lip sync and voice length worked out here */
+  function workerData(cfg) { if (!cfg || !cfg.puppet) return null; const rig = Puppet.forWorkers(cfg.puppet); if (!rig) return null; const A = syncOf(cfg), m = cfg.voice && typeof CutMedia !== 'undefined' ? CutMedia.info(cfg.voice) : null;
+    return { rig, voice: cfg.voice || null, script: String(cfg.script || ''), A, dur: m && m.dur ? { dur: m.dur } : null }; }
+  function adoptWorker(d) { if (!d) return; if (d.rig) Puppet.adopt(d.rig); if (d.voice && d.A) { ['patter', 'rhubarb'].forEach(e => LipSync.seed(d.voice, d.script, e, d.A)); last[d.voice] = d.A; } if (d.voice && d.dur) durHint[d.voice] = d.dur; }
   function syncOf(cfg) {
     const script = String(cfg.script || ''), eng = engineOf(cfg);
     if (cfg.voice && typeof CutMedia !== 'undefined') {
@@ -330,7 +335,7 @@ const Character = (() => {
   /* ---------- the module ---------- */
   const defaults = () => ({ v: 1, puppet: '', voice: '', voiceName: '', script: "[calm] Right. Here's the thing nobody wanted to hear. [angry] They've only gone and shut the chippy! [point] You heard me.", moves: [], mood: 'calm', energy: 1, costume: '', frame: 'desk', hands: 'natural', zoom: 1, dx: 0, dy: 0, bg: 'colour', fill: '#4a5063', len: 6, pace: 1, seed: 0, vol: 0 });
   function duration(cfg) {
-    if (cfg.voice && typeof CutMedia !== 'undefined') { const m = CutMedia.info(cfg.voice); if (m && m.dur) return Math.max(0.5, m.dur + 0.3); }
+    if (cfg.voice && (typeof CutMedia !== 'undefined' || durHint[cfg.voice])) { const m = (typeof CutMedia !== 'undefined' && CutMedia.info(cfg.voice)) || durHint[cfg.voice]; if (m && m.dur) return Math.max(0.5, m.dur + 0.3); }
     const A = !cfg.voice && String(cfg.script || '').trim() ? syncOf(cfg) : null; if (A) return Math.max(1, A.dur + 0.4);
     return cl(+cfg.len || 6, 1, 600);
   }
@@ -436,5 +441,5 @@ const Character = (() => {
   const soundId = cfg => cfg && cfg.voice || null;
   // Just the puppet at a moment, in its own pixels (no background, no framing): for the Studio to place and light
   function drawRig(g, cfg, t) { const rig = cfg && cfg.puppet ? Puppet.get(cfg.puppet) : null; if (!rig) return null; const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d); Puppet.draw(g, rig, poseAt(cfg, A, rig, p, Math.max(0, t))); return rig; }
-  return { id: 'char', name: 'Character', mainThread: () => true, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
+  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
 })();

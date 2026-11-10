@@ -3,7 +3,7 @@
 const Render = (() => {
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
   const mk = (w, h) => { if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll, typeof Video !== 'undefined' && Video, typeof Studio !== 'undefined' && Studio].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
+  const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll, typeof Video !== 'undefined' && Video, typeof Studio !== 'undefined' && Studio, typeof Character !== 'undefined' && Character].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
 
   // Draws frame i. 'smart' blur draws once, measures how much the picture moved since the last frame this renderer drew,
   // and only redraws with motion blur when the movement is fast enough to need it.
@@ -35,19 +35,47 @@ const Render = (() => {
 
   // Worker side
   function workerMain() {
-    let R = null, fps = 60;
+    let R = null, C = null, fps = 60;
+    // What every helper needs before drawing: fonts, the map, pictures, the studio, B roll footage, packs
+    const setup = async m => {
+      if (m.fonts && m.fonts.length && self.fonts) await Promise.all(m.fonts.map(f => { const ff = new FontFace(f.family, `url(${f.url})`, { style: f.style || 'normal', weight: f.weight || '400', unicodeRange: f.range || 'U+0-10FFFF' }); self.fonts.add(ff); return ff.load().catch(() => null); }));
+      if (typeof PatterFonts !== 'undefined') await PatterFonts.ready();
+      E.fontVersion = 1;
+      if (m.needsMap) { await GeoData.load(); if (GeoData.full) await GeoData.full; if (GeoData.state.status !== 'ready') throw new Error('Map unavailable in worker'); }
+      if (m.assets && typeof Layers !== 'undefined') await Layers.setAssets(m.assets);
+      if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready();
+      if (m.media && typeof Media !== 'undefined') Media.load(m.media);
+      if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
+    };
     self.onmessage = async e => {
       const m = e.data;
-      if (m.type === 'init') {
+      if (m.type === 'cutinit') {
+        // A Video tab export: this helper draws the moments without his footage, the page draws the rest
         try {
-          if (m.fonts && m.fonts.length && self.fonts) await Promise.all(m.fonts.map(f => { const ff = new FontFace(f.family, `url(${f.url})`, { style: f.style || 'normal', weight: f.weight || '400', unicodeRange: f.range || 'U+0-10FFFF' }); self.fonts.add(ff); return ff.load().catch(() => null); }));
-          E.fontVersion = 1;
+          await setup(m);
+          if (typeof CutMedia !== 'undefined' && CutMedia.seed) CutMedia.seed(m.meta);
+          Object.assign(Video.hooks, { look: () => m.appLook, studio: () => m.studio });
+          if (m.studioX && Studio.adoptWorker) Studio.adoptWorker(m.studioX);
+          (m.chars || []).forEach(d => Character.adoptWorker(d));
+          const Vw = Layers.wrap(Video), cv = new OffscreenCanvas(m.W, m.H);
+          C = { Vw, cfg: m.cfg, look: m.look, m, cv, g: cv.getContext('2d', { alpha: !!m.look.transparent }), images: new Map(m.images || []), blurN: m.blur ? CutExport.blurN(m.fps, m.bW, m.bH) : null };
+          Vw.duration(m.cfg, m.look);
+          self.postMessage({ type: 'ready' });
+        } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err) }); }
+      } else if (m.type === 'cutframe') {
+        try {
+          const { m: o, g, cv, Vw, cfg, look } = C, t = m.t, a = performance.now();
+          if (typeof Media !== 'undefined' && Video.mediaAt) await Media.prepare(Video.mediaAt(cfg, t, look));
+          g.setTransform(1, 0, 0, 1, 0, 0); if (look.transparent) g.clearRect(0, 0, o.W, o.H); else { g.fillStyle = '#000'; g.fillRect(0, 0, o.W, o.H); }
+          g.setTransform(o.scale, 0, 0, o.scale, 0, 0);
+          Vw.draw(g, t, cfg, Object.assign({}, look, { cutEnv: { frames: new Map(), images: C.images, k: o.scale, fps: o.fps, blur: !!o.blur, blurN: C.blurN } }), o.bW, o.bH);
+          const bmp = cv.transferToImageBitmap(); self.postMessage({ type: 'cutframe', j: m.j, bmp, ms: performance.now() - a }, [bmp]);
+        } catch (err) { self.postMessage({ type: 'cutframe', j: m.j, err: String((err && err.message) || err) }); }
+      } else if (m.type === 'init') {
+        try {
+          await setup(m);
           const mod = allMods().find(x => x.id === m.modId); if (!mod) throw new Error('Unknown clip type');
-          if (m.needsMap) { await GeoData.load(); if (GeoData.full) await GeoData.full; if (GeoData.state.status !== 'ready') throw new Error('Map unavailable in worker'); }
-          if (m.assets && typeof Layers !== 'undefined') await Layers.setAssets(m.assets);
-          if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready();
-          if (m.media && typeof Media !== 'undefined') Media.load(m.media);
-          if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
+          if (m.extra && mod.adoptWorker) mod.adoptWorker(m.extra);
           fps = m.fps; R = frameRenderer(mod, m.cfg, m.look, m.W, m.H, m.fps, m.blur, false, m.t0 || 0); R.mod = mod; R.cfg = m.cfg; R.look = m.look; R.t0 = m.t0 || 0;
           mod.duration(m.cfg, m.look);
           self.postMessage({ type: 'ready', gpu: typeof GlobeGL !== 'undefined' && (m.modId === 'map' || m.modId === 'flights' || m.modId === 'flyover' || m.needsMap) ? GlobeGL.available : null });
@@ -72,7 +100,9 @@ const Render = (() => {
   // Main side: the web fonts the page uses, so workers can draw identical text.
   async function fontList() {
     const link = document.querySelector('link[href*="fonts.googleapis.com/css"]'), href = window.PATTER_FONT_CSS || (link && link.href);
-    const usesWebFonts = () => { try { return !!document.fonts && [...document.fonts].some(ff => ff.status === 'loaded'); } catch (e) { return false; } };
+    // fonts built into the bundle (PATTER_FONTS) the helpers load themselves; any other loaded web font they could not match
+    const own = new Set(typeof PATTER_FONTS !== 'undefined' ? Object.keys(PATTER_FONTS).map(k => k.split('|')[0]) : []);
+    const usesWebFonts = () => { try { return !!document.fonts && [...document.fonts].some(ff => ff.status === 'loaded' && !own.has(ff.family.replace(/['"]/g, ''))); } catch (e) { return false; } };
     if (!href) return usesWebFonts() ? null : [];
     try {
       const css = await (await fetch(href)).text(), out = [], re = /\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{([^}]*)\}/g; let mm;
@@ -83,8 +113,8 @@ const Render = (() => {
       return out;
     } catch (e) { return usesWebFonts() ? null : []; }
   }
-  async function makePool(mod, cfg, look, W, H, fps, blur, n, t0 = 0) {
-    if (mod.mainThread && mod.mainThread(cfg)) return null;   // some clips only draw on the page (his puppet's pictures live there)
+  // Starts n helpers from the app's own code and waits until each has taken in its starting message (msg(fonts) builds it)
+  async function spawn(n, msg) {
     if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined' || typeof VideoFrame === 'undefined') return null;
     const el = document.getElementById('patter-js'), src = el && el.textContent; if (!src) return null;
     const d3src = [...document.scripts].map(s => s.src).find(s => /d3(\.min)?\.js/.test(s || ''));
@@ -95,16 +125,46 @@ const Render = (() => {
     const url = URL.createObjectURL(new Blob([pre, src, '\n;Render.workerMain();'], { type: 'text/javascript' }));
     const workers = [];
     try {
+      const m = msg(fonts);
       for (let k = 0; k < n; k++) workers.push(new Worker(url));
-      const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover' || !!(mod.needsMap && mod.needsMap(cfg));
       await Promise.all(workers.map(w => new Promise((res, rej) => {
         const to = setTimeout(() => rej(new Error('Worker start timed out')), 45000);
         w.onmessage = e => { if (e.data.type === 'ready') { clearTimeout(to); workers.gpu = e.data.gpu; res(); } else if (e.data.type === 'error') { clearTimeout(to); rej(new Error(e.data.msg)); } };
         w.onerror = ev => { clearTimeout(to); rej(new Error(ev.message || 'Worker failed')); };
-        w.postMessage({ type: 'init', modId: mod.id, cfg, look, W, H, fps, blur, fonts, needsMap, t0, assets: typeof Layers !== 'undefined' ? Layers.assetsFor(cfg) : null, packs: typeof Packs !== 'undefined' ? Packs.forWorkers() : null, media: mod.mediaFor && typeof Media !== 'undefined' ? Media.forWorkers(mod.mediaFor(cfg)) : null });
+        w.postMessage(m);
       })));
-      URL.revokeObjectURL(url); const out = workers; return out;
+      URL.revokeObjectURL(url); return workers;
     } catch (e) { workers.forEach(w => w.terminate()); URL.revokeObjectURL(url); console.warn('Parallel export unavailable, using one thread:', e.message); return null; }
+  }
+  async function makePool(mod, cfg, look, W, H, fps, blur, n, t0 = 0) {
+    // his puppet's pictures live on the page: clips that use it hand the helpers a copy (workerData), else they draw on the page
+    let extra = null; if (mod.mainThread && mod.mainThread(cfg)) { extra = mod.workerData ? mod.workerData(cfg) : null; if (!extra) return null; }
+    const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover' || !!(mod.needsMap && mod.needsMap(cfg));
+    return spawn(n, fonts => ({ type: 'init', modId: mod.id, cfg, look, W, H, fps, blur, fonts, needsMap, t0, extra, assets: typeof Layers !== 'undefined' ? Layers.assetsFor(cfg) : null, packs: typeof Packs !== 'undefined' ? Packs.forWorkers() : null, media: mod.mediaFor && typeof Media !== 'undefined' ? Media.forWorkers(mod.mediaFor(cfg)) : null }));
+  }
+  /* Helpers for a Video tab export (CutExport): each draws whole frames of the video at the export size, for the moments
+     without his own footage, and hands back an ImageBitmap. o: { look (as exported), W, H, bW, bH, scale, fps, blur, images }.
+     Returns { size, frame(t) -> Promise<ImageBitmap>, close() } or null when the helpers cannot be used. */
+  async function cutPool(cfg, o, n) {
+    if (typeof Video === 'undefined' || typeof CutMedia === 'undefined' || !CutMedia.forWorkers || n < 1) return null;
+    const all = [...(cfg.items || []), ...(cfg.tracks || []).flatMap(T => (T && T.items) || [])];
+    const chars = []; for (const it of all) if (it && it.kind === 'clip' && it.mod === 'char' && it.cfg) { const d = Character.workerData(it.cfg); if (!d) return null; chars.push(d); }
+    const studio = Video.studioCfg(cfg); let studioX = null;
+    if (studio && Studio.mainThread(studio) && all.some(it => it && it.kind === 'avatar')) { studioX = Studio.workerData(studio); if (!studioX) return null; }
+    const assets = {}; if (typeof Layers !== 'undefined') { [cfg, studio, ...all.map(it => it && it.cfg)].forEach(c => { if (c) Object.assign(assets, Layers.assetsFor(c)); }); }
+    const images = [...(o.images || new Map())].filter(([, b]) => b);
+    const workers = await spawn(n, fonts => ({ type: 'cutinit', cfg, look: o.look, appLook: Video.hooks.look ? Video.hooks.look() : o.look, studio, studioX, chars, W: o.W, H: o.H, bW: o.bW, bH: o.bH, scale: o.scale, fps: o.fps, blur: !!o.blur,
+      fonts, needsMap: !!Video.needsMap(cfg), assets, images, meta: CutMedia.forWorkers(Video.assetsUsed(cfg)), packs: typeof Packs !== 'undefined' ? Packs.forWorkers() : null, media: typeof Media !== 'undefined' ? Media.forWorkers(Video.mediaFor(cfg)) : null }));
+    if (!workers) return null;
+    const idle = [...workers], queue = [], wait = new Map(); let j = 0, dead = null;
+    const run = () => { while (idle.length && queue.length) { const w = idle.pop(), job = queue.shift(); w.postMessage({ type: 'cutframe', j: job.j, t: job.t }); } };
+    workers.forEach(w => {
+      w.onmessage = e => { const m = e.data; if (m.type !== 'cutframe') return; idle.push(w); const p = wait.get(m.j); wait.delete(m.j); if (p) { if (m.err) p.rej(new Error(m.err)); else p.res(m.bmp); } else if (m.bmp) m.bmp.close(); run(); };
+      w.onerror = ev => { dead = new Error('A render helper crashed: ' + (ev.message || '')); wait.forEach(p => p.rej(dead)); wait.clear(); };
+    });
+    return { size: workers.length,
+      frame(t) { if (dead) return Promise.reject(dead); const id = j++; return new Promise((res, rej) => { wait.set(id, { res, rej }); queue.push({ j: id, t }); run(); }); },
+      close() { workers.forEach(w => w.terminate()); wait.forEach(p => p.rej(new Error('Stopped'))); wait.clear(); queue.length = 0; } };
   }
   function cores() { return Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 1)); }
 
@@ -165,5 +225,5 @@ const Render = (() => {
       pool.forEach(w => { send(w); send(w); });
     });
   }
-  return { workerMain, frameRenderer, renderFrames, buildPreview, inWorker, cores };
+  return { workerMain, frameRenderer, renderFrames, buildPreview, inWorker, cores, cutPool };
 })();

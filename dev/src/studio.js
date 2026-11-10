@@ -954,6 +954,9 @@ const Studio = (() => {
   }
 
   const mainThread = cfg => !!(cfg && cfg.avatar && cfg.avatar.kind === 'char');
+  // With his character in: the export helpers get the Character tab's settings and a copy of his puppet and lip sync
+  const workerData = cfg => { if (!mainThread(cfg) || typeof Character === 'undefined' || !Character.workerData) return null; const c = charCfg(); const d = c && Character.workerData(c); return d ? { char: c, data: d } : null; };
+  const adoptWorker = x => { if (!x) return; hooks.char = () => x.char; Character.adoptWorker(x.data); };
   async function prepare(cfg) { if (cfg && cfg.avatar && cfg.avatar.kind === 'char' && typeof Character !== 'undefined') { const cc = charCfg(); if (cc) await Character.prepare(cc); } }
-  return { id: 'studio', name: 'Studio', mainThread, prepare, ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _dbg: DBG, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
+  return { id: 'studio', name: 'Studio', mainThread, workerData, adoptWorker, prepare, ready, BUILTIN, editor, hooks, soundData, wav, form: (root, cfg, changed) => panel(root, cfg, changed, null, null), defaults, duration, draw, drawAt, mediaFor, mediaAt, mediaAtAv, needsMap, blurHint, view, flashAt, flashTimes, lampLevel, loopOf, WEATHER, WX, STINGS, NAMES, modOf, avatarRect, roomBmp, detect, _dbg: DBG, _internals: { hash, rng, wob, pmod, sm, mk, P, onGlass, dbg: () => ({ cloud: cloudBuf.c, rooms: roomCache }) } };
 })();

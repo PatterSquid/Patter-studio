@@ -132,7 +132,12 @@ standard and as easy to use.
 * `cut_audio.js` (`CutAudio`): one set of gain rules for the live preview (audio elements through Web Audio) and the
   export mix (OfflineAudioContext in blocks, crossfaded joins), voice enhance, noise reduction, ducking, WSOLA time stretch
   for speed with the pitch kept, AAC (else Opus) encoding, WAV.
-* `cut_export.js` (`CutExport.run`): renders on the main thread with exact frames, mixes sound alongside, streams to disk.
+* `cut_export.js` (`CutExport.run`): renders with exact frames, mixes sound alongside, streams to disk. Helpers on the other
+  cores (`Render.cutPool`, worker messages `cutinit`/`cutframe`) draw every moment without his footage or the intro ahead of
+  time and hand back ImageBitmaps; the page draws the footage and intro moments (`Video.pageOnlyAt`) and keeps the order.
+  The helpers get the video, the studio, his puppet (`Character.workerData`, `Studio.workerData`), pictures, the file list
+  (`CutMedia.forWorkers`/`seed`), packs and B roll. `workers: false` turns them off; `tests/cut_workers.js` (runjs) checks
+  the frames match and times both.
   MP4 (H.264 plus AAC on his PC; VP9 and Opus here in headless), PNG sequence, WAV. The Video tab always exports through it.
 * **Snap** (switch in the timeline toolbar): on, the main track is magnetic and drags snap to edges, markers and the
   playhead (Alt while dragging skips the edge snap); off (`cfg.free`), main track clips go where they are dropped and the
@@ -275,6 +280,10 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   drawn behind him (he darkens himself). Studio and Character have `mainThread` (no render workers: the puppet's pictures
   live on the page) and `prepare`. In the Video tab his voice plays under every [ME] part from that part's place in the
   one take (`cut_audio.js` `voiceItem`, src0 = `Video.avStart`). Test: `tests/char_studio.py`.
+* **Exports use every core** (he found 30 s with the plane and his character took 139 s): Studio with his character and the
+  Character tab draw in the render helpers too: `mainThread` still says the puppet lives on the page, and `workerData`
+  hands each helper a copy (the rig without mips, about 50 MB, the voice timing, `durHint`), taken in by `adoptWorker`.
+  Fonts built into the bundle (`PATTER_FONTS`) no longer stop the helpers (`fontList`). `tests/char_workers.js` (runjs).
 * **Speed** (he found the preview slow with his character and the plane): `Puppet.draw` picks one size per drawing
   (`mipLevel`, sixteenths of full size, two sizes kept) and draws every layer from a copy resized once with high quality,
   so nothing big is shrunk every frame (preview and exports). In the Studio, while the preview plays (`look.preview` and

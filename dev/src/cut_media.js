@@ -299,7 +299,10 @@ const CutMedia = (() => {
   // Storage use, so the library can say how much room footage takes
   async function usage() { try { const e = await navigator.storage.estimate(); return e; } catch (e) { return null; } }
 
+  // For export helpers: what the drawing needs to know about each file, and taking that in on the other side
+  const forWorkers = ids => (ids || []).map(id => meta[id]).filter(Boolean).map(m => { const o = Object.assign({}, m); delete o.peaks; delete o.thumbs; return o; });
+  const seed = list => (list || []).forEach(m => { if (m && m.id) meta[m.id] = Object.assign(meta[m.id] || {}, m); });
   if (!inWorker && typeof indexedDB !== 'undefined') loadAll();
-  return { importFile, kindOf, info, list, loadAll, live, endFrame, pauseAll, videoReader, audioReader, releaseAudio, thumb, image, bitmap, peakAt, blobOf, urlOf, remove, usage,
+  return { importFile, kindOf, info, list, loadAll, live, endFrame, pauseAll, videoReader, audioReader, releaseAudio, thumb, image, bitmap, peakAt, blobOf, urlOf, remove, usage, forWorkers, seed,
     onChange: f => listeners.push(f), get tick() { return tick; }, get thumbTick() { return thumbTick; }, get version() { return version; }, _meta: meta, PEAK_RATE };
 })();

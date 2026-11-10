@@ -330,6 +330,9 @@ const Video = (() => {
     (cfg.tracks || []).forEach(T => { if (T.kind !== 'video' || T.hide) return; (T.items || []).forEach(it => { const s = +it.start || 0, d = lenOf(it, look); if (t >= s - 1e-9 && t < s + d) add(it, t - s); }); });
     return out;
   }
+  // Moments the export draws on the page itself: his own footage (decoded there) or the intro; everything else the helpers can draw
+  function pageOnlyAt(cfg, look, t) { if (framesAt(cfg, look, t).length) return true;
+    return allPlaced(cfg, look).some(p => t >= p.t0 - 1e-9 && t < p.t0 + p.d && (p.it.kind === 'intro' || (p.it.kind === 'clip' && (p.it.mod === 'intro' || !modOf(p.it.mod))))); }
   // Pictures (still images) used anywhere, so the export can load them first
   function imagesUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.kind === 'media') { const m = M(it.asset); if (m && m.kind === 'image') ids.add(it.asset); } }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function assetsUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.asset) ids.add(it.asset); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
@@ -399,6 +402,6 @@ const Video = (() => {
 
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
-    natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
+    natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, pageOnlyAt, studioCfg, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
     runsOn, CURVES, curvePts, curveMul, hasCurve, rateOf, pinCurve, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();
