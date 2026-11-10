@@ -563,3 +563,6 @@ body.gfx #manualBtn,body.gfx #resetMod,body.anim #manualBtn,body.anim #resetMod{
 .au-side .hint{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .au-side .hint:hover{-webkit-line-clamp:unset;display:block}
 body.gfx aside[data-at=look] #look h3,body.anim aside[data-at=look] #look h3{display:none}
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:80;background:#101c33;border:1px solid #4a6290;color:var(--fg);padding:9px 16px;border-radius:9px;box-shadow:0 8px 26px rgba(0,0,0,.5);max-width:min(640px,90vw);transition:opacity .2s,transform .2s;font-size:13.5px}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.err{border-color:var(--red)}

@@ -74,7 +74,10 @@
   fillDefaults(); writeLight();
   const cfg = () => state.cfg[state.module] || (state.cfg[state.module] = mod().defaults());
   const status = $('status');
-  const say = (msg, err) => { status.className = 'status' + (err ? ' err' : ''); status.textContent = msg; };
+  // Messages go in the export panel and, when that is closed, show for a few seconds at the bottom of the screen
+  const toastEl = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'toast', role: 'status' }));
+  const say = (msg, err) => { status.className = 'status' + (err ? ' err' : ''); status.textContent = msg;
+    if (!msg || document.body.classList.contains('exp-open') || /^Ready\./.test(msg)) return; toastEl.textContent = msg; toastEl.className = 'on' + (err ? ' err' : ''); clearTimeout(say.t); say.t = setTimeout(() => { toastEl.className = ''; }, err ? 7000 : 4500); };
 
   // Look controls
   const schemesEl = $('schemes');
@@ -418,6 +421,22 @@
   async function openFromClaude(r) { const data = await DB.get('meta', 'inbox:' + r.id).catch(() => null); if (!data) { say('That one could not be opened. Try Check again later.', true); return; } const s = JSON.parse(JSON.stringify(data)); s.name = r.name; r.opened = true; await saveInbox(); drawProjDot(); dlg.close(); await newProject(s); say('Opened ' + r.name + ' as a new project. It is in your projects now, so you can change anything.'); }
   function inboxSec() { if (!INBOX.length) return ''; return H('section', { className: 'dlg-sec' }, H('h3', { textContent: 'From Claude' }), H('div', { className: 'ver-list' }, ...INBOX.map(r => H('div', { className: 'pack-row' }, H('div', { className: 'lib-meta' }, H('b', { textContent: r.name + (r.opened ? '' : '  (new)') }), H('span', { textContent: (r.note ? r.note + ', ' : '') + 'arrived ' + ago(r.added) })),
     UI.btn(r.opened ? 'Open a fresh copy' : 'Open', () => openFromClaude(r), r.opened ? '' : 'primary'), confirmBtn('Remove', async () => { INBOX = INBOX.filter(x => x !== r); await saveInbox(); DB.put('meta', null, 'inbox:' + r.id).catch(() => null); drawProjDot(); openLibrary(); }))))); }
+  /* His own puppet and hand drawings, sent locked through the update repo (PrivateArt): asked for the password once,
+     then loaded into the Character by themselves whenever they change */
+  function openUnlock() {
+    const dlg = $('dlg'), pw = H('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Password', placeholder: 'Your artwork password' }), msg = H('p', { className: 'hint', 'aria-live': 'polite' });
+    const go = UI.btn('Unlock', async () => { if (!pw.value) return; go.disabled = true; msg.textContent = 'Unlocking and loading your puppet…'; try { await PrivateArt.unlock(pw.value.trim()); dlg.close(); } catch (e) { msg.textContent = e.message || String(e); go.disabled = false; } }, 'primary');
+    pw.addEventListener('keydown', e => { if (e.key === 'Enter') go.click(); });
+    dlg.innerHTML = ''; dlg.append(H('div', { className: 'dlg-head' }, H('h2', { textContent: 'Your puppet and hands are here' }), UI.btn('×', () => dlg.close())),
+      H('p', { textContent: 'Claude sent your puppet and hand drawings locked, so nobody else can open them. Type your password once and they load into the Character. It is remembered on this computer.' }), pw, msg, H('div', { className: 'btnrow' }, go, UI.btn('Not now', () => dlg.close())));
+    dlg.showModal(); setTimeout(() => pw.focus(), 50);
+  }
+  if (typeof PrivateArt !== 'undefined') {
+    PrivateArt.hooks.ask = () => openUnlock();
+    PrivateArt.hooks.loaded = rig => { const c = state.cfg.char || (state.cfg.char = MODULES.char.defaults()); c.puppet = rig.id; save(); if (state.module === 'char' || state.module === 'studio') refreshAll(); say('Your puppet and hand drawings are loaded into the Character.'); };
+    if (typeof Character !== 'undefined') Character.unlockArt = () => openUnlock();
+    setTimeout(() => { if (navigator.onLine !== false) PrivateArt.check(); }, 1500);
+  }
   if (typeof Packs !== 'undefined') {
     Packs.onChange(() => { if (SP) SP.touch(); refreshAll(); });
     loadInbox().then(() => Packs.loadSaved()).then(() => Packs.check()).then(async got => { const pj = await checkInbox(); const msg = [];

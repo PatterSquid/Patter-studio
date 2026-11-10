@@ -223,7 +223,7 @@ Everything is a pure function of time and repeats exactly every `loop` seconds, 
 
 ## The Character (the Animator tab: dev/src/puppet.js, lipsync.js, character.js)
 
-His Character Animator puppet animated without Adobe. **His artwork never goes in the repo**: he loads his .puppet (a zip
+His Character Animator puppet animated without Adobe. **His artwork never goes in the repo unlocked** (see His artwork, sent privately): he loads his .puppet (a zip
 with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patter-puppet`. Test fixture: `dev/tmp_puppet.puppet`
 (gitignored; his Massive_v2.puppet), voices `dev/tmp_voice.wav`, `dev/tmp_voice2.wav` made with ffmpeg's flite.
 * `Puppet`: our own zip and PSD reader (RLE, zip, PSB, masks), layers kept as WebP at up to 2200 wide, the rig worked out
@@ -255,6 +255,14 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   with `old` falling back to his puppet's hands when no sheet is loaded. When a palm turns over the forearm shows the
   plain inside of the sleeve (`HandSheet.plain`, stripes kept on the upper arm; `pose.arms[side].plain`). He rejected
   hands we drew ourselves ("horrifying") and the steeple (pointless): do not bring either back.
+* **His artwork, sent privately** (`dev/src/private_art.js` `PrivateArt`, `dev/lock_art.py`): the update repo is public, so
+  his puppet and hand sheet go in it only locked: `private/art.locked` (AES-256-GCM, key from his password with PBKDF2
+  SHA-256 600000 rounds) and `private/art.json` (`rev`). The app asks for the password once (`openUnlock` in app.js, or
+  "Unlock the one Claude sent" in the Character panel), keeps it in IndexedDB `patter-private`, loads the puppet and hands
+  and sets the Character's puppet; a new `rev` is loaded by itself. To send him a new version:
+  `PATTER_ART_PASSWORD=... python3 lock_art.py his.puppet hand-sheet.png`, publish, push. **Never commit the password**
+  or his unlocked files; only he and the user's own records hold the password. Test: `tests/private_art.py` (serves
+  `private/` through `dev/tmp_home/private`, password from `PATTER_ART_PASSWORD`).
 * **Rhubarb** (`dev/src/rhubarb.js`, `cfg.sync` 'rhubarb'): Rhubarb Lip Sync as WebAssembly (`lip-sync-engine` 1.0.3, MIT,
   PocketSphinx inside), files in `lipsync/rhubarb/` (about 40 MB, credits in NOTICE.md). Downloaded once from the update
   repo when he presses the panel's download button, kept in IndexedDB `patter-lipsync`, run in a worker. Only the mouth
