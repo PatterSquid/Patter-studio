@@ -196,9 +196,31 @@ const Puppet = (() => {
       set.kids.push({ name: 'back fist', li, vis: false, op: 255, made: true });
     }
   }
-  async function make(id, rig, blobs) {
+  /* his hand drawings (HandSheet), fitted to this puppet and added to each hand's swap set; their wrist goes on the cuff
+     of that arm's sleeve (found the way analyse finds it). Also plain copies of the dark sleeves for turned forearms. */
+  async function sheetHands(rig, hands) {
+    if (typeof HandSheet === 'undefined') return;
+    const sets = []; const walk = (n, par) => { if (!n.kids) return; if (n.group && /hand/i.test(n.name) && par && n.kids.some(k => /^default$/i.test(k.name))) sets.push([n, par]); n.kids.forEach(k => walk(k, n)); }; walk(rig.tree, null);
+    const cuffOf = arm => { const sl = arm.kids.find(k => k.group && !/hand/i.test(k.name) && /elbow|sleeve|arm/i.test(k.name)), sd = sl && (sl.kids.find(k => /^default$/i.test(k.name)) || sl.kids.find(k => k.vis)), SL = sd && rig.layers[sd.li]; if (!SL || !SL.w) return null; const dir = /^\+?r/i.test(arm.name) ? 1 : -1; return { cuff: [dir > 0 ? SL.x + SL.w - 0.13 * SL.w : SL.x + 0.13 * SL.w, SL.y + 0.6 * SL.h], sleeve: sl }; };
+    // plain sleeves
+    rig.plainBm = {}; for (const [, arm] of sets) { const c = cuffOf(arm); if (!c) continue; for (const k of c.sleeve.kids) { if (k.li == null || !rig.bm[k.li]) continue; const pc = HandSheet.plain(rig.bm[k.li], /^\+?r/i.test(arm.name) ? 1 : -1); if (pc) rig.plainBm[k.li] = await createImageBitmap(pc); } }
+    if (!hands || !hands.blob) return;
+    const img = await createImageBitmap(hands.blob), pieces = HandSheet.cut(img), roles = hands.roles && hands.roles.length === pieces.length ? hands.roles : HandSheet.guess(pieces);
+    const refs = []; for (const [set] of sets) { for (const w of set.kids.filter(k => /^(wave|default)$/i.test(k.name))) { const b = rig.bm[w.li]; if (!b) continue; const c = new OffscreenCanvas(b.width, b.height), g = c.getContext('2d'); g.drawImage(b, 0, 0); refs.push(g.getImageData(0, 0, b.width, b.height)); } }
+    const F = HandSheet.fit(pieces, roles, refs); rig.sheet = { pieces, roles, fit: F }; if (!F) return;
+    for (const [set, arm] of sets) {
+      const c = cuffOf(arm); if (!c) continue; const side = /^\+?r/i.test(arm.name) ? 'R' : 'L', D = rig.layers[set.kids.find(k => /^default$/i.test(k.name)).li];
+      for (const o of F.list.filter(q => q.side === side)) {
+        const li = rig.layers.length; rig.layers.push(Object.assign({}, D, { x: c.cuff[0] - o.anchor[0], y: c.cuff[1] - o.anchor[1], w: o.w, h: o.h, name: o.role })); rig.bm.push(await createImageBitmap(o.canvas));
+        set.kids = set.kids.filter(k => k.name !== o.role); set.kids.push({ name: o.role, li, vis: false, op: 255, made: true, inside: o.role !== 'point you' });
+        if (o.role === 'steeple') rig.steeple = { other: o.other, half: o.anchor[0] - o.w / 2 };   // where his left wrist sits from the middle of the drawing
+      }
+    }
+  }
+  async function make(id, rig, blobs, hands) {
     const bm = await Promise.all(blobs.map(b => b ? createImageBitmap(b) : null)); rig.bm = bm; rig.id = id; rig.layers = rig.layers.slice();
     try { await backFists(rig); } catch (e) { console.warn('back fist', e); }
+    try { await sheetHands(rig, hands); } catch (e) { console.warn('hand drawings', e); }
     analyse(rig); measure(rig);
     mem[id] = rig; tick++; return rig;
   }
@@ -210,8 +232,14 @@ const Puppet = (() => {
   const put = v => tx('readwrite', s => s.put(v));
   async function list() { try { const all = await tx('readonly', s => s.getAll()); return (all || []).map(p => ({ id: p.id, name: p.name, added: p.added })).sort((a, b) => a.added - b.added); } catch (e) { return []; } }
   async function remove(id) { delete mem[id]; tick++; await tx('readwrite', s => s.delete(id)).catch(() => { }); }
+  // his hand drawings sheet (a picture on green), kept with the puppet; roles: what each drawing is, in sheet order
+  async function setHands(id, blob, roles) {
+    const p = await tx('readonly', s => s.get(id)); if (!p) throw new Error('Load the puppet first.');
+    p.hands = blob ? { blob: blob || (p.hands && p.hands.blob), roles: roles || null } : (roles && p.hands ? Object.assign({}, p.hands, { roles }) : null);
+    await put(p); delete mem[id]; tick++; return load(id);
+  }
   function load(id) { if (!id) return Promise.resolve(null); if (mem[id]) return Promise.resolve(mem[id]); if (loading[id]) return loading[id];
-    return (loading[id] = tx('readonly', s => s.get(id)).then(p => p ? make(id, p.rig, p.blobs) : null).catch(e => { console.warn('puppet', e); return null; }).finally(() => { delete loading[id]; })); }
+    return (loading[id] = tx('readonly', s => s.get(id)).then(p => p ? make(id, p.rig, p.blobs, p.hands) : null).catch(e => { console.warn('puppet', e); return null; }).finally(() => { delete loading[id]; })); }
   const get = id => { if (id && !mem[id] && !loading[id]) load(id); return mem[id] || null; };
 
   /* ---------- drawing one pose ----------
@@ -229,12 +257,14 @@ const Puppet = (() => {
       if (nd.role === 'lid' && (P.blink || 0) >= 0.5 && par && par.kids.some(k => k.role === 'blink')) return false;   // the blink covers the eye; only the lid line goes
       return nd.vis;
     };
-    let g = g0; const flush = +P.flush || 0;
+    let g = g0, plainK = 0; const flush = +P.flush || 0;
     const paint = nd => {
       if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return;
       g.save(); if (op < 1) g.globalAlpha *= op;
       if (nd.role === 'head' && P.head) { const [px, py] = rig.pivot.head, [dx, dy, r] = P.head; g.translate(px + dx, py + dy); g.rotate(r || 0); if (P.head[3]) g.scale(1 + P.head[3], 1 + P.head[3]); g.translate(-px, -py); }
       if (nd.role === 'body' && P.body) { const [px, py] = rig.pivot.body, k = P.body[0] || 0; g.translate(px, py); g.scale(1 + k * 0.4, 1 + k); g.translate(-px, -py); }
+      if (nd.role === 'sleeve') plainK = P.arms && P.arms[nd.side] ? +P.arms[nd.side].plain || 0 : 0;
+      if (nd.role === 'hand' && P.arms && P.arms[nd.side] && P.arms[nd.side].hide) { g.restore(); return; }
       if ((nd.role === 'sleeve' || nd.role === 'hand') && P.arms && P.arms[nd.side] && rig.arms && rig.arms[nd.side]) {
         const A = rig.arms[nd.side], q = P.arms[nd.side], c1 = [A.cuff[0] + (q.dx || 0), A.cuff[1] + (q.dy || 0)];
         if (nd.role === 'sleeve') { const v0 = [A.cuff[0] - A.shoulder[0], A.cuff[1] - A.shoulder[1]], v1 = [c1[0] - A.shoulder[0], c1[1] - A.shoulder[1]], a0 = Math.atan2(v0[1], v0[0]), ang = Math.atan2(v1[1], v1[0]) - a0, k = Math.max(0.72, Math.min(1.35, Math.hypot(v1[0], v1[1]) / Math.hypot(v0[0], v0[1])));
@@ -253,12 +283,12 @@ const Puppet = (() => {
         g.drawImage(c, hb[0], hb[1], w, h);
       }
       else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
-      else { const b = bm[nd.li], q = L[nd.li]; if (b && q) g.drawImage(b, q.x, q.y, q.w, q.h); }
+      else { const b = bm[nd.li], q = L[nd.li]; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }
       g.restore();
     };
     paint(rig.tree);
   }
   // names of the things a script can trigger: hands, poses, costumes (as found in the swap sets)
   const triggerNames = rig => Object.keys(rig.triggers || {});
-  return { importFile, readPSD, unzip, list, load, get, remove, draw, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
+  return { importFile, setHands, readPSD, unzip, list, load, get, remove, draw, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
 })();

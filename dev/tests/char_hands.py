@@ -11,8 +11,8 @@ async def main():
     pg.on('pageerror', lambda e: errs.append(str(e)))
     await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort()); await pg.route('**/fonts.googleapis.com/**', lambda r: r.abort())
     await pg.goto('http://127.0.0.1:8765/dist/test.html'); await pg.wait_for_timeout(1200)
-    await pg.evaluate(f"()=>{{ window.__voice = '{os.environ.get('VOICE', 'tmp_voice2.wav')}'; window.__hands = '{os.environ.get('HANDS', 'natural')}'; }}")
-    r = await pg.evaluate("""async(script)=>{ const { rig } = await Puppet.importFile(new File([await (await fetch('/tmp_puppet.puppet')).blob()], 'M.puppet'));
+    await pg.evaluate(f"()=>{{ window.__voice = '{os.environ.get('VOICE', 'tmp_voice2.wav')}'; window.__hands = '{os.environ.get('HANDS', 'natural')}'; window.__sheet = {1 if os.path.exists('tmp_hands/sheet.png') and os.environ.get('SHEET', '1') == '1' else 0}; }}")
+    r = await pg.evaluate("""async(script)=>{ let { rig } = await Puppet.importFile(new File([await (await fetch('/tmp_puppet.puppet')).blob()], 'M.puppet')); if (window.__sheet) rig = await Puppet.setHands(rig.id, await (await fetch('/tmp_hands/sheet.png')).blob());   // his hand drawings (tmp_hands/sheet.png) when there
       const voice = await CutMedia.importFile(new File([await (await fetch('/' + window.__voice)).blob()], 'v.wav', { type: 'audio/wav' }));
       const c = Object.assign(Character.defaults(), { puppet: rig.id, voice: voice.id, script, hands: window.__hands }); await Character.prepare(c); window.__c = c;
       const A = Character.syncOf(c), d = Character.duration(c), p = Character.perfOf(c, A, rig, d), hh = rig.pivot.headH;

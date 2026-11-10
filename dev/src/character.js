@@ -34,21 +34,25 @@ const Character = (() => {
      [across, up] in head heights, and how far the hand turns (radians). His right hand mirrors them. art: the hand
      drawing from the puppet. Found by drawing each one (the hands are drawn lying on the desk, so they turn to point). */
   const GEST = {   // checked by him: turned, never mirrored (mirrored hands read back to front)
-    point: { art: 'point', at: [-0.03, -0.32, 1.95], side: 'L', len: 1.5, label: 'Point' },
+    point: { art: 'point you', at: [-0.05, -0.12, 0], side: 'L', len: 1.5, label: 'Point', old: { art: 'point', at: [-0.03, -0.32, 1.95] } },
     'finger up': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, label: 'Finger up (listen)' },
     'point aside': { art: 'point', at: [-0.02, -0.3, 1.45], side: 'L', len: 1.5, label: 'Point over there' },
     wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
-    explain: { art: 'wave', at: [0.05, -0.17, 2.6], side: 'L', len: 2, sway: 1, label: 'Explaining hand' },
+    // his own talking hands (the green screen sheet, HandSheet): used when he has loaded them, else the old drawing in 'old'
+    talk: { art: 'relaxed', at: [-0.05, -0.12, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
+    explain: { art: 'open', at: [-0.05, -0.12, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Explaining hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
+    offer: { art: 'palm up', at: [0.02, -0.1, 0], side: 'L', len: 1.5, plain: 1, label: 'Palm up (here\u2019s the thing)', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
+    steeple: { art: 'steeple', at: [0.24, -0.1, 0], side: 'both', len: 2.4, plain: 1, steeple: 1, label: 'Steeple (thinking)' },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
-    shrug: { art: 'wave', at: [0.14, -0.12, 2.35], side: 'both', len: 1.5, label: 'Shrug' },
+    shrug: { art: 'palm up', at: [0.02, -0.1, 0], side: 'both', len: 1.5, plain: 1, label: 'Shrug', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
     fist: { art: 'back fist', at: [0, 0, 0.5], sc: 1.1, side: 'both', len: 1.1, bang: 1, label: 'Bang the desk' },   // back fist: made by Puppet from the thumbs up (his fist drawing shows only its front)
     'fist shake': { art: 'back fist', at: [0, -0.3, 0.5], sc: 1.1, side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
     slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
-    beat: { art: null, at: [0, -0.07, 0.12], side: 'L', len: 0.7, label: 'Wee hand beat' },
+    beat: { art: 'relaxed', at: [-0.03, -0.07, 0], side: 'L', len: 0.7, plain: 1, label: 'Wee hand beat', old: { art: null, at: [0, -0.07, 0.12], plain: 0 } },
   };
-  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'explain', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
+  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', talking: 'talk', explaining: 'explain', thinking: 'steeple', think: 'steeple', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
   // words that bring a gesture with them; the common ones only when he leans on them
   const LEX = {}; const lex = (k, words, strong) => words.split(' ').forEach(w => { LEX[w] = { k, strong }; });
   // weak: everyday words, a gesture only when he leans on them; the rest always
@@ -111,7 +115,7 @@ const Character = (() => {
   const rng = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const perfMemo = new Map();
   function perfOf(cfg, A, rig, dur) {
-    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, dur.toFixed(2)]);
+    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, rig && rig.steeple ? 1 : 0, dur.toFixed(2)]);
     let box = perfMemo.get(A || 'none'); if (box && box.key === key) return box.p;
     const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E };
     const env = A ? A.env : new Float32Array(0), fps = A ? A.fps : 100, envAt = t => { const f = t * fps, i = Math.floor(f); if (i < 0 || i >= env.length - 1) return 0; return env[i] + (env[i + 1] - env[i]) * (f - i); };
@@ -135,7 +139,7 @@ const Character = (() => {
     (cfg.moves || []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
     moves.forEach(m => { if (m.kind === 'gesture') m.start = Math.max(0, m.start - 0.45); });   // the hand gets there on the word
     planBursts(cfg, A, p, moves, rig, dur);
-    if (cfg.hands !== 'tags' && A && A.words && A.words.length) planHands(cfg, A, p, moves, R, E, dur);
+    if (cfg.hands !== 'tags' && A && A.words && A.words.length) planHands(cfg, A, p, moves, R, E, dur, rig);
     moves.sort((a, b) => a.start - b.start);
     // lengths: emotions and costumes last until the next one of their kind
     moves.forEach((m, i) => { if (m.end != null) return; if (m.dur) { m.end = m.start + m.dur; return; } if (m.kind === 'burst') { m.end = m.start + 2.2; return; } if (m.kind === 'gesture') { m.end = m.start + ((GEST[m.k] && GEST[m.k].len) || 1.6) + 0.4; return; } const L0 = LEN[m.kind]; if (L0) { m.end = m.start + L0; return; } const nx = moves.slice(i + 1).find(q => q.kind === m.kind && (m.kind !== 'costume' || q.k === m.k)); m.end = nx ? nx.start : dur + 10; });
@@ -190,7 +194,7 @@ const Character = (() => {
      (about a third, a half or three quarters), more when he is worked up, less when he is sad; short throwaway lines
      stay still. The same big gesture is not used twice running. Tags always win. */
   const ACT = { calm: 0.3, natural: 0.5, auto: 0.5, animated: 0.85 };   // animated asks a little over three quarters: throwaway lines stay still whatever
-  function planHands(cfg, A, p, moves, R, E, dur) {
+  function planHands(cfg, A, p, moves, R, E, dur, rig) {
     const W = A.words, lev = A.lev || A.env, fps = A.fps, target0 = ACT[cfg.hands] || 0.5;
     // each word's stress: the loudest moment in it, and when that is
     const pk = W.map(w => { let m = 0, at = (w[0] + w[1]) / 2; for (let f = Math.floor(w[0] * fps); f <= Math.ceil(w[1] * fps) && f < lev.length; f++) if ((lev[f] || 0) > m) { m = lev[f]; at = f / fps; } return { v: m, t: Math.min(Math.max(at, w[0]), w[1]) }; });
@@ -206,7 +210,7 @@ const Character = (() => {
       // the word that calls for a bigger gesture (the common ones only when he leans on them)
       const cross = P.ex || P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage';   // fists only when he is worked up
       P.trig = null; P.ids.forEach((i, j) => { const L0 = LEX[W[i][4]]; if (!L0) return; if (!cross && GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake)) return; if (j > 0 && LEX[W[P.ids[j - 1]][4]] && LEX[W[P.ids[j - 1]][4]].k === 'wave') return; if (L0.strong && pk[i].v < Math.max(P.med, medAll) + 0.03 && P.ids.length > 2) return; const sc = (L0.strong ? 1 : 2) + pk[i].v; if (!P.trig || sc > P.trig.sc) P.trig = { k: L0.k, i, sc, why: W[i][4] }; });
-      if (!P.trig && P.q) P.trig = { k: 'shrug', i: P.ids[P.ids.length - 1], sc: 1.2, why: '?' };
+      if (!P.trig && P.q) P.trig = { k: 'offer', i: P.ids[P.ids.length - 1], sc: 1.2, why: '?' };
       if (P.ex && (P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage')) P.trig = { k: 'fist', i: P.peak, sc: 2.5, why: '!' };
       const len = P.b - P.a, throwaway = len < 0.7 || P.ids.length <= 2;
       P.pri = (P.trig ? 0.8 + P.trig.sc * 0.3 : 0) + (pk[P.peak].v - medAll) * 3 + Math.min(len, 3) / 3 + (P.ex ? 0.4 : 0) + R() * 0.35 - (throwaway && !P.trig ? 2 : 0) - (laughing(P.a, P.b) ? 5 : 0);
@@ -228,15 +232,17 @@ const Character = (() => {
       const fx = fixed.find(q => q.a > start && q.a < end); if (fx) end = Math.max(start + 0.6, fx.a);   // stop where a tag takes over
       const hot = u.ph.some(P => P.mood === 'rage' || P.mood === 'furious' || P.mood === 'angry'), side = hot && u.ph.some(P => P.ex) && R() < 0.5 ? 'both' : 'L';
       if (end - start < 0.6 || clash(start, end, side)) return;
-      const base = target0 <= 0.3 && !hot ? 'beat' : (n++ % 3 === 2 ? 'beat' : 'explain');
-      moves.push({ id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side, start, end, auto: true, plan: true, pri: 1, tag: base === 'beat' ? 'Hand beats' : 'Talking hand' });
+      const k4 = n++ % 4, base = !hot && end - start > 2.2 && k4 === 3 && rig && rig.steeple ? 'steeple' : target0 <= 0.3 && !hot ? 'beat' : k4 === 1 ? 'explain' : k4 === 2 ? 'beat' : 'talk';   // mostly the relaxed hand, sometimes the open one, now and then a steeple on a long calm thought
+      moves.push({ id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, auto: true, plan: true, pri: 1, tag: GEST[base].label });
+      if (base === 'steeple') return;   // the hands stay together for the thought
       // at most one bigger gesture in the unit, on its word's stressed syllable, never the same one twice running
       const best = u.ph.map(P => P.trig && Object.assign({ P }, P.trig)).filter(Boolean).sort((x, y) => y.sc - x.sc)[0];
-      if (!best || !GEST[best.k] || best.k === lastBig || pk[best.i].t - (lastT[best.k] != null ? lastT[best.k] : -99) < 8) return;
+      const fam = k => GEST[k] && (GEST[k].art === 'palm up' || k === 'shrug' || k === 'offer') ? 'palm' : k;   // a shrug and an offered palm count as the same move
+      if (!best || !GEST[best.k] || fam(best.k) === lastBig || pk[best.i].t - (lastT[fam(best.k)] != null ? lastT[fam(best.k)] : -99) < 8) return;
       const G = GEST[best.k], s0 = Math.max(start, pk[best.i].t - 0.45), e0 = Math.min(Math.max(end, s0 + 1) + 0.2, s0 + G.len * 0.85 + 0.4), sd = G.side === 'both' ? 'both' : 'L';
       if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
       moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
-      lastBig = best.k; lastT[best.k] = pk[best.i].t;
+      lastBig = fam(best.k); lastT[fam(best.k)] = pk[best.i].t;
     });
   }
   const easeWin = (t, a, b, i, o) => sm((t - a) / i) * (1 - sm((t - b) / o));
@@ -281,18 +287,22 @@ const Character = (() => {
     const want = { L: [], R: [] }, hh2 = hh;
     for (const m of p.moves) {
       if (m.kind !== 'gesture' || t < m.start || t >= m.end) continue;
-      const G = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }, u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.48, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
+      let G = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (G.art && !rig.triggers[G.art]) { if (!G.old) continue; G = Object.assign({}, G, G.old); }   // his own drawings when loaded, else the old ones
+      const u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.48, 0.4), sides = m.side === 'both' || G.steeple ? ['L', 'R'] : [m.side || 'L'];
       sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = G.at;
         if (G.wag) ar += Math.sin(u * (G.wagHz || 14)) * G.wag * sm((u - 0.2) / 0.25);
         if (G.shake) { const on = sm((u - 0.3) / 0.2); ax += Math.sin(u * 27) * 0.014 * on; ay += Math.sin(u * 31 + 1) * 0.016 * on; }
         if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
         if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
         if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }
-        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: ay * hh2, rot: ar * mir, art: G.art, fy: G.fy || 0, sc: G.sc || 1 }); });
+        let art = G.art, dx0 = ax * hh2 * mir;
+        if (G.steeple && rig.steeple && rig.arms.L && rig.arms.R) { const S = rig.steeple, cL = rig.arms.L.cuff, cR = rig.arms.R.cuff, mid = (cL[0] + cR[0]) / 2, xL = mid + S.half - cL[0] + ax * hh2;   // both hands meet in front of him (to the right of the mic): the drawing on his left hand, his right hand hidden at its other cuff
+          if (sd === 'L') dx0 = xL; else { dx0 = cL[0] + xL + S.other[0] - cR[0]; ay += S.other[1] / hh2; art = '-hide'; } }
+        want[sd].push({ w, pri: m.pri || 2, dx: dx0, dy: ay * hh2, rot: ar * mir, art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd]; if (!L2.length) return; let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
-      L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; if (!best || q.ww > best.ww) best = q; });
-      if (tw <= 0) return; pose.arms[sd] = { dx: dx / tw * mx, dy: dy / tw * mx, rot: rot / tw * mx, fy: best.art && mx > 0.3 ? best.fy : 0, sc: best.art && mx > 0.3 ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1 }; if (best.art && mx > 0.3) apply(best.art, sd); });
+      let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; if (!best || q.ww > best.ww) best = q; });
+      if (tw <= 0) return; pose.arms[sd] = { dx: dx / tw * mx, dy: dy / tw * mx, rot: rot / tw * mx, fy: best.art && mx > 0.3 ? best.fy : 0, sc: best.art && mx > 0.3 ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3 }; if (best.art && best.art !== '-hide' && mx > 0.3) apply(best.art, sd); });   // the plain inside of the sleeve as the forearm turns over
     // a laugh: head back, eyes screwed shut, mouth wide open on every ha, shoulders bouncing
     const lw = cl(em.laugh, 0, 1);
     if (lw > 0.03) {
@@ -362,6 +372,18 @@ const Character = (() => {
     Puppet.list().then(L => { if (!L.length) return; pupSel.innerHTML = ''; L.forEach(p => pupSel.append(H('option', { value: p.id, textContent: p.name, selected: p.id === cfg.puppet }))); if (!cfg.puppet || !L.some(p => p.id === cfg.puppet)) { cfg.puppet = L[L.length - 1].id; redo(); } });
     root.append(card('Your character', field('Puppet', pupSel), H('div', { className: 'btnrow' }, btn(rig ? 'Load another puppet' : 'Load my puppet', () => pick.click(), rig ? '' : 'primary')), pick, note,
       rig ? H('p', { className: 'hint', textContent: `${rig.visemes.length} mouth shapes, ${Object.keys(rig.views).length} head turns, and ${Object.keys(rig.triggers).map(k => FRIENDLY[k] || k).join(', ') || 'no swaps'}. It stays on this computer.` }) : H('p', { className: 'hint', textContent: 'Use the .puppet file from Character Animator (File, Export, Puppet), or the Photoshop .psd behind it. It is kept in this browser and never uploaded.' })));
+    // his own talking hands: a picture of drawings on green (HandSheet), kept with the puppet
+    if (rig) {
+      const hpick = H('input', { type: 'file', accept: 'image/*' }); hpick.style.display = 'none'; const hnote = H('p', { className: 'hint', 'aria-live': 'polite' });
+      hpick.addEventListener('change', async () => { const f = hpick.files && hpick.files[0]; if (!f) return; hnote.textContent = 'Cutting out your hands…'; try { await Puppet.setHands(rig.id, f, null); redo(); } catch (e) { hnote.textContent = e.message || String(e); } });
+      const sh = rig.sheet, kids = [];
+      if (sh && sh.pieces.length) { const roles = sh.roles.map(r => r.slice());
+        sh.pieces.forEach((pc, i) => { const cv = H('canvas', { width: 72, height: 72, className: 'ch-hand' }), g = cv.getContext('2d'), tmp = new OffscreenCanvas(pc.w, pc.h); tmp.getContext('2d').putImageData(pc.data, 0, 0); const k = Math.min(72 / pc.w, 72 / pc.h); g.drawImage(tmp, (72 - pc.w * k) / 2, (72 - pc.h * k) / 2, pc.w * k, pc.h * k);
+          const opts = HandSheet.ROLES.flatMap(([v, l]) => v === 'steeple' || v === '' ? [[v + '|both', l]] : [[v + '|L', l + ', his left'], [v + '|R', l + ', his right']]);
+          kids.push(H('div', { className: 'ch-handrow' }, cv, sel((roles[i][0] || '') + '|' + (roles[i][0] === 'steeple' || !roles[i][0] ? 'both' : roles[i][1]), opts, v => { const [r, sd] = v.split('|'); roles[i] = [r, sd]; Puppet.setHands(rig.id, null, roles).then(() => redo()); }, 'What this hand is'))); }); }
+      root.append(card('Your talking hands', ...kids, H('div', { className: 'btnrow' }, btn(sh ? 'Load another sheet' : 'Load my hand drawings', () => hpick.click(), sh ? '' : 'primary'), sh ? btn('Take them out', () => Puppet.setHands(rig.id, null, null).then(() => redo())) : null), hpick, hnote,
+        H('p', { className: 'hint', textContent: sh ? 'Matched to his own hands in size and colour. He uses them for talking, explaining, palms up, pointing at you and the steeple; without them he uses his puppet\u2019s hands.' : 'A picture of your hand drawings on green (each with a bit of sleeve). They are cut out, matched to his hands in size and colour, and kept on this computer with the puppet.' })));
+    }
     // the voice
     const vpick = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm' }); vpick.style.display = 'none'; const vnote = H('p', { className: 'hint', 'aria-live': 'polite' });
     vpick.addEventListener('change', async () => { const f = vpick.files && vpick.files[0]; if (!f || typeof CutMedia === 'undefined') return; vnote.textContent = 'Bringing in ' + f.name + '…'; try { const m = await CutMedia.importFile(f, (q) => { vnote.textContent = 'Bringing in ' + f.name + '… ' + Math.round(q * 100) + '%'; }); cfg.voice = m.id; cfg.voiceName = f.name; redo(); } catch (e) { vnote.textContent = e.message || String(e); } });

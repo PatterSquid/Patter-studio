@@ -469,3 +469,4 @@ body.aud main > :not(#audioWs){display:none!important}
 .au-big{width:100%;font-size:16px;padding:12px}
 .au-sl input{width:100%}
 .au-val{float:right;color:var(--muted);font-weight:400}
+.ch-handrow{display:flex;align-items:center;gap:8px;margin:4px 0}.ch-handrow select{flex:1;min-width:0}.ch-hand{background:#2b3a2b;border-radius:6px;flex:none}

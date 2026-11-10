@@ -26,7 +26,7 @@ open(os.path.join(SRC, 'story.js'), 'w').write(''.join(open(os.path.join(ROOT, '
 _rn = open(os.path.join(ROOT, 'assets', 'rnnoise', 'rnnoise.js')).read().replace('export default createRNNWasmModule;', '')
 open(os.path.join(SRC, 'rnnoise_lib.js'), 'w').write(_rn + '\nconst RNNOISE_WASM = ' + repr(base64.b64encode(open(os.path.join(ROOT, 'assets', 'rnnoise', 'rnnoise.wasm'), 'rb').read()).decode()) + ';\n')
 FILES = ['fonts.js', 'mp4mux.js', 'engine.js', 'ui.js', 'charts.js', 'timeline.js', 'picto.js', 'geodata.js', 'globegl.js', 'globe.js', 'routes.js',
-         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'cut_mp4.js', 'cut_media.js', 'cut_gl.js', 'cut_audio.js', 'cut_intro.js', 'video.js', 'cut_export.js', 'cut_ui.js', 'cut_insp.js', 'puppet.js', 'lipsync.js', 'rhubarb.js', 'character.js', 'rnnoise_lib.js', 'audio_fx.js', 'audio_ui.js', 'studio_room.js', 'studio_events.js', 'studio_decor.js', 'studio.js', 'g3.js', 'squid.js', 'intro_scenes.js', 'intro.js', 'layers.js', 'editor.js', 'render.js', 'repair.js', 'app.js']
+         'map.js', 'flights.js', 'flyover.js', 'news.js', 'media.js', 'packs.js', 'story.js', 'cut_mp4.js', 'cut_media.js', 'cut_gl.js', 'cut_audio.js', 'cut_intro.js', 'video.js', 'cut_export.js', 'cut_ui.js', 'cut_insp.js', 'hand_sheet.js', 'puppet.js', 'lipsync.js', 'rhubarb.js', 'character.js', 'rnnoise_lib.js', 'audio_fx.js', 'audio_ui.js', 'studio_room.js', 'studio_events.js', 'studio_decor.js', 'studio.js', 'g3.js', 'squid.js', 'intro_scenes.js', 'intro.js', 'layers.js', 'editor.js', 'render.js', 'repair.js', 'app.js']
 VERSION = open(os.path.join(ROOT, 'VERSION')).read().strip()
 html = open(os.path.join(SRC, 'index.html')).read()
 css = open(os.path.join(SRC, 'style.css')).read()
