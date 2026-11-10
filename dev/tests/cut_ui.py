@@ -92,7 +92,7 @@ async def main():
         await pg.click('.cl-tabs button:has-text("Patter")'); await pg.evaluate("()=>PatterCut.player.seek(0)"); await pg.locator('.cl-tile', has_text='Chart').click(); await pg.wait_for_timeout(400)
         ok('Patter chart clip added', await C("c.items.some(i=>i.kind==='clip'&&i.mod==='charts')"))
         # 16. sound effect made and added
-        await pg.click('.cl-tabs button:has-text("Audio")'); await pg.locator('.cl-tile', has_text='Whoosh').click()
+        await pg.click('.cl-tabs button:has-text("Audio")'); await pg.click('.cl-sub2 button:has-text("Made here")'); await pg.locator('.cl-tile', has_text='Whoosh').click()
         for i in range(30):
             if await C("(c.tracks||[]).filter(T=>T.kind==='audio').reduce((a,T)=>a+T.items.length,0)>=2"): break
             await pg.wait_for_timeout(300)
