@@ -3,5 +3,6 @@ dev/src/story.js
 dev/fakehome/
 __pycache__/
 dev/src/studio_room.js
+dev/src/mug_logo.js
 dev/tmp_*
 dev/src/fonts.js
