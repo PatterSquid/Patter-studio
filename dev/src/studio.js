@@ -57,7 +57,9 @@ const Studio = (() => {
   function duration(cfg) {
     const L = loopOf(cfg); if (+cfg.len > 0) return cl(+cfg.len, 1, 1800);
     const A = cfg.avatar, inf = avInfo(A);
-    if (inf) return Math.max(1, inf.dur - (+A.inPt || 0));
+    // with you (or your character) in it, it runs to the end of your take or of the last bar on the timeline, whichever is later
+    const bars = ['events', 'stings', 'shows'].flatMap(k => Array.isArray(cfg[k]) ? cfg[k] : []).reduce((m, b) => { const e = (+(b && b.start) || 0) + (+(b && b.dur) || 0); return isFinite(e) ? Math.max(m, e) : m; }, 0);
+    if (inf) return Math.max(1, inf.dur - (+A.inPt || 0), Math.min(1800, bars));
     return L;
   }
 

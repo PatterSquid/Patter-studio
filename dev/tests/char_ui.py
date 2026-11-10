@@ -36,7 +36,7 @@ async def main():
     # play a moment with sound
     await pg.click('#playBtn'); await pg.wait_for_timeout(1500); await pg.click('#playBtn')
     # undo the script
-    await pg.locator('.stagecol').click(position={'x': 5, 'y': 5}); await pg.keyboard.press('Control+z'); await pg.wait_for_timeout(500)
+    await pg.locator('.pvbox').click(position={'x': 5, 'y': 5}); await pg.keyboard.press('Control+z'); await pg.wait_for_timeout(500)
     print('after undo script starts:', (await pg.evaluate("()=>JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.char.script"))[:30])
     await pg.keyboard.press('Control+y'); await pg.wait_for_timeout(500)
     # export with the voice (as the panel's button does, through the editor's exporter)
