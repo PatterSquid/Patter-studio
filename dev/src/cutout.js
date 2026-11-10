@@ -145,5 +145,7 @@ const Cutout = (() => {
   async function cut(bm, opts = {}) { await start(opts); const c = await createImageBitmap(bm); return job({ type: 'cut', bm: c, max: opts.max }, [c]); }
   async function refine(bm, maskBm) { await start(); const c = await createImageBitmap(bm), m = await createImageBitmap(maskBm); return job({ type: 'refine', bm: c, mask: m }, [c, m]); }
   function stop() { if (W) W.terminate(); W = null; jobs.forEach(J => J.rej(new Error('Stopped'))); jobs.clear(); urls.forEach(u => URL.revokeObjectURL(u)); urls = []; }
-  return { check, download, cut, refine, stop, hooks, get state() { return state; }, get how() { return how; } };
+  // started quietly when the Thumbnail tab opens, so the first cut out is quick
+  async function warm() { try { if ((await check()) === 'ready' && !W) await start(); } catch (e) { } }
+  return { check, download, cut, refine, stop, hooks, warm, get state() { return state; }, get how() { return how; } };
 })();

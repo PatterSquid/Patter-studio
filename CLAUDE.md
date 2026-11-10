@@ -139,6 +139,13 @@ layers along the bottom (`.th-layers`, drag to reorder). The header Export opens
   links the page makes: the runtime goes to the helper as text, its glue as a data: module (with `import.meta.url` swapped
   for a fixed address) and the wasm as `wasmBinary`. `tests/thumb_cut_file.py` checks that. Tests: `tests/thumb_cut.py` (serves `dev/tmp_cutout/`, a copy with a full precision model because
   SwiftShader WebGPU here has no 16 bit floats), `tests/thumb_ui.py`.
+* **Shapes** (`dev/src/thumb_shapes.js` `ThumbShapes`): he found plain straight shapes "spectacularly basic". Curved, swoosh,
+  loop and hand drawn arrows, scribbled circle, ring, underline, cross, tick, brush stroke, speech, shout and thought
+  bubbles, boom, burst, star, heart and the basics, each a ready look in `PRESETS` (the Shapes drawer). A shape is a list
+  of outlines (ribbons along smooth curves for strokes), each filled in turn so parts never cut holes in each other; the
+  outline is drawn fat behind the fill; `fill2` gradient, `depth`/`depthC` 3D extrusion, `shine`, `bend`, `thick`,
+  `rough` (low frequency wobble, `seed`), `tail`. Words have 3D depth too (`depth: { d, c }`). The remover warms up
+  (`Cutout.warm`) 1.5 s after the tab opens, so the first cut out is quick.
 * He asked for the Basic Logic channel's thumbnail style. Do not make layouts or test pictures that mock people for race
   or religion.
 

@@ -49,7 +49,7 @@ const Thumb = (() => {
       bg: { k: 'radial', c1: '#ffd21f', c2: '#ff7a00' }, make: f => { const [W, H] = DIMS[f] || DIMS['16:9'], v = W < H;
         return [newImage({ name: 'Picture', x: v ? W / 2 : W * 0.7, y: v ? H * 0.66 : H * 0.56, w: v ? W * 0.9 : W * 0.5, h: v ? H * 0.6 : H * 0.88, slot: true, autoCut: true, outline: { on: true, c: '#ffffff', w: 14 }, shadow: { on: true, c: '#000000', b: 30, x: 0, y: 10, o: 0.6 } }),
           newText({ name: 'Words', text: 'NO\nWAY', x: v ? W / 2 : W * 0.27, y: v ? H * 0.2 : H * 0.42, w: v ? W * 0.8 : W * 0.44, size: v ? 260 : 210, font: 'Anton', cols: ['#ffffff'], stroke: { w: 16, c: '#000000' }, fit: true }),
-          newShape({ name: 'Arrow', shape: 'arrow', x: v ? W * 0.3 : W * 0.47, y: v ? H * 0.42 : H * 0.7, w: 230, h: 120, rot: v ? 60 : -20, fill: '#e8322c', stroke: '#ffffff', sw: 8 })]; } },
+          newShape({ name: 'Curved arrow', shape: 'carrow', x: v ? W * 0.3 : W * 0.47, y: v ? H * 0.43 : H * 0.7, w: 250, h: 190, rot: v ? 40 : 0, fill: '#e8322c', stroke: '#ffffff', sw: 7, depth: 8, thick: 0.2, bend: 0.5 })]; } },
     word: { name: 'One big word', note: 'A dark gradient, one huge word with a thick outline, the picture in the corner.',
       bg: { k: 'grad', c1: '#0b1530', c2: '#3a0f2e', ang: 120 }, make: f => { const [W, H] = DIMS[f] || DIMS['16:9'], v = W < H;
         return [newImage({ name: 'Picture', x: v ? W / 2 : W * 0.76, y: v ? H * 0.7 : H * 0.58, w: v ? W : W * 0.5, h: v ? H * 0.6 : H * 0.85, slot: true, autoCut: true, glow: { on: true, c: '#4cc3ff', b: 40 } }),
@@ -59,7 +59,7 @@ const Thumb = (() => {
       bg: { k: 'grad', c1: '#c4161c', c2: '#0b3d91', ang: 90 }, make: f => { const [W, H] = DIMS[f] || DIMS['16:9'], v = W < H;
         return [newImage({ name: 'Left picture', x: v ? W / 2 : W * 0.25, y: v ? H * 0.27 : H * 0.55, w: v ? W * 0.8 : W * 0.48, h: v ? H * 0.45 : H * 0.9, slot: true, autoCut: true, outline: { on: true, c: '#ffffff', w: 10 } }),
           newImage({ name: 'Right picture', x: v ? W / 2 : W * 0.75, y: v ? H * 0.75 : H * 0.55, w: v ? W * 0.8 : W * 0.48, h: v ? H * 0.45 : H * 0.9, slot: true, autoCut: true, flipH: true, outline: { on: true, c: '#ffffff', w: 10 } }),
-          newShape({ name: 'Burst', shape: 'burst', x: W / 2, y: H / 2, w: 260, h: 260, fill: '#ffd21f', stroke: '#000000', sw: 8 }),
+          newShape({ name: 'Boom', shape: 'boom', x: W / 2, y: H / 2, w: 290, h: 270, fill: '#ffd21f', fill2: '#ff8a00', stroke: '#000000', sw: 8, depth: 8, depthC: '#c0392b' }),
           newText({ name: 'VS', text: 'VS', x: W / 2, y: H / 2, w: 220, size: 120, font: 'Anton', cols: ['#000000'] })]; } },
     news: { name: 'Breaking', note: 'Your picture full size with a red banner and a headline strip along the bottom.',
       bg: { k: 'colour', c1: '#111111' }, make: f => { const [W, H] = DIMS[f] || DIMS['16:9'], v = W < H;
@@ -146,26 +146,14 @@ const Thumb = (() => {
     if (B.on) { g.save(); g.globalAlpha *= B.op == null ? 1 : +B.op; g.fillStyle = B.c || '#e8322c'; const bw = L.fit ? L.w : Math.max(...T.lines.map(q => q.w), 1) + pad * 2, bx = al === 'left' ? -L.w / 2 : al === 'right' ? L.w / 2 - bw : -bw / 2; rr(g, bx, -H2 / 2, bw, H2, +B.r || 0); g.fill(); g.restore(); }
     const cols = Array.isArray(L.cols) && L.cols.length ? L.cols : ['#ffffff'];
     const pass = (fn) => T.lines.forEach((q, i) => { g.font = fontStr(L, q.size); g.letterSpacing = (L.ls || 0) + 'px'; fn(q, i, top + q.y + q.asc); });
-    const S2 = L.stroke2 || {}, S1 = L.stroke || {};
+    const S2 = L.stroke2 || {}, S1 = L.stroke || {}, D = L.depth || {};
+    if (+D.d > 0) { const n = Math.ceil(+D.d / 1.5); for (let k = n; k >= 1; k--) { const o = +D.d * k / n; pass((q, i, y) => { const ow = 2 * ((+S1.w || 0) + (+S2.w || 0)); g.save(); g.translate(o * 0.45, o); if (ow > 0) { g.strokeStyle = (+S2.w > 0 ? S2.c : S1.c) || '#000'; g.lineWidth = ow; g.strokeText(q.s, ax, y); } g.fillStyle = D.c || '#7a0d0d'; g.fillText(q.s, ax, y); g.restore(); }); } }
     if (+S2.w > 0) pass((q, i, y) => { g.strokeStyle = S2.c || '#fff'; g.lineWidth = (2 * (+S1.w || 0) + 2 * +S2.w); g.strokeText(q.s, ax, y); });
     if (+S1.w > 0) pass((q, i, y) => { g.strokeStyle = S1.c || '#000'; g.lineWidth = 2 * +S1.w; g.strokeText(q.s, ax, y); });
     g.save(); if (+S1.w > 0 || +S2.w > 0) g.shadowColor = 'transparent'; pass((q, i, y) => { g.fillStyle = cols[Math.min(i, cols.length - 1)]; g.fillText(q.s, ax, y); }); g.restore();
     return H2;
   }
   function rr(g, x, y, w, h, r) { w = Math.abs(w) || 0; h = Math.abs(h) || 0; r = Math.max(0, Math.min(+r || 0, w / 2, h / 2)); g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-  function shapePath(g, L) {
-    const w = L.w, h = L.h, x = -w / 2, y = -h / 2; g.beginPath();
-    switch (L.shape) {
-      case 'circle': g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); break;
-      case 'round': rr(g, x, y, w, h, Math.min(w, h) * 0.22); break;
-      case 'tri': g.moveTo(0, y); g.lineTo(-x, -y); g.lineTo(x, -y); g.closePath(); break;
-      case 'line': g.rect(x, -Math.max(2, h * 0.08) / 2, w, Math.max(2, h * 0.08)); break;
-      case 'arrow': { const sh = h * 0.42, hl = Math.min(w * 0.45, h * 0.95); g.moveTo(x, -sh / 2); g.lineTo(-x - hl, -sh / 2); g.lineTo(-x - hl, y); g.lineTo(-x, 0); g.lineTo(-x - hl, -y); g.lineTo(-x - hl, sh / 2); g.lineTo(x, sh / 2); g.closePath(); break; }
-      case 'star': case 'burst': { const n = L.shape === 'star' ? 5 : 14, ri = L.shape === 'star' ? 0.45 : 0.72; for (let i = 0; i < n * 2; i++) { const a = -Math.PI / 2 + i * Math.PI / n, r = i % 2 ? ri : 1; const px = Math.cos(a) * w / 2 * r, py = Math.sin(a) * h / 2 * r; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.closePath(); break; }
-      case 'banner': { const k = Math.min(w * 0.08, h * 0.5); g.moveTo(x, y); g.lineTo(-x, y); g.lineTo(-x - k, 0); g.lineTo(-x, -y); g.lineTo(x, -y); g.lineTo(x + k, 0); g.closePath(); break; }
-      default: if (+L.r > 0) rr(g, x, y, w, h, +L.r); else g.rect(x, y, w, h);
-    }
-  }
   // Height of a text layer follows its words; everything else keeps its own
   function sizeOf(L, g) { if (L.k === 'text') { L.h = drawText(g || meas(), L, true); } return [L.w, L.h]; }
   let measCv = null; const meas = () => (measCv || (measCv = document.createElement('canvas'))).getContext('2d');
@@ -184,11 +172,11 @@ const Thumb = (() => {
     if (L.k === 'image') { const C = composite(L, k); if (C) return { cv: C.cv, x: -L.w / 2 - C.pad * L.w / C.W, y: -L.h / 2 - C.pad * L.h / C.H, w: C.cv.width * L.w / C.W, h: C.cv.height * L.h / C.H };
       if (opts.clean) return null; }
     if (L.k === 'text') sizeOf(L);
-    const sw = L.k === 'text' ? 2 * ((+(L.stroke || {}).w || 0) + (+(L.stroke2 || {}).w || 0)) + (+L.size || 100) * 0.4 : L.k === 'shape' ? (+L.sw || 0) + 4 : 8;
+    const sw = L.k === 'text' ? 2 * ((+(L.stroke || {}).w || 0) + (+(L.stroke2 || {}).w || 0)) + (+L.size || 100) * 0.4 + (+(L.depth || {}).d || 0) * 1.2 : L.k === 'shape' ? (+L.sw || 0) + (+L.depth || 0) * 1.2 + 10 + Math.max(L.w, L.h) * 0.06 : 8;
     const pw = L.w + sw * 2, ph = L.h + sw * 2; if (!(pw > 0 && ph > 0 && pw * k < 16000 && ph * k < 16000)) return null; const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(pw * k)); cv.height = Math.max(1, Math.ceil(ph * k));
     const g = cv.getContext('2d'); g.setTransform(k, 0, 0, k, pw * k / 2, ph * k / 2);
     if (L.k === 'text') drawText(g, L);
-    else if (L.k === 'shape') { shapePath(g, L); if (L.fillOn !== false) { g.fillStyle = L.fill || '#e8322c'; g.fill(); } if (+L.sw > 0) { g.lineJoin = 'round'; g.strokeStyle = L.stroke || '#fff'; g.lineWidth = +L.sw; g.stroke(); } }
+    else if (L.k === 'shape') ThumbShapes.draw(g, L);
     else { // an empty picture slot
       g.setLineDash([18, 12]); g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 4; rr(g, -L.w / 2, -L.h / 2, L.w, L.h, 18); g.fillStyle = 'rgba(255,255,255,0.06)'; g.fill(); g.stroke(); g.setLineDash([]);
       g.fillStyle = 'rgba(255,255,255,0.75)'; g.font = '600 ' + Math.max(18, Math.min(34, L.w / 14)) + 'px Arial, sans-serif'; g.textAlign = 'center'; g.fillText(L.asset ? 'Loading…' : 'Drop a picture here', 0, -6);
@@ -334,7 +322,6 @@ const Thumb = (() => {
 
   /* ---------- panels ---------- */
   const EMOJI = ['😱', '😂', '🤬', '😭', '🤡', '💀', '👀', '🔥', '💯', '❌', '✅', '⚠️', '❓', '❗', '💥', '💰', '🍺', '🥃', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', '🇬🇧', '👑', '🚨', '🤔', '🙄', '😡', '🥴', '🤮', '👎', '👍', '🖕'];
-  const SHAPES = [['rect', 'Box'], ['round', 'Rounded'], ['circle', 'Circle'], ['arrow', 'Arrow'], ['line', 'Line'], ['star', 'Star'], ['burst', 'Burst'], ['tri', 'Triangle'], ['banner', 'Banner']];
   const TEXTS = {
     two: { name: 'Two colour lines', o: { text: 'WHITE LINE\nRED LINE', font: 'Oswald', cols: ['#ffffff', '#ff3b30'], fit: true, size: 120, w: 560 } },
     outline: { name: 'Thick outline', o: { text: 'BIG WORDS', font: 'Anton', cols: ['#ffffff'], stroke: { w: 14, c: '#000000' }, size: 150, w: 700 } },
@@ -360,8 +347,11 @@ const Thumb = (() => {
     else if (d === 'text') { box.append(head('Text'), H('p', { className: 'hint', textContent: 'Click one to add it, then type your words on the right.' })); const grid = H('div', { className: 'th-col' });
       Object.entries(TEXTS).forEach(([k, T]) => { const L = newText(JSON.parse(JSON.stringify(T.o))), c = document.createElement('canvas'); c.width = 240; c.height = 70; const g = c.getContext('2d'); sizeOf(L, g); const s = Math.min(220 / L.w, 60 / Math.max(1, L.h)); g.translate(120, 35); g.scale(s, s); drawText(g, L);
         grid.append(H('button', { type: 'button', className: 'th-tline', title: T.name, on: { click: () => addLayer(newText(JSON.parse(JSON.stringify(T.o)))) } }, c)); }); box.append(grid); }
-    else if (d === 'shape') { box.append(head('Shapes')); const grid = H('div', { className: 'th-sgrid' });
-      SHAPES.forEach(([k, n]) => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const g = c.getContext('2d'), L = newShape({ shape: k, w: 50, h: k === 'line' ? 30 : 36, fill: '#f5821f' }); g.translate(32, 24); shapePath(g, L); g.fillStyle = '#f5821f'; g.fill(); grid.append(tile(n, () => addLayer(newShape({ shape: k, name: n, w: k === 'line' ? 400 : k === 'arrow' ? 260 : 240, h: k === 'line' ? 80 : k === 'arrow' ? 130 : k === 'banner' ? 110 : 240, fill: '#e8322c' })), c)); }); box.append(grid); }
+    else if (d === 'shape') { box.append(head('Shapes'), H('p', { className: 'hint', textContent: 'Click one to add it. Then on the right: colours, outline, 3D depth, shine, and the bend of curved arrows.' }));
+      ThumbShapes.PRESETS.forEach(([grp, list]) => { const grid = H('div', { className: 'th-sgrid' }); box.append(head(grp), grid);
+        list.forEach(([n, o]) => { const c = document.createElement('canvas'), dpr = 2; c.width = 72 * dpr; c.height = 56 * dpr; c.style.width = '72px'; c.style.height = '56px'; const g = c.getContext('2d'), L = newShape(Object.assign({ id: 'p' + n }, JSON.parse(JSON.stringify(o)))), pad = 10 + (+L.sw || 0) + (+L.depth || 0), k = Math.min((72 * dpr - 12) / (L.w + pad * 2), (56 * dpr - 10) / (L.h + pad * 2));
+          g.translate(36 * dpr, 28 * dpr); g.scale(k, k); try { ThumbShapes.draw(g, L); } catch (e) { }
+          grid.append(tile(n, () => { const [PW, PH] = dims(W.cfg); addLayer(newShape(Object.assign({ name: n, x: PW / 2, y: PH / 2 }, JSON.parse(JSON.stringify(o))))); }, c)); }); }); }
     else if (d === 'emoji') { box.append(head('Stickers')); const grid = H('div', { className: 'th-egrid' });
       EMOJI.forEach(e => grid.append(H('button', { type: 'button', className: 'th-emo', textContent: e, on: { click: () => addLayer(newText({ name: 'Sticker', text: e, upper: false, font: 'Segoe UI Emoji', weight: 400, size: 160, w: 200, cols: ['#ffffff'] })) } }))); box.append(grid); }
     else if (d === 'font') { box.append(head('Your fonts'), H('p', { className: 'hint', textContent: 'Add a font file you have (TTF or OTF, like the ones you used in Canva). It is kept in this browser and shows in every font list.' }), btn('Add a font file', () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.ttf,.otf,.woff,.woff2'; i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return; try { const n = await addFont(f); say('Added the font ' + n + '.'); const L = selL(); if (L && L.k === 'text') { L.font = n; L.weight = 400; changed(true); } drawer(); } catch (e) { say('That font file could not be read.'); } }; i.click(); }, 'primary'),
@@ -426,11 +416,20 @@ const Thumb = (() => {
         field('Line up', seg(L.align || 'center', [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']], v => { L.align = v; })),
         slider('Letter spacing', L.ls || 0, -10, 40, 0.5, v => { L.ls = v; }, px), slider('Line spacing', L.lh == null ? 1 : L.lh, 0.6, 1.8, 0.02, v => { L.lh = v; }, v => v.toFixed(2))),
         card('Outline', slider('Outline', L.stroke.w, 0, 40, 1, v => { L.stroke.w = v; }, px), ...(L.stroke.w ? [colour('Outline colour', L.stroke.c, v => { L.stroke.c = v; })] : []),
-          slider('Second outline', L.stroke2.w, 0, 40, 1, v => { L.stroke2.w = v; }, px), ...(L.stroke2.w ? [colour('Second outline colour', L.stroke2.c, v => { L.stroke2.c = v; })] : [])),
+          slider('Second outline', L.stroke2.w, 0, 40, 1, v => { L.stroke2.w = v; }, px), ...(L.stroke2.w ? [colour('Second outline colour', L.stroke2.c, v => { L.stroke2.c = v; })] : []),
+          slider('3D depth', (L.depth || {}).d || 0, 0, 40, 1, v => { L.depth = Object.assign({ c: '#7a0d0d' }, L.depth || {}, { d: v }); }, v => v ? Math.round(v) + ' px' : 'Off'), ...((L.depth || {}).d ? [colour('Depth colour', L.depth.c || '#7a0d0d', v => { L.depth.c = v; })] : [])),
         card('Box behind', onoff('Box behind the words', L.box.on, v => { L.box.on = v; }), ...(L.box.on ? [colour('Box colour', L.box.c, v => { L.box.c = v; }), slider('Padding', L.box.pad, 0, 80, 1, v => { L.box.pad = v; }, px), slider('Round corners', L.box.r, 0, 60, 1, v => { L.box.r = v; }, px), slider('Box see through', 1 - L.box.op, 0, 1, 0.05, v => { L.box.op = Math.round((1 - v) * 100) / 100; }, pct)] : [])),
         ...fxCards(L)); return; }
-    if (L.k === 'shape') { box.append(card('Shape', seg(L.shape, SHAPES, v => { L.shape = v; }), onoff('Filled', L.fillOn !== false, v => { L.fillOn = v; }), ...(L.fillOn !== false ? [colour('Fill colour', L.fill, v => { L.fill = v; })] : []),
-        slider('Outline', L.sw || 0, 0, 40, 1, v => { L.sw = v; }, px), ...(L.sw ? [colour('Outline colour', L.stroke, v => { L.stroke = v; })] : []), ...(L.shape === 'rect' ? [slider('Round corners', L.r || 0, 0, 200, 1, v => { L.r = v; }, px)] : [])), ...fxCards(L)); }
+    if (L.k === 'shape') { const SH = ThumbShapes, kinds = Object.entries(SH.NAMES);
+      const ksel = H('select', { 'aria-label': 'Shape', on: { change: e => { L.shape = e.target.value; full(); } } }, ...kinds.map(([k, n]) => H('option', { value: k, selected: k === L.shape, textContent: n })));
+      box.append(card('Shape', field('Shape', ksel), onoff('Filled', L.fillOn !== false, v => { L.fillOn = v; }), ...(L.fillOn !== false ? [colour('Colour', L.fill, v => { L.fill = v; }), onoff('Fade to a second colour', !!L.fill2, v => { L.fill2 = v ? SH.shade(L.fill || '#e8322c', -0.4).replace(/rgb\((\d+),(\d+),(\d+)\)/, (m, a, b, c) => '#' + [a, b, c].map(x => (+x).toString(16).padStart(2, '0')).join('')) : ''; }), ...(L.fill2 ? [colour('Second colour', L.fill2, v => { L.fill2 = v; })] : []), onoff('Shine', !!L.shine, v => { L.shine = v; })] : []),
+          ...(SH.BENDY.includes(L.shape) ? [slider('Bend', L.bend == null ? 0.5 : L.bend, -1.2, 1.2, 0.02, v => { L.bend = v; }, v => Math.round(v * 100) + '')] : []),
+          ...(SH.THICK.includes(L.shape) ? [slider('Thickness', L.thick == null ? 0.2 : L.thick, 0.03, 0.6, 0.01, v => { L.thick = v; }, v => Math.round(v * 100) + '%')] : []),
+          ...(SH.ROUGH.includes(L.shape) ? [slider('Hand drawn', L.rough || 0, 0, 1, 0.05, v => { L.rough = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'), ...(L.rough ? [btn('Draw it again differently', () => { L.seed = Math.floor(Math.random() * 1e6); full(); })] : [])] : []),
+          ...(SH.TAILED.includes(L.shape) ? [slider('Tail along the bottom', L.tail == null ? 0.25 : L.tail, 0, 1, 0.01, v => { L.tail = v; }, pct)] : []),
+          ...(L.shape === 'rect' ? [slider('Round corners', L.r || 0, 0, 200, 1, v => { L.r = v; }, px)] : [])),
+        card('Outline and 3D', slider('Outline', L.sw || 0, 0, 30, 1, v => { L.sw = v; }, px), ...(L.sw ? [colour('Outline colour', L.stroke, v => { L.stroke = v; })] : []),
+          slider('3D depth', L.depth || 0, 0, 40, 1, v => { L.depth = v; }, v => v ? Math.round(v) + ' px' : 'Off'), ...(L.depth ? [colour('Depth colour', L.depthC || '#7a0d0d', v => { L.depthC = v; })] : [])), ...fxCards(L)); }
   }
   function order(L, d) { const a = W.cfg.layers, i = a.indexOf(L), j = cl(i + d, 0, a.length - 1); if (i < 0 || i === j) return; a.splice(i, 1); a.splice(j, 0, L); changed(true); layersBar(); }
   function dup(L) { const n = JSON.parse(JSON.stringify(L)); n.id = nid(); n.x += 30; n.y += 30; n.name = (L.name || '') ; W.cfg.layers.splice(W.cfg.layers.indexOf(L) + 1, 0, n); W.sel = n.id; changed(true); layersBar(); }
@@ -439,7 +438,7 @@ const Thumb = (() => {
   function layersBar() {
     const box = W.root && W.root.querySelector('.th-layers'); if (!box) return; const { H } = UI; box.innerHTML = ''; const Ls = (W.cfg.layers || []).slice().reverse();
     box.append(H('span', { className: 'th-lhead', textContent: 'Layers' }));
-    Ls.forEach(L => { const c = document.createElement('canvas'); c.width = 44; c.height = 30; try { const g = c.getContext('2d'); if (L.k === 'image') { const C = composite(L, 0.1), b = C ? C.cv : null; if (b) { const s = Math.min(44 / b.width, 30 / b.height); g.drawImage(b, (44 - b.width * s) / 2, (30 - b.height * s) / 2, b.width * s, b.height * s); } else { g.strokeStyle = '#93a4c0'; g.setLineDash([3, 3]); g.strokeRect(4, 4, 36, 22); } } else { g.fillStyle = L.k === 'text' ? (L.cols && L.cols[0]) || '#fff' : L.fill || '#e8322c'; g.font = '700 18px Arial'; g.textAlign = 'center'; if (L.k === 'text') g.fillText((Array.from(String(L.text || 'T').trim())[0] || 'T').toUpperCase(), 22, 22); else { g.translate(22, 15); shapePath(g, Object.assign({}, L, { w: 34, h: 22 })); g.fill(); } } } catch (e) { }
+    Ls.forEach(L => { const c = document.createElement('canvas'); c.width = 44; c.height = 30; try { const g = c.getContext('2d'); if (L.k === 'image') { const C = composite(L, 0.1), b = C ? C.cv : null; if (b) { const s = Math.min(44 / b.width, 30 / b.height); g.drawImage(b, (44 - b.width * s) / 2, (30 - b.height * s) / 2, b.width * s, b.height * s); } else { g.strokeStyle = '#93a4c0'; g.setLineDash([3, 3]); g.strokeRect(4, 4, 36, 22); } } else { g.fillStyle = L.k === 'text' ? (L.cols && L.cols[0]) || '#fff' : L.fill || '#e8322c'; g.font = '700 18px Arial'; g.textAlign = 'center'; if (L.k === 'text') g.fillText((Array.from(String(L.text || 'T').trim())[0] || 'T').toUpperCase(), 22, 22); else { g.translate(22, 15); const k = Math.min(36 / L.w, 24 / L.h); g.scale(k, k); ThumbShapes.draw(g, Object.assign({}, L, { sw: 0, depth: 0 })); } } } catch (e) { }
       const chip = H('div', { className: 'th-chip' + (L.id === W.sel ? ' on' : '') + (L.hide ? ' off' : ''), draggable: true, title: 'Click to select. Drag to put it in front of or behind others.', on: { click: () => { W.sel = L.id; panels(); layersBar(); redraw(); },
           dragstart: e => { e.dataTransfer.setData('text/plain', L.id); }, dragover: e => e.preventDefault(), drop: e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'), a = W.cfg.layers, src = a.find(x => x.id === id); if (!src || src === L) return; a.splice(a.indexOf(src), 1); a.splice(a.indexOf(L) + (e.offsetX > e.currentTarget.offsetWidth / 2 ? 0 : 1), 0, src); changed(true); layersBar(); } } },
         c, H('span', { className: 'th-cname', textContent: L.name || (L.k === 'image' ? 'Picture' : L.k === 'text' ? String(L.text || 'Words').split('\n')[0].slice(0, 18) : 'Shape') }),
@@ -518,7 +517,7 @@ const Thumb = (() => {
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function' && typeof window !== 'undefined' && !window.PATTER_WORKER) document.addEventListener('paste', e => { if (!document.body.classList.contains('thb') || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
     const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(f => /^image\//.test(f.type)); if (f) { e.preventDefault(); addPicture(f, null); return; }
     if (W.clip) { e.preventDefault(); const n = JSON.parse(JSON.stringify(W.clip)); n.id = nid(); n.x += 30; n.y += 30; W.cfg.layers.push(n); W.sel = n.id; changed(true); layersBar(); } });
-  function activate(on) { document.body.classList.toggle('thb', !!on); const ws = document.getElementById('thumbWs'); if (ws) ws.hidden = !on; if (on) { linkFonts(); redraw(); } else if (W.brush) W.brush = null; }
+  function activate(on) { document.body.classList.toggle('thb', !!on); const ws = document.getElementById('thumbWs'); if (ws) ws.hidden = !on; if (on) { linkFonts(); redraw(); if (typeof Cutout !== 'undefined') setTimeout(() => Cutout.warm(), 1500); } else if (W.brush) W.brush = null; }
   const duration = () => 1;
   // the app's small previews (project list) draw the thumbnail itself
   function draw(g, t, cfg, look, Wd, Hd) { g.fillStyle = '#000'; g.fillRect(0, 0, Wd, Hd); try { const [PW, PH] = dims(cfg), s = Math.min(Wd / PW, Hd / PH), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(PW * s)); c.height = Math.max(1, Math.round(PH * s)); render(c.getContext('2d'), cfg, c.width, c.height, { clean: true }); g.drawImage(c, (Wd - c.width) / 2, (Hd - c.height) / 2); } catch (e) { } }
