@@ -60,8 +60,7 @@ const CutUI = (() => {
     function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { const m = CutMedia.info(id); if (!c.bin.includes(id) && !(m && m.builtin)) c.bin.push(id); }); return c.bin.filter(id => { const m = CutMedia.info(id); return m && !m.builtin; }); }
     function drawLib() {
       libBody.innerHTML = ''; libBody._n = (libBody._n || 0) + 1;
-      if (libTab === 'audio') return drawAudio();
-      if (libTab === 'media') return drawMedia(false);
+      if (libTab === 'media' || libTab === 'audio') return drawMedia(libTab === 'audio');
       if (libTab === 'text' || libTab === 'stickers') return drawLayers(libTab);
       if (libTab === 'effects') { libBody.append(H('p', { className: 'hint', textContent: 'Click to add to the selected clip, or drag onto a clip. With nothing selected it goes on its own track at the playhead, over everything under it.' }));
         const g = H('div', { className: 'cl-grid' }); Object.entries(CutGL.EFFECTS).forEach(([k, e]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile fx', title: e.label, on: { click: () => applyFx(k) } }, H('i', { textContent: e.icon }), H('span', { textContent: e.label })), { type: 'fx', k }))); libBody.append(g); return; }
@@ -71,66 +70,7 @@ const CutUI = (() => {
         const g = H('div', { className: 'cl-grid looks' }); Object.entries(CutGL.LOOKS).forEach(([k, L]) => { const cv = H('canvas', { width: 96, height: 54 }); lookThumb(cv, k); g.append(drag0(H('button', { type: 'button', className: 'cl-tile lk', title: L.label, on: { click: () => applyLook(k) } }, cv, H('span', { textContent: L.label })), { type: 'look', k })); }); libBody.append(g); return; }
       if (libTab === 'patter') return drawPatter();
     }
-    /* ---------- Sound: his own library (a folder on his computer), what is in this project, and sounds made here ---------- */
-    let audioSub = 'lib', sndQ = '', sndFolder = 'all', sndShown = 150, sndOpen = '';
-    function drawAudio() {
-      const tabs = H('div', { className: 'cl-sub2' }, ...[['lib', 'My library'], ['proj', 'In this project'], ['made', 'Made here']].map(([k, l]) => H('button', { type: 'button', className: audioSub === k ? 'on' : '', textContent: l, on: { click: () => { audioSub = k; drawLib(); } } })));
-      libBody.append(tabs);
-      if (audioSub === 'proj') return drawMedia(true, 'proj');
-      if (audioSub === 'made') return drawMedia(true, 'made');
-      drawSounds();
-    }
-    function drawSounds() {
-      const L = typeof SoundLib !== 'undefined' ? SoundLib : null; if (!L) return; const box = H('div', { className: 'snd' }); libBody.append(box);
-      if (!L.supported()) { box.append(H('p', { className: 'hint', textContent: 'This browser cannot open folders on your computer. Open Patter Studio in Microsoft Edge to use your sound library.' })); return; }
-      if (L.state === 'none') { box.append(H('div', { className: 'snd-start' }, H('b', { textContent: 'Your sound library' }),
-          H('p', { textContent: 'Keep the music and sound effects you download in one folder on your computer, like CapCut’s sounds but yours. Make a folder called Patter Sounds (on your Desktop, say), then choose it here. Patter Studio adds Music and Sound effects folders inside it.' }),
-          H('button', { type: 'button', className: 'primary', textContent: 'Choose your sound folder', on: { click: async () => { try { await L.choose(); drawLib(); } catch (e) { if (e && e.name !== 'AbortError') o.say(e.message || String(e), true); } } } }))); return; }
-      if (L.state === 'locked') { box.append(H('div', { className: 'snd-start' }, H('b', { textContent: 'Your sound library: ' + L.name }), H('p', { textContent: 'Edge asks once each time you open Patter Studio before it lets the app into the folder.' }),
-          H('button', { type: 'button', className: 'primary', textContent: 'Open ' + L.name, on: { click: async () => { try { await L.unlock(); } catch (e) { o.say(e.message || String(e), true); } drawLib(); } } }),
-          H('button', { type: 'button', className: 'snd-link', textContent: 'Use a different folder', on: { click: async () => { try { await L.choose(); drawLib(); } catch (e) { } } } }))); return; }
-      const fileAdd = H('input', { type: 'file', multiple: true, accept: 'audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus', hidden: true, on: { change: async e => { const f = [...e.target.files]; e.target.value = ''; await addToLib(f); } } });
-      const search = H('input', { type: 'search', className: 'snd-q', value: sndQ, placeholder: 'Search ' + L.count.toLocaleString() + ' sounds', 'aria-label': 'Search your sounds', on: { input: e => { sndQ = e.target.value; sndShown = 150; fillList(); } } });
-      const chips = H('div', { className: 'snd-chips' }, ...[['all', 'All'], ['fav', '★ Favourites'], ...L.folders().map(f => [f, f])].map(([k, l]) => H('button', { type: 'button', className: sndFolder === k ? 'on' : '', textContent: l, on: { click: () => { sndFolder = k; sndShown = 150; drawLib(); } } })));
-      box.append(H('div', { className: 'snd-head' }, search, H('button', { type: 'button', className: 'sm', title: 'Add downloaded sounds into your library folder', textContent: '+ Add', on: { click: () => fileAdd.click() } }), H('button', { type: 'button', className: 'sm', title: 'Look in the folder again for new files', textContent: '↻', on: { click: () => L.scan() } }), fileAdd), chips);
-      const count = H('div', { className: 'snd-count' }), listEl = H('div', { className: 'snd-list', title: 'Drop downloaded sounds here to add them to your library' });
-      box.append(count, listEl, H('div', { className: 'snd-foot' }, H('button', { type: 'button', className: 'sm', textContent: 'Credits for this video', title: 'The sounds from your library in this video, with your notes, ready to paste into the description', on: { click: showCredits } }), H('span', { className: 'hint', textContent: L.name + (L.scanning ? ' · looking…' : '') })));
-      listEl.addEventListener('dragover', e => { if ([...(e.dataTransfer.items || [])].some(i => i.kind === 'file')) { e.preventDefault(); e.stopPropagation(); listEl.classList.add('drop'); } });
-      listEl.addEventListener('dragleave', () => listEl.classList.remove('drop'));
-      listEl.addEventListener('drop', e => { const f = [...(e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); e.stopPropagation(); listEl.classList.remove('drop'); lib.classList.remove('dropping'); addToLib(f); });
-      function fillList() {
-        const all = L.list({ q: sndQ, folder: sndFolder }); listEl.innerHTML = ''; count.textContent = L.count ? all.length.toLocaleString() + ' of ' + L.count.toLocaleString() + ' sounds' : (L.scanning ? 'Looking through the folder…' : '');
-        if (!L.count && !L.scanning) listEl.append(H('div', { className: 'cl-drop' }, H('b', { textContent: 'No sounds yet' }), H('p', { textContent: 'Drop the music and sound effects you download here, or press + Add. They are saved into ' + L.name + ' on your computer: music in Music, short sounds in Sound effects.' })));
-        const now = L.playing();
-        all.slice(0, sndShown).forEach(x => { const m = L.metaOf(x.path), on = now === x.path;
-          const row = drag0(H('div', { className: 'snd-row' + (on ? ' on' : ''), title: x.path + (m.note ? '\n' + m.note : '') + '\nDrag onto the timeline, or + to add at the playhead', on: { dblclick: () => addSnd(x.path) } },
-            H('button', { type: 'button', className: 'snd-play', 'aria-label': (on ? 'Stop ' : 'Play ') + x.name, textContent: on ? '■' : '▶', on: { click: async e => { e.stopPropagation(); try { await L.play(x.path); } catch (er) { o.say('That file could not be played: ' + (er.message || er), true); } } } }),
-            H('div', { className: 'snd-t' }, H('span', { className: 'snd-n', textContent: x.name }), H('span', { className: 'snd-s', textContent: [x.sub || 'Library', x.dur ? short(x.dur) : '', (x.ext || '').toUpperCase(), m.note ? '✎' : ''].filter(Boolean).join(' · ') })),
-            H('button', { type: 'button', className: 'snd-star' + (m.fav ? ' on' : ''), title: m.fav ? 'Favourite' : 'Make a favourite', textContent: m.fav ? '★' : '☆', on: { click: e => { e.stopPropagation(); L.setMeta(x.path, { fav: !m.fav }); } } }),
-            H('button', { type: 'button', className: 'snd-i', title: 'Notes: where it came from, credit needed', textContent: 'i', on: { click: e => { e.stopPropagation(); sndOpen = sndOpen === x.path ? '' : x.path; fillList(); } } }),
-            H('button', { type: 'button', className: 'snd-add', title: 'Add at the playhead', textContent: '+', on: { click: e => { e.stopPropagation(); addSnd(x.path); } } })), { type: 'snd', path: x.path, dur: x.dur });
-          listEl.append(row);
-          if (sndOpen === x.path) listEl.append(H('div', { className: 'snd-note' }, H('textarea', { rows: 2, value: m.note || '', placeholder: 'Where it came from, and the credit if it needs one (e.g. Music by Kevin MacLeod, CC BY 4.0)', on: { change: e => L.setMeta(x.path, { note: e.target.value.slice(0, 400) }) } }))); });
-        if (all.length > sndShown) listEl.append(H('button', { type: 'button', className: 'snd-more', textContent: 'Show more (' + (all.length - sndShown).toLocaleString() + ')', on: { click: () => { sndShown += 300; fillList(); } } }));
-      }
-      fillList();
-    }
-    async function addToLib(files) { try { o.say('Adding ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' to your library…'); const done = await SoundLib.addFiles(files, sndFolder); o.say(done.length ? 'Added to your library: ' + done.join(', ') : 'Those were not sound files.'); drawLib(); } catch (e) { o.say(e.message || String(e), true); } }
-    // a library sound into the video: music on a Music track that lowers under talking, the rest like any sound
-    async function addSnd(path, t, row) { try { o.say('Adding ' + path.split('/').pop() + '…'); const id = await SoundLib.asset(path); o.commit(); const c = cfg(); c.bin = c.bin || []; if (!c.bin.includes(id)) c.bin.push(id);
-        const it = itemFor(id); if (!it) return; it.start = r3(Math.max(0, t == null ? o.player.t : t)); const music = /^music/i.test(path) || /music/i.test(path.split('/').slice(0, -1).join('/'));
-        let T = row && row.kind === 'audio' ? row.T : null;
-        if (!T && music) { c.tracks = c.tracks || []; T = c.tracks.find(q => q.kind === 'audio' && q.music); if (!T) { T = { id: V().nid('t'), kind: 'audio', name: 'Music', music: true, duck: true, items: [] }; c.tracks.push(T); } if (it.vol == null) it.vol = -8; }
-        V().placeFree(c, 'audio', it, T); changed(); build(); select('C:' + it.id); o.say(''); }
-      catch (e) { o.say(e.message || String(e), true); } }
-    function showCredits() { const c = cfg(), lines = SoundLib.credits(V().assetsUsed(c)); let d = document.getElementById('sndCredits'); if (d) d.remove();
-      const text = lines.length ? 'Sounds:\n' + lines.join('\n') : ''; d = H('dialog', { id: 'sndCredits', className: 'th-dlg' }, H('div', { className: 'dlg-head' }, H('b', { textContent: 'Credits for this video' }), H('button', { type: 'button', textContent: 'Close', on: { click: () => d.close() } })),
-        H('div', { className: 'th-dbody' }, lines.length ? H('textarea', { rows: Math.min(14, lines.length + 2), value: text, readOnly: true }) : H('p', { className: 'hint', textContent: 'No sounds from your library are in this video yet.' }),
-          lines.length ? H('div', { className: 'btnrow' }, H('button', { type: 'button', className: 'primary', textContent: 'Copy', on: { click: async () => { try { await navigator.clipboard.writeText(text); o.say('Credits copied: paste them into the description.'); d.close(); } catch (e) { } } } })) : '',
-          H('p', { className: 'hint', textContent: 'From the notes on each sound (the i button). Add where it came from and any credit it needs when you download it.' })));
-      document.body.append(d); d.showModal(); }
-    function drawMedia(audioOnly, part) {
-      if (part === 'made') { libBody.append(H('p', { className: 'hint', textContent: 'Sound effects made on the spot: click one to add it at the playhead.' })); const s = H('div', { className: 'cl-grid' }); Object.entries(SFX).forEach(([k, f]) => s.append(H('button', { type: 'button', className: 'cl-tile', title: 'Make and add at the playhead', on: { click: () => addSfx(k) } }, H('i', { textContent: f.icon }), H('span', { textContent: f.label })))); libBody.append(s); return; }
+    function drawMedia(audioOnly) {
       const ids = binIds(), all = audioOnly ? ids.filter(id => { const m = CutMedia.info(id); return m.kind === 'audio'; }) : ids.filter(id => mediaFilter === 'all' || CutMedia.info(id).kind === mediaFilter);
       const head = H('div', { className: 'cl-head' }, H('button', { type: 'button', className: 'primary sm', textContent: audioOnly ? '+ Import sound' : '+ Import', on: { click: () => fileIn.click() } }));
       if (!audioOnly) head.append(UI.sel(mediaFilter, [['all', 'Everything'], ['video', 'Footage'], ['image', 'Pictures'], ['audio', 'Sound']], v => { mediaFilter = v; drawLib(); }, 'Show'));
@@ -147,7 +87,7 @@ const CutUI = (() => {
           H('button', { type: 'button', className: 'rm', title: 'Remove from this project', 'aria-label': 'Remove ' + m.name, textContent: '×', on: { click: e => { e.stopPropagation(); removeAsset(id); } } })), { type: 'asset', id });
         g.append(card); });
       libBody.append(g);
-
+      if (audioOnly) { libBody.append(H('h4', { className: 'cl-sub', textContent: 'Sound effects' })); const s = H('div', { className: 'cl-grid' }); Object.entries(SFX).forEach(([k, f]) => s.append(H('button', { type: 'button', className: 'cl-tile', title: 'Make and add at the playhead', on: { click: () => addSfx(k) } }, H('i', { textContent: f.icon }), H('span', { textContent: f.label })))); libBody.append(s); }
       // Other footage on this computer, from other projects
       const others = CutMedia.list().filter(m => !ids.includes(m.id) && (!audioOnly || m.kind === 'audio'));
       if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(H('div', { className: 'cl-orow' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })))); libBody.append(d); }
@@ -210,7 +150,6 @@ const CutUI = (() => {
       return out;
     }
     let libTimer = 0; const drawLibSoon = () => { clearTimeout(libTimer); libTimer = setTimeout(() => { if (active) drawLib(); }, 250); };
-    if (typeof SoundLib !== 'undefined') { SoundLib.onChange(() => { if (!active || libTab !== 'audio' || audioSub !== 'lib') return; const ae = document.activeElement; if (ae && lib.contains(ae) && /INPUT|TEXTAREA/.test(ae.tagName) && ae.type !== 'file') return; drawLibSoon(); }); SoundLib.load(); }
     async function removeAsset(id) { const c = cfg(); if (V().assetsUsed(c).includes(id) && !confirm('This is used in your video. Take it out of the video and this project?')) return; o.commit(); c.items = (c.items || []).filter(x => x.asset !== id); (c.tracks || []).forEach(T => T.items = (T.items || []).filter(x => x.asset !== id)); V().pruneTracks(c); c.bin = (c.bin || []).filter(x => x !== id); changed(); drawLib(); }
     // New clip from a file at time t: footage and pictures go on the main track at the playhead (or above, on an overlay
     // track, when the main track already has something under the playhead and row says so); sound goes on an audio track
@@ -544,11 +483,10 @@ const CutUI = (() => {
     // Things dropped from the library or from the computer
     const readDrop = e => { try { return JSON.parse(e.dataTransfer.getData('application/x-cut')); } catch (er) { return dragData; } };
     function laneDragOver(e) { const files = e.dataTransfer && [...(e.dataTransfer.items || [])].some(i => i.kind === 'file'); if (!dragData && !files) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; const row = rowAt(e.clientY), t = laneT(e.clientX);
-      if (dragData && (dragData.type === 'fx' || dragData.type === 'look' || dragData.type === 'trans')) return; const d = dragData && dragData.type === 'asset' ? (V().lenOf(itemFor(dragData.id) || {}, look()) || 3) : dragData && dragData.type === 'snd' ? (+dragData.dur || 3) : 3; dropMark(row && row.kind ? row : null, t, d, row && row.kind === 'main'); }
+      if (dragData && (dragData.type === 'fx' || dragData.type === 'look' || dragData.type === 'trans')) return; const d = dragData && dragData.type === 'asset' ? (V().lenOf(itemFor(dragData.id) || {}, look()) || 3) : 3; dropMark(row && row.kind ? row : null, t, d, row && row.kind === 'main'); }
     function laneDrop(e) { e.preventDefault(); dropMark(null); const row = rowAt(e.clientY), t = laneT(e.clientX), dd = readDrop(e), files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
       if (files.length && !dd) { importFiles(files, { t, row }); return; } if (!dd) return; o.commit();
       if (dd.type === 'asset') { const id = placeAsset(dd.id, t, row && row.kind === 'new' ? { kind: 'video', T: null } : row); changed(); build(); if (id) select(id); }
-      else if (dd.type === 'snd') addSnd(dd.path, t, row);
       else if (dd.type === 'patter') addPatter(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
       else if (dd.type === 'block') addBlock(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
       else if (dd.type === 'intro') addIntro(t);

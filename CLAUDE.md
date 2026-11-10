@@ -158,14 +158,9 @@ standard and as easy to use.
   (chroma key), `mask`, `anIn anOut anLoop`, `kf` (keyframes `{ prop: [[t, v, ease]] }` for x y s rot op vol), `speed`,
   `pitch`, `rev`, `still` (freeze frame). Sound: `vol` (dB), `mute`, `fadeIn`, `fadeOut`, `enhance`, `denoise`. Also
   `markers`, `bin` (assets in this project), `bg` (black, blur, white), `gap`, `studio`, `duckDb`, `main*` track flags.
-* **His sound library** (`dev/src/sounds.js` `SoundLib`, the Video tab's Audio section: My library, In this project, Made
-  here): a folder on his computer (he chooses it with the browser's folder access; Music and Sound effects are made in an
-  empty one; Edge asks once a session to open it again, one click). The index, favourites, notes (source and credit) and
-  which CutMedia copy belongs to which file live in IndexedDB `patter-sounds`. Search, folder chips, play preview, + adds
-  at the playhead (anything under Music goes on a Music track that lowers under talking, at -8 dB), drag a row onto the
-  timeline (`type: 'snd'`), drop or + Add files files them into the folder (over 45 s into Music, else Sound effects),
-  and Credits for this video lists the library sounds used with his notes. Test: `tests/sounds_ui.py` (a folder in the
-  browser's own storage stands in for his; needs `dev/tmp_snd/`).
+* He tried a sound library linked to a folder on his computer and had it taken out: Edge asks permission every session
+  and he did not want that. He keeps his sounds on his computer and imports them (Audio, + Import sound). Do not bring
+  back folder access.
 * `cut_mp4.js`: our own MP4/MOV/M4A reader (`MP4In`: sample tables, edit lists, rotation, H.264, HEVC, VP9, AV1, AAC, Opus,
   PCM) and streaming writer (`MP4Out`: video plus sound, 64 bit, writes to a file sink or Blob pieces). No outside
   libraries (npm and GitHub downloads are blocked in this environment).
