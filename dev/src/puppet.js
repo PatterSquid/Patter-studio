@@ -233,12 +233,62 @@ const Puppet = (() => {
       br.lim = { pts: P, lid: lp, allow: Math.max(0, rest) }; br.lidY = lidY;
     });
   }
+  /* His mug carries his PatterSquid logo (MUG_LOGO, from his channel picture) instead of the slogan drawn on it: the mug
+     is found in the foreground layer (the biggest light, unsaturated patch), its face is repainted with its own shading
+     (the middle colour of each column, so the round shape stays) and the logo is wrapped round it like a print on a
+     cylinder, shaded the same way. Only his copy in this browser changes; nothing of his art leaves it. */
+  async function mugLogo(rig) {
+    if (typeof MUG_LOGO === 'undefined') return; const logo = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = MUG_LOGO; }); if (!logo) return;
+    const fg = rig.nodes ? rig.nodes.filter(n => n.li != null && /^f[-_ ]|geek|mug|cup/i.test(n.name)) : [];
+    for (const nd of fg) {
+      const b = rig.bm[nd.li], L = rig.layers[nd.li]; if (!b || !L) continue; const W = b.width, H = b.height, c = new OffscreenCanvas(W, H), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(b, 0, 0);
+      const D = g.getImageData(0, 0, W, H), d = D.data, N = W * H, light = new Uint8Array(N);
+      for (let i = 0; i < N; i++) { const r = d[i * 4], gg = d[i * 4 + 1], bl = d[i * 4 + 2], mn = Math.min(r, gg, bl), mx = Math.max(r, gg, bl); if (d[i * 4 + 3] > 200 && mn > 165 && mx - mn < 75) light[i] = 1; }
+      // the biggest light patch with a mug's proportions
+      const lab = new Int32Array(N), st = new Int32Array(N); let best = null, n = 0;
+      for (let s0 = 0; s0 < N; s0++) { if (!light[s0] || lab[s0]) continue; n++; let sp = 0, cnt = 0, x0 = W, y0 = H, x1 = 0, y1 = 0; st[sp++] = s0; lab[s0] = n;
+        while (sp) { const i = st[--sp], x = i % W, y = (i / W) | 0; cnt++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; for (const j of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1]) if (j >= 0 && light[j] && !lab[j]) { lab[j] = n; st[sp++] = j; } }
+        const w = x1 - x0 + 1, h = y1 - y0 + 1; if (cnt > 1500 && h / w > 0.7 && h / w < 2.2 && (!best || cnt > best.cnt)) best = { n, cnt, x0, y0, x1, y1 }; }
+      if (!best) continue;
+      // the face: the patch with its holes (the slogan's letters, stains) filled
+      const { x0, y0, x1, y1 } = best, bw = x1 - x0 + 1, bh = y1 - y0 + 1, out = new Uint8Array(bw * bh), q = [];
+      const inP = (x, y) => lab[(y0 + y) * W + x0 + x] === best.n;
+      for (let x = 0; x < bw; x++) for (const y of [0, bh - 1]) if (!inP(x, y)) { out[y * bw + x] = 1; q.push(y * bw + x); }
+      for (let y = 0; y < bh; y++) for (const x of [0, bw - 1]) if (!inP(x, y) && !out[y * bw + x]) { out[y * bw + x] = 1; q.push(y * bw + x); }
+      for (let qi = 0; qi < q.length; qi++) { const i = q[qi], x = i % bw, y = (i / bw) | 0; for (const [xx, yy] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) if (xx >= 0 && yy >= 0 && xx < bw && yy < bh && !out[yy * bw + xx] && !inP(xx, yy)) { out[yy * bw + xx] = 1; q.push(yy * bw + xx); } }
+      // the face row by row, from the mug's left side to its right (stains touching the edge included), steadied over a few rows
+      const lo = new Array(bh).fill(1e9), hi = new Array(bh).fill(-1); for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) if (!out[y * bw + x]) { lo[y] = Math.min(lo[y], x); hi[y] = Math.max(hi[y], x); }
+      const R = 8, lo2 = lo.map((v, y) => { let m = v; for (let k = -R; k <= R; k++) if (lo[y + k] != null && hi[y + k] >= 0) m = Math.min(m, lo[y + k]); return hi[y] >= 0 ? Math.max(m, lo[y] - 6) : 1e9; }), hi2 = hi.map((v, y) => { let m = v; for (let k = -R; k <= R; k++) if (hi[y + k] != null) m = Math.max(m, hi[y + k]); return v >= 0 ? Math.min(m, hi[y] + 6) : -1; });
+      const face = i => { const x = i % bw, y = (i / bw) | 0; return x >= lo2[y] && x <= hi2[y] && (!out[i] || (x > lo[y] && x < hi[y]) || light[(y0 + y) * W + x0 + x] || (d[((y0 + y) * W + x0 + x) * 4 + 3] > 200 && Math.min(d[((y0 + y) * W + x0 + x) * 4], d[((y0 + y) * W + x0 + x) * 4 + 1]) > 120)); };
+      // each column's own colour (the mug's round shading), from its clean light pixels below the rim
+      const top = Math.round(bh * 0.14), col = [];
+      for (let x = 0; x < bw; x++) { const v = [[], [], []]; for (let y = top; y < bh; y++) { const i = (y0 + y) * W + x0 + x; if (light[i] && inP(x, y)) for (let k = 0; k < 3; k++) v[k].push(d[i * 4 + k]); } col.push(v[0].length ? v.map(a => a.sort((p2, q2) => p2 - q2)[a.length >> 1]) : null); }
+      for (let x = 0; x < bw; x++) if (!col[x]) col[x] = col[x - 1] || col.find(Boolean);
+      // edge distance inside the face, so the outline and the rim keep their own pixels
+      const dist = new Float32Array(bw * bh).fill(1e9), q2 = []; for (let i = 0; i < bw * bh; i++) if (!face(i)) { dist[i] = 0; q2.push(i); }
+      for (let qi = 0; qi < q2.length; qi++) { const i = q2[qi], x = i % bw, y = (i / bw) | 0; if (dist[i] > 6) continue; for (const [xx, yy] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) { const j = yy * bw + xx; if (xx >= 0 && yy >= 0 && xx < bw && yy < bh && dist[j] > dist[i] + 1) { dist[j] = dist[i] + 1; q2.push(j); } } }
+      for (let y = top; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!face(i)) continue; const k = Math.min(1, Math.max(0, (dist[i] - 2) / 3)); if (k <= 0) continue; const j = ((y0 + y) * W + x0 + x) * 4; for (let ch = 0; ch < 3; ch++) d[j + ch] = d[j + ch] * (1 - k) + col[x][ch] * k; }
+      g.putImageData(D, 0, 0);
+      // the logo, wrapped round the mug: narrower towards its sides, shaded like the mug
+      let fx0 = bw, fx1 = 0; for (let y = Math.round(bh * 0.5) - 2; y <= Math.round(bh * 0.5) + 2; y++) for (let x = 0; x < bw; x++) if (face(y * bw + x)) { fx0 = Math.min(fx0, x); fx1 = Math.max(fx1, x); }
+      const faceW = fx1 - fx0, lw = faceW * 0.8, lh = Math.min(lw * logo.height / logo.width, (bh - top) * 0.78), lw2 = lh * logo.width / logo.height, cxF = x0 + (fx0 + fx1) / 2, cyF = y0 + top + (bh - top) * 0.53;
+      const lc = new OffscreenCanvas(bw, bh), lg = lc.getContext('2d'), TH = 0.85, sn = Math.sin(TH), steps = Math.ceil(lw2);
+      for (let k = 0; k < steps; k++) { const u0 = k / steps, u1 = (k + 1) / steps, s0 = (Math.asin((2 * u0 - 1) * sn) / TH + 1) / 2, s1 = (Math.asin((2 * u1 - 1) * sn) / TH + 1) / 2;
+        lg.drawImage(logo, s0 * logo.width, 0, Math.max(0.5, (s1 - s0) * logo.width), logo.height, cxF - x0 - lw2 / 2 + u0 * lw2, cyF - y0 - lh / 2, lw2 / steps + 0.6, lh); }
+      // keep it on the face and shade it like the mug (darker towards the sides)
+      const LD = lg.getImageData(0, 0, bw, bh), ld = LD.data, peak = Math.max(...col.map(cc => cc[0] + cc[1] + cc[2]));
+      for (let i = 0; i < bw * bh; i++) { if (!ld[i * 4 + 3]) continue; if (!face(i) || dist[i] < 4) { ld[i * 4 + 3] = 0; continue; } const x = i % bw, sh = (col[x][0] + col[x][1] + col[x][2]) / peak; for (let ch = 0; ch < 3; ch++) ld[i * 4 + ch] *= sh; }
+      lg.putImageData(LD, 0, 0); g.drawImage(lc, x0, y0);
+      rig.bm[nd.li] = await createImageBitmap(c); rig.mugLogo = true; return;
+    }
+  }
   async function make(id, rig, blobs, hands) {
     const bm = await Promise.all(blobs.map(b => b ? createImageBitmap(b) : null)); rig.bm = bm; rig.id = id; rig.layers = rig.layers.slice();
     try { await backFists(rig); } catch (e) { console.warn('back fist', e); }
     try { await sheetHands(rig, hands); } catch (e) { console.warn('hand drawings', e); }
     analyse(rig); measure(rig);
     try { browLimits(rig); } catch (e) { console.warn('brow limits', e); }
+    try { await mugLogo(rig); } catch (e) { console.warn('mug logo', e); }
     mem[id] = rig; tick++; return rig;
   }
 
