@@ -102,6 +102,36 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 
+## The Thumbnail tab (dev/src/thumb.js `Thumb`, dev/src/cutout.js `Cutout`, module `thumb`)
+
+His YouTube thumbnails, in place of Canva and remove.bg (November 2026). Its own top tab like Audio: `body.thb` gives
+`#thumbWs` the whole of main and the module's `form()` draws it (so undo redraws it). Layout: rail of drawers on the left
+(Layouts, Pictures, Text, Shapes, Stickers, Fonts), the picture in the middle (`.th-cv` drawn at the size shown, `.th-ov`
+on top for the selection, handles, snapping guides and the hand fixing brush), settings on the right (`.th-insp`), the
+layers along the bottom (`.th-layers`, drag to reorder). The header Export opens its save window (JPG kept under YouTube's
+2 MB, or PNG, at 1x to 2x; copy to the clipboard).
+* cfg: `fmt` ('16:9' 1280x720, '9:16' 1080x1920, '1:1'), `bg` (colour, grad, radial, image), `layers` drawn in order, each
+  `{ id, k: image|text|shape, x, y (middle), w, h, rot, op, flipH, flipV, hide, lock, shadow, glow }`. Pictures are CutMedia
+  files (imported with `builtin`, so they stay out of the Video library); `slot: true` is an empty picture place in a
+  layout (double click or drop to fill), `autoCut` cuts it out on arrival. Text: `cols` a colour per line, `fit` stretches
+  every line to the box width (the Basic Logic look he likes: black, cut out head left, white line then red punchline),
+  `stroke`, `stroke2`, `box`. Each layer is drawn flat then laid on (glow and shadow are blurred silhouettes), so soft edges
+  and see through never double up.
+* Layouts in `TEMPLATES` (split, shock, word, versus, news); his own saved layouts and font files live in IndexedDB
+  `patter-thumb`. Fonts: Google Fonts for thumbnails are linked when the tab opens (`GURL`), plus the built in ones.
+* **Background removal** (`Cutout`): BiRefNet lite (MIT, github.com/emoro24/birefnet-lite-onnx v2, float16 1024) run with
+  ONNX Runtime Web 1.20.1 in a worker, WebGPU first, else the processor. Files in `cutout/` (model split in two for
+  GitHub), downloaded once into IndexedDB `patter-cutout`. After the model: a guided filter on the picture's brightness
+  so the mask follows real edges at full size (only where the model was unsure), a trim of faint haze, and blur fusion
+  foreground colours (Forte and Pitie) so no halo of the old background is left. A layer's `cut` is `{ mask, fg, on }`
+  (two CutMedia PNGs); `edge` softens or pulls the edge in, `outline` is a sticker edge from an exact distance transform.
+  Fix by hand paints Keep or Remove on the mask (red shows removed), then `Cutout.refine` redoes the colours. Tidy stray
+  bits keeps the main body. On the processor the model is very slow (minutes) and memory hungry: his PC uses the
+  graphics card. Tests: `tests/thumb_cut.py` (serves `dev/tmp_cutout/`, a copy with a full precision model because
+  SwiftShader WebGPU here has no 16 bit floats), `tests/thumb_ui.py`.
+* He asked for the Basic Logic channel's thumbnail style. Do not make layouts or test pictures that mock people for race
+  or religion.
+
 ## The Video tab: the editor (dev/src/video.js and dev/src/cut_*.js)
 
 The Video tab is a full video editor laid out like CapCut: library on the left (`.cut-lib`: Media, Audio with made-on-the-spot

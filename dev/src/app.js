@@ -2,7 +2,7 @@
 (() => {
   if (typeof self !== 'undefined' && self.PATTER_WORKER) return;
   const { H } = UI;
-  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null), audio: (typeof AudioTab !== 'undefined' ? AudioTab : null) };
+  const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null), audio: (typeof AudioTab !== 'undefined' ? AudioTab : null), thumb: (typeof Thumb !== 'undefined' ? Thumb : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
   const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio' };
   const KEY = 'patter-studio-v1';
@@ -129,14 +129,15 @@
   window.PatterUndo = { sizes: () => ({ back: hist.length, forward: fut.length, quiet }) };   // for the tests
   function undo() { commit(); if (!hist.length) return; fut.push(lastSnap); restore(hist.pop()); }
   function redo() { if (!fut.length) return; hist.push(lastSnap); restore(fut.pop()); }
-  function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); if (typeof AudioTab !== 'undefined') AudioTab.activate(state.module === 'audio'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
+  function refreshAll() { if (ed) ed.closePop(); if (cutUI) cutUI.activate(state.module === 'video'); if (typeof AudioTab !== 'undefined') AudioTab.activate(state.module === 'audio'); if (typeof Thumb !== 'undefined') Thumb.activate(state.module === 'thumb'); buildForm(); buildInspector(); layoutPanels(); ed && ed.build(); updateRangeUI(); drawBanner(); }
   const tabs = document.querySelectorAll('#tabs button[data-mod], .rail button[data-mod]');
   const GFX = ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll'], ANIM = ['studio', 'char'];
   const isGfx = m => GFX.includes(m), isAnim = m => ANIM.includes(m);
   const gfxBtn = document.querySelector('#tabs button[data-group=gfx]'), animBtn = document.querySelector('#tabs button[data-group=anim]'), rail = $('gfxRail'), arail = $('animRail');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); });
     const g = isGfx(state.module), a = isAnim(state.module); if (g) state.lastGfx = state.module; if (a) state.lastAnim = state.module; [[gfxBtn, g], [animBtn, a]].forEach(([b, on]) => { if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); } }); if (rail) rail.hidden = !g; if (arail) arail.hidden = !a; document.body.classList.toggle('gfx', g); document.body.classList.toggle('anim', a); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio' || state.module === 'char'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
-  function switchTab(m) { document.body.classList.remove('exp-open'); if (typeof Character !== 'undefined') Character.stopSound(); if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
+  let videoT = 0;   // where the Video tab's playhead was, for the Thumbnail tab's Take the frame
+  function switchTab(m) { if (state.module === 'video') videoT = player.t || 0; document.body.classList.remove('exp-open'); if (typeof Character !== 'undefined') Character.stopSound(); if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
   if (gfxBtn) gfxBtn.addEventListener('click', () => { if (isGfx(state.module)) return; const e = state.edit; switchTab(e && isGfx(e.mod) ? e.mod : (isGfx(state.lastGfx) && MODULES[state.lastGfx] ? state.lastGfx : 'charts')); });
   if (animBtn) animBtn.addEventListener('click', () => { if (isAnim(state.module)) return; const e = state.edit; switchTab(e && isAnim(e.mod) ? e.mod : (isAnim(state.lastAnim) && MODULES[state.lastAnim] ? state.lastAnim : 'studio')); });
@@ -245,6 +246,7 @@
       cutInsp.exportDialog({ v: 2, items: [{ id: 'introx', kind: 'clip', mod: 'intro', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };   // the tests drive the editor through this
     if (typeof Character !== 'undefined') Character.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Character.prepare(copy); } catch (e) { }
       cutInsp.exportDialog({ v: 2, items: [{ id: 'charx', kind: 'clip', mod: 'char', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };
+    if (typeof Thumb !== 'undefined') Thumb.hooks.videoFrame = async () => { const v = state.cfg.video; if (!v || !((v.items || []).length || (v.tracks || []).some(T => (T.items || []).length))) return null; const lk = state.look; return CutExport.still(JSON.parse(JSON.stringify(v)), lk, state.module === 'video' ? player.t : videoT, '1080'); };
     Object.assign(Video.hooks, { inspect: (...a) => cutInsp.inspect(...a), scene: (...a) => cutInsp.scene(...a), time: () => player.t, cfg: () => state.cfg.video });
     const gBuild = ed.build; ed.build = () => { gBuild(); if (cutUI.active) cutUI.build(); };
     const gSel = ed.select; ed.select = (id, q) => { gSel(id, q); if (cutUI.active) cutUI.markSel(); };
@@ -285,6 +287,7 @@
     if (ctrl && k === 'e') { e.preventDefault(); exportNow(true); return; }
     if (typing) return;
     if (state.module === 'audio' && typeof AudioTab !== 'undefined' && !ctrl && AudioTab.key(e)) return;
+    if (state.module === 'thumb' && typeof Thumb !== 'undefined') { if (Thumb.key(e)) { e.preventDefault(); return; } if (e.code === 'Space') return; }
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (ctrl && k === 'y') { e.preventDefault(); redo(); return; }
@@ -505,7 +508,8 @@
   function exportNow(go) {
     if (state.module === 'video' && cutInsp) return cutInsp.exportDialog();
     if (state.module === 'intro' || (state.module === 'char' && cfg().voice)) return $('exportBtn').click();
-    if (state.module === 'audio' && typeof AudioTab !== 'undefined') return AudioTab.send('wav');   // the cleaned up recording as a WAV
+    if (state.module === 'audio' && typeof AudioTab !== 'undefined') return AudioTab.send('wav');
+    if (state.module === 'thumb' && typeof Thumb !== 'undefined') return Thumb.exportDialog();   // save the picture   // the cleaned up recording as a WAV
     if (go) return $('exportBtn').click();
     document.body.classList.toggle('exp-open');
   }

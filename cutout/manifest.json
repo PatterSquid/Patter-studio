@@ -1,0 +1,25 @@
+{
+ "v": 1,
+ "model": {
+  "name": "BiRefNet lite",
+  "size": 1024,
+  "parts": [
+   "birefnet-lite-1024-fp16.onnx.part0",
+   "birefnet-lite-1024-fp16.onnx.part1"
+  ],
+  "sha256": "945ef7bcca23823f823ca00a22c1c08fedd9391bff8620658dfe292dfcea0a22"
+ },
+ "ort": {
+  "js": "ort.webgpu.min.js",
+  "mjs": "ort-wasm-simd-threaded.jsep.mjs",
+  "wasm": "ort-wasm-simd-threaded.jsep.wasm",
+  "version": "1.20.1"
+ },
+ "sizes": {
+  "ort.webgpu.min.js": 333594,
+  "ort-wasm-simd-threaded.jsep.mjs": 46839,
+  "ort-wasm-simd-threaded.jsep.wasm": 21663894,
+  "birefnet-lite-1024-fp16.onnx.part0": 62000000,
+  "birefnet-lite-1024-fp16.onnx.part1": 60969369
+ }
+}
