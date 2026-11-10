@@ -196,29 +196,9 @@ const Puppet = (() => {
       set.kids.push({ name: 'back fist', li, vis: false, op: 255, made: true });
     }
   }
-  /* Our own talking and palm up hands (HandArt), added to each hand's swap set; placed so their wrist sits on the cuff
-     of that arm's sleeve (found the same way analyse finds it) and sized to his hands. */
-  async function madeHands(rig) {
-    if (typeof HandArt === 'undefined') return;
-    const sets = []; const walk = (n, par) => { if (!n.kids) return; if (n.group && /hand/i.test(n.name) && par && n.kids.some(k => /^default$/i.test(k.name)) && !n.kids.some(k => k.name === 'talk')) sets.push([n, par]); n.kids.forEach(k => walk(k, n)); }; walk(rig.tree, null);
-    for (const [set, arm] of sets) {
-      const def = set.kids.find(k => /^default$/i.test(k.name)), D = rig.layers[def.li]; if (!D || !D.w) continue;
-      const sl = arm.kids.find(k => k !== set && k.group && /elbow|sleeve|arm/i.test(k.name)), sd = sl && (sl.kids.find(k => /^default$/i.test(k.name)) || sl.kids.find(k => k.vis)), SL = sd && rig.layers[sd.li]; if (!SL || !SL.w) continue;
-      const mir = /^\+?r/i.test(arm.name) || /^r/i.test(set.name), dir = mir ? 1 : -1;
-      const cuff = [dir > 0 ? SL.x + SL.w - 0.13 * SL.w : SL.x + 0.13 * SL.w, SL.y + 0.6 * SL.h], k = D.w / 345 * 1.08;
-      for (const kind of HandArt.kinds) {
-        const w = Math.round(HandArt.W * k), h = Math.round(HandArt.H * k), c = new OffscreenCanvas(w, h), g = c.getContext('2d');
-        g.scale(k, k); if (mir) { g.translate(HandArt.W, 0); g.scale(-1, 1); } HandArt.draw(kind, g);
-        const wx = (mir ? HandArt.W - HandArt.WR[0] : HandArt.WR[0]) * k, wy = HandArt.WR[1] * k;
-        const li = rig.layers.length; rig.layers.push(Object.assign({}, D, { x: cuff[0] - wx, y: cuff[1] - wy, w, h, name: kind })); rig.bm.push(await createImageBitmap(c));
-        set.kids.push({ name: kind, li, vis: false, op: 255, made: true });
-      }
-    }
-  }
   async function make(id, rig, blobs) {
     const bm = await Promise.all(blobs.map(b => b ? createImageBitmap(b) : null)); rig.bm = bm; rig.id = id; rig.layers = rig.layers.slice();
     try { await backFists(rig); } catch (e) { console.warn('back fist', e); }
-    try { await madeHands(rig); } catch (e) { console.warn('made hands', e); }
     analyse(rig); measure(rig);
     mem[id] = rig; tick++; return rig;
   }
