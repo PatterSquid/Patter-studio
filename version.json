@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.10.12",
+  "version": "2026.11.10.13",
   "file": "app/patter-studio.html",
-  "notes": "Background remover fixed: it now works when the app is opened from your computer"
+  "notes": "Thumbnail shapes for YouTube: curved, swoosh, loop and hand drawn arrows, scribbles, bubbles, booms, 3D depth and shine, 3D words; the background remover starts up when you open the tab"
 }
