@@ -135,7 +135,9 @@ layers along the bottom (`.th-layers`, drag to reorder). The header Export opens
   (two CutMedia PNGs); `edge` softens or pulls the edge in, `outline` is a sticker edge from an exact distance transform.
   Fix by hand paints Keep or Remove on the mask (red shows removed), then `Cutout.refine` redoes the colours. Tidy stray
   bits keeps the main body. On the processor the model is very slow (minutes) and memory hungry: his PC uses the
-  graphics card. Tests: `tests/thumb_cut.py` (serves `dev/tmp_cutout/`, a copy with a full precision model because
+  graphics card. **His app runs from a file** (the launcher writes it into a file:// page), so helpers cannot open blob:
+  links the page makes: the runtime goes to the helper as text, its glue as a data: module (with `import.meta.url` swapped
+  for a fixed address) and the wasm as `wasmBinary`. `tests/thumb_cut_file.py` checks that. Tests: `tests/thumb_cut.py` (serves `dev/tmp_cutout/`, a copy with a full precision model because
   SwiftShader WebGPU here has no 16 bit floats), `tests/thumb_ui.py`.
 * He asked for the Basic Logic channel's thumbnail style. Do not make layouts or test pictures that mock people for race
   or religion.

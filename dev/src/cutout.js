@@ -95,7 +95,7 @@ const Cutout = (() => {
     self.onmessage = async e => { const m = e.data;
       try {
         if (m.type === 'init') {
-          importScripts(m.js); ort.env.wasm.wasmPaths = { mjs: m.mjs, wasm: m.wasm }; ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
+          (0, eval)(m.js + '\n;self.ort = typeof ort !== "undefined" ? ort : self.ort;'); ort.env.wasm.wasmPaths = { mjs: m.mjs, wasm: 'about:blank' }; ort.env.wasm.wasmBinary = m.wasm; ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
           const ad = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null, gpu = !!ad, f16 = !!(ad && ad.features && ad.features.has('shader-f16'));
           const ep = m.ep || (gpu ? 'webgpu' : 'wasm'); let err = null;
           if (ep === 'webgpu' && m.half && !f16) { self.postMessage({ type: 'error', gpu, f16, ep, msg: 'This graphics card has no 16 bit maths' }); return; }
@@ -115,7 +115,10 @@ const Cutout = (() => {
     const u = (b, t) => { const x = URL.createObjectURL(new Blob([b], { type: t })); urls.push(x); return x; };
     const w = new Worker(u('(' + helper.toString() + ')()', 'text/javascript'));
     const ready = new Promise((res, rej) => { w.onmessage = e => { const m = e.data; if (m.type === 'ready') { how = m.how; res(m); } else if (m.type === 'error' && m.j == null) { const x = new Error(m.msg); Object.assign(x, { gpu: m.gpu, f16: m.f16, ep: m.ep }); rej(x); } else { const J = jobs.get(m.j); if (!J) return; jobs.delete(m.j); m.type === 'error' ? J.rej(new Error(m.msg)) : J.res(m); } }; w.onerror = ev => rej(new Error(ev.message || 'The background remover stopped')); });
-    model.arrayBuffer().then(buf => w.postMessage({ type: 'init', js: u(files.js, 'text/javascript'), mjs: u(files.mjs, 'text/javascript'), wasm: u(files.wasm, 'application/wasm'), model: buf, ep, half }, [buf]));
+    // the app runs from a file on his computer, where helpers cannot open blob: links made by the page: everything goes over as data
+    Promise.all([model.arrayBuffer(), files.js.text(), files.mjs.text(), files.wasm.arrayBuffer()]).then(([buf, js, mjs, wasm]) => {
+      let b64 = ''; const bytes = new TextEncoder().encode(mjs.replace(/import\.meta\.url/g, '"https://patter.invalid/ort.mjs"')); for (let i = 0; i < bytes.length; i += 0x8000) b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      w.postMessage({ type: 'init', js, mjs: 'data:text/javascript;base64,' + btoa(b64), wasm, model: buf, ep, half }, [buf, wasm]); });
     return ready.then(() => w, e => { w.terminate(); throw e; });
   }
   async function start(opts = {}) {
