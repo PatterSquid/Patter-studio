@@ -201,7 +201,7 @@ const Puppet = (() => {
   async function sheetHands(rig, hands) {
     if (typeof HandSheet === 'undefined') return;
     const sets = []; const walk = (n, par) => { if (!n.kids) return; if (n.group && /hand/i.test(n.name) && par && n.kids.some(k => /^default$/i.test(k.name))) sets.push([n, par]); n.kids.forEach(k => walk(k, n)); }; walk(rig.tree, null);
-    const cuffOf = arm => { const sl = arm.kids.find(k => k.group && !/hand/i.test(k.name) && /elbow|sleeve|arm/i.test(k.name)), sd = sl && (sl.kids.find(k => /^default$/i.test(k.name)) || sl.kids.find(k => k.vis)), SL = sd && rig.layers[sd.li]; if (!SL || !SL.w) return null; const dir = /^\+?r/i.test(arm.name) ? 1 : -1; return { cuff: [dir > 0 ? SL.x + SL.w - 0.13 * SL.w : SL.x + 0.13 * SL.w, SL.y + 0.6 * SL.h], sleeve: sl }; };
+    const cuffOf = arm => { const sl = arm.kids.find(k => k.group && !/hand/i.test(k.name) && /elbow|sleeve|arm/i.test(k.name)), sd = sl && (sl.kids.find(k => /^default$/i.test(k.name)) || sl.kids.find(k => k.vis)), SL = sd && rig.layers[sd.li]; if (!SL || !SL.w) return null; const dir = /^\+?r/i.test(arm.name) ? 1 : -1; return { cuff: [dir > 0 ? SL.x + SL.w - 0.13 * SL.w : SL.x + 0.13 * SL.w, SL.y + 0.6 * SL.h], open: [dir > 0 ? SL.x + SL.w - 0.14 * SL.w : SL.x + 0.14 * SL.w, SL.y + 0.71 * SL.h], sleeve: sl }; };   // open: the middle of the sleeve's opening
     // plain sleeves
     rig.plainBm = {}; for (const [, arm] of sets) { const c = cuffOf(arm); if (!c) continue; for (const k of c.sleeve.kids) { if (k.li == null || !rig.bm[k.li]) continue; const pc = HandSheet.plain(rig.bm[k.li], /^\+?r/i.test(arm.name) ? 1 : -1); if (pc) rig.plainBm[k.li] = await createImageBitmap(pc); } }
     if (!hands || !hands.blob) return;
@@ -209,10 +209,10 @@ const Puppet = (() => {
     const refs = []; for (const [set] of sets) { for (const w of set.kids.filter(k => /^(wave|default)$/i.test(k.name))) { const b = rig.bm[w.li]; if (!b) continue; const c = new OffscreenCanvas(b.width, b.height), g = c.getContext('2d'); g.drawImage(b, 0, 0); refs.push(g.getImageData(0, 0, b.width, b.height)); } }
     const F = HandSheet.fit(pieces, roles, refs); rig.sheet = { pieces, roles, fit: F }; if (!F) return;
     for (const [set, arm] of sets) {
-      const c = cuffOf(arm); if (!c) continue; const side = /^\+?r/i.test(arm.name) ? 'R' : 'L', D = rig.layers[set.kids.find(k => /^default$/i.test(k.name)).li];
+      const c = cuffOf(arm); if (!c) continue; const side = /^\+?r/i.test(arm.name) ? 'R' : 'L', D = rig.layers[set.kids.find(k => /^default$/i.test(k.name)).li]; (rig.wrist = rig.wrist || {})[side] = c.open;
       for (const o of F.list.filter(q => q.side === side)) {
-        const li = rig.layers.length; rig.layers.push(Object.assign({}, D, { x: c.cuff[0] - o.anchor[0], y: c.cuff[1] - o.anchor[1], w: o.w, h: o.h, name: o.role })); rig.bm.push(await createImageBitmap(o.canvas));
-        set.kids = set.kids.filter(k => k.name !== o.role); set.kids.push({ name: o.role, li, vis: false, op: 255, made: true, inside: o.role !== 'point you' });
+        const li = rig.layers.length; rig.layers.push(Object.assign({}, D, { x: c.open[0] - o.anchor[0], y: c.open[1] - o.anchor[1], w: o.w, h: o.h, name: o.role })); rig.bm.push(await createImageBitmap(o.canvas));
+        set.kids = set.kids.filter(k => k.name !== o.role); set.kids.push({ name: o.role, li, vis: false, op: 255, made: true });
         if (o.role === 'steeple') rig.steeple = { other: o.other, half: o.anchor[0] - o.w / 2 };   // where his left wrist sits from the middle of the drawing
       }
     }

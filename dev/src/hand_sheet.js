@@ -40,7 +40,7 @@ const HandSheet = (() => {
       for (let i = 0; i < n2; i++) { const x = i % w, y = (i / w) | 0, sd = x < cx ? 0 : 1;
         if (slv[i]) { if (o[i * 4 + 3] > 128) { sl[sd][0] += x; sl[sd][1] += y; sl[sd][2]++; } o[i * 4 + 3] = 0; continue; }
         if (dist[i] <= 3 && o[i * 4 + 3] > 128 && !dk[i]) { wr[sd][0] += x; wr[sd][1] += y; wr[sd][2]++; }
-        if (dist[i] < 10) o[i * 4 + 3] *= Math.max(0, (dist[i] - 1) / 9); }
+        if (dist[i] < 4) o[i * 4 + 3] *= Math.max(0, (dist[i] - 1) / 3); }   // a short soft edge at the wrist, no blur
       const avg = A => { const t = A[0][2] + A[1][2]; return t ? [(A[0][0] + A[1][0]) / t, (A[0][1] + A[1][1]) / t] : [w / 2, h]; }, one = avg(sl), wone = wr[0][2] + wr[1][2] ? avg(wr) : one;
       const two = wr.map(q => q[2] ? [q[0] / q[2], q[1] / q[2]] : wone);
       return { data: out, w, h, x: x0, y: y0, sleeve: one, wrist: wone, wrists: two, wide: w > h * 1.5 };
@@ -81,7 +81,9 @@ const HandSheet = (() => {
       const w = Math.max(1, Math.round(p.w * k)), h = Math.max(1, Math.round(p.h * k));
       const make = mir => { const c = mk(w, h), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; if (mir) { g.translate(w, 0); g.scale(-1, 1); } g.drawImage(c0, 0, 0, w, h); return c; };
       const [role, side] = roles[i], at = s => [(s[0]) * k, s[1] * k], flip = a => [w - a[0], a[1]];
-      if (role === 'steeple') { const [a, b] = p.wrists.map(at); out.push({ role, side: 'L', canvas: make(false), w, h, anchor: b, other: [a[0] - b[0], a[1] - b[1]] }); return; }
+      if (role === 'steeple') {   // cut down the middle: each hand on its own arm, so each goes into its own sleeve
+        const [a, b] = p.wrists.map(at), cx = (a[0] + b[0]) / 2, half = keepRight => { const c = make(false), g = c.getContext('2d'); g.clearRect(keepRight ? 0 : cx + 3, 0, keepRight ? cx - 3 : w - cx - 3, h); return c; };
+        out.push({ role, side: 'L', canvas: half(true), w, h, anchor: b, other: [a[0] - b[0], a[1] - b[1]] }); out.push({ role, side: 'R', canvas: half(false), w, h, anchor: a }); return; }
       const a = at(p.wrist), sd = side === 'R' ? 'R' : 'L';
       out.push({ role, side: sd, canvas: make(false), w, h, anchor: a });
       out.push({ role, side: sd === 'L' ? 'R' : 'L', canvas: make(true), w, h, anchor: flip(a), mirror: true });   // the other hand, unless he drew that one too

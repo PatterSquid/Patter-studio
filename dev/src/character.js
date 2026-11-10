@@ -34,17 +34,17 @@ const Character = (() => {
      [across, up] in head heights, and how far the hand turns (radians). His right hand mirrors them. art: the hand
      drawing from the puppet. Found by drawing each one (the hands are drawn lying on the desk, so they turn to point). */
   const GEST = {   // checked by him: turned, never mirrored (mirrored hands read back to front)
-    point: { art: 'point you', at: [-0.05, -0.12, 0], side: 'L', len: 1.5, label: 'Point', old: { art: 'point', at: [-0.03, -0.32, 1.95] } },
+    point: { art: 'point you', at: [-0.05, -0.16, 0], side: 'L', len: 1.5, label: 'Point', old: { art: 'point', at: [-0.03, -0.32, 1.95] } },
     'finger up': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, label: 'Finger up (listen)' },
     'point aside': { art: 'point', at: [-0.02, -0.3, 1.45], side: 'L', len: 1.5, label: 'Point over there' },
     wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
     // his own talking hands (the green screen sheet, HandSheet): used when he has loaded them, else the old drawing in 'old'
-    talk: { art: 'relaxed', at: [-0.05, -0.12, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
-    explain: { art: 'open', at: [-0.05, -0.12, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Explaining hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
-    offer: { art: 'palm up', at: [0.02, -0.1, 0], side: 'L', len: 1.5, plain: 1, label: 'Palm up (here\u2019s the thing)', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
+    talk: { art: 'relaxed', at: [-0.05, -0.16, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
+    explain: { art: 'open', at: [-0.05, -0.22, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Explaining hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
+    offer: { art: 'palm up', at: [0.02, -0.2, 0], side: 'L', len: 1.5, plain: 1, label: 'Palm up (here\u2019s the thing)', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
     steeple: { art: 'steeple', at: [0.24, -0.1, 0], side: 'both', len: 2.4, plain: 1, steeple: 1, label: 'Steeple (thinking)' },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
-    shrug: { art: 'palm up', at: [0.02, -0.1, 0], side: 'both', len: 1.5, plain: 1, label: 'Shrug', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
+    shrug: { art: 'palm up', at: [0.02, -0.18, 0], side: 'both', len: 1.5, plain: 1, label: 'Shrug', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
     'thumbs up': { art: 'thumbs up', at: [-0.02, -0.28, 0.1], side: 'L', len: 1.5, label: 'Thumbs up' },
     fist: { art: 'back fist', at: [0, 0, 0.5], sc: 1.1, side: 'both', len: 1.1, bang: 1, label: 'Bang the desk' },   // back fist: made by Puppet from the thumbs up (his fist drawing shows only its front)
     'fist shake': { art: 'back fist', at: [0, -0.3, 0.5], sc: 1.1, side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
@@ -294,11 +294,12 @@ const Character = (() => {
         if (G.shake) { const on = sm((u - 0.3) / 0.2); ax += Math.sin(u * 27) * 0.014 * on; ay += Math.sin(u * 31 + 1) * 0.016 * on; }
         if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
         if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
-        if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }
+        if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; if (!G.steeple) ar += 0.07 * k; } }   // the steeple's two halves move as one
         let art = G.art, dx0 = ax * hh2 * mir;
-        if (G.steeple && rig.steeple && rig.arms.L && rig.arms.R) { const S = rig.steeple, cL = rig.arms.L.cuff, cR = rig.arms.R.cuff, mid = (cL[0] + cR[0]) / 2, xL = mid + S.half - cL[0] + ax * hh2;   // both hands meet in front of him (to the right of the mic): the drawing on his left hand, his right hand hidden at its other cuff
-          if (sd === 'L') dx0 = xL; else { dx0 = cL[0] + xL + S.other[0] - cR[0]; ay += S.other[1] / hh2; art = '-hide'; } }
-        want[sd].push({ w, pri: m.pri || 2, dx: dx0, dy: ay * hh2, rot: ar * mir, art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
+        let dy0 = ay * hh2;
+        if (G.steeple && rig.steeple && rig.wrist && rig.wrist.L && rig.wrist.R) { const S = rig.steeple, oL = rig.wrist.L, oR = rig.wrist.R, tL = [(oL[0] + oR[0]) / 2 + S.half + ax * hh2, oL[1] + ay * hh2];   // both hands meet in front of him (to the right of the mic), each half on its own arm, wrist to wrist as drawn
+          if (sd === 'L') dx0 = tL[0] - oL[0]; else { dx0 = tL[0] + S.other[0] - oR[0]; dy0 = tL[1] + S.other[1] - oR[1]; } }
+        want[sd].push({ w, pri: m.pri || 2, dx: dx0, dy: dy0, rot: ar * mir, art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd]; if (!L2.length) return; let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
       let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; if (!best || q.ww > best.ww) best = q; });
