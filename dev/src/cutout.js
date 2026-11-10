@@ -15,6 +15,12 @@ const Cutout = (() => {
 
   // Is it downloaded? ('ready', 'none')
   async function check() { try { const m = await get('manifest'); if (m && (await get('model'))) { man = m; state = 'ready'; } else state = 'none'; } catch (e) { state = 'none'; } return state; }
+  async function fetchParts(m, parts, onProgress, sha) {
+    const total = parts.reduce((s, f) => s + (m.sizes[f] || 0), 0); let done = 0; const got = [];
+    for (const f of parts) { const q = await fetch(base() + f, { cache: 'no-store' }); if (!q.ok) throw new Error('Download failed (' + q.status + ') on ' + f + '. Try again.');
+      const rd = q.body.getReader(), ps = []; for (;;) { const { done: end, value } = await rd.read(); if (end) break; ps.push(value); done += value.length; if (onProgress) onProgress(Math.min(0.99, done / (total || 1))); } got.push(new Blob(ps)); }
+    const b = new Blob(got); if (sha && crypto.subtle) { const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await b.arrayBuffer()))].map(x => x.toString(16).padStart(2, '0')).join(''); if (h !== sha) throw new Error('The download came through damaged. Try again.'); } return b;
+  }
   async function download(onProgress) {
     const r = await fetch(base() + 'manifest.json', { cache: 'no-store' }); if (!r.ok) throw new Error('Could not reach the update repo (' + r.status + '). Check the internet connection and try again.');
     const m = await r.json(), files = [m.ort.js, m.ort.mjs, m.ort.wasm, ...m.model.parts], total = files.reduce((s, f) => s + (m.sizes[f] || 0), 0); let done = 0; const got = {};
@@ -90,31 +96,51 @@ const Cutout = (() => {
       try {
         if (m.type === 'init') {
           importScripts(m.js); ort.env.wasm.wasmPaths = { mjs: m.mjs, wasm: m.wasm }; ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
-          const tries = m.cpu ? ['wasm'] : ['webgpu', 'wasm']; let err = null;
-          for (const ep of tries) { try { if (ep === 'webgpu' && !(navigator.gpu && await navigator.gpu.requestAdapter())) continue; sess = await ort.InferenceSession.create(m.model, { executionProviders: [ep], graphOptimizationLevel: 'all' }); how = ep; break; } catch (x) { err = x; sess = null; } }
-          if (!sess) throw err || new Error('Could not start the background remover');
-          self.postMessage({ type: 'ready', how });
+          const ad = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null, gpu = !!ad, f16 = !!(ad && ad.features && ad.features.has('shader-f16'));
+          const ep = m.ep || (gpu ? 'webgpu' : 'wasm'); let err = null;
+          if (ep === 'webgpu' && m.half && !f16) { self.postMessage({ type: 'error', gpu, f16, ep, msg: 'This graphics card has no 16 bit maths' }); return; }
+          try { sess = await ort.InferenceSession.create(m.model, { executionProviders: [ep], graphOptimizationLevel: ep === 'wasm' ? 'basic' : 'all' }); how = ep; } catch (x) { err = x; sess = null; }
+          if (!sess) { self.postMessage({ type: 'error', gpu, f16, ep, msg: String((err && err.message) || err || 'Could not start the background remover') }); return; }
+          self.postMessage({ type: 'ready', how, gpu, f16 });
         } else if (m.type === 'cut') { const r = await cut(m.bm, m); self.postMessage(Object.assign({ type: 'done', j: m.j }, r)); }
         else if (m.type === 'refine') { const r = await refine(m.bm, m.mask); self.postMessage(Object.assign({ type: 'done', j: m.j }, r)); }
       } catch (x) { self.postMessage({ type: 'error', j: m.j, msg: String((x && x.message) || x) }); }
     };
   }
 
-  let W = null, how = '', jobs = new Map(), jn = 0, urls = [];
-  async function start(opts = {}) {
-    if (W) return W; if (state !== 'ready') await check(); if (state !== 'ready') throw new Error('The background remover is not downloaded yet.');
-    const [js, mjs, wasm, model] = await Promise.all(['js', 'mjs', 'wasm', 'model'].map(get));
+  let W = null, how = '', jobs = new Map(), jn = 0, urls = [], starting = null; const hooks = { status: null };
+  // A helper with the model loaded. The small (16 bit) model on the graphics card first; a card without 16 bit maths gets
+  // the full precision copy (downloaded once, only then); no graphics card at all runs on the processor (slow).
+  function boot(files, model, ep, half) {
     const u = (b, t) => { const x = URL.createObjectURL(new Blob([b], { type: t })); urls.push(x); return x; };
     const w = new Worker(u('(' + helper.toString() + ')()', 'text/javascript'));
-    const ready = new Promise((res, rej) => { w.onmessage = e => { const m = e.data; if (m.type === 'ready') { how = m.how; res(); } else if (m.type === 'error' && m.j == null) rej(new Error(m.msg)); else { const J = jobs.get(m.j); if (!J) return; jobs.delete(m.j); m.type === 'error' ? J.rej(new Error(m.msg)) : J.res(m); } }; w.onerror = ev => rej(new Error(ev.message || 'The background remover stopped')); });
-    w.postMessage({ type: 'init', js: u(js, 'text/javascript'), mjs: u(mjs, 'text/javascript'), wasm: u(wasm, 'application/wasm'), model: await model.arrayBuffer(), cpu: !!opts.cpu });
-    try { await ready; } catch (e) { w.terminate(); throw e; }
-    W = w; return W;
+    const ready = new Promise((res, rej) => { w.onmessage = e => { const m = e.data; if (m.type === 'ready') { how = m.how; res(m); } else if (m.type === 'error' && m.j == null) { const x = new Error(m.msg); Object.assign(x, { gpu: m.gpu, f16: m.f16, ep: m.ep }); rej(x); } else { const J = jobs.get(m.j); if (!J) return; jobs.delete(m.j); m.type === 'error' ? J.rej(new Error(m.msg)) : J.res(m); } }; w.onerror = ev => rej(new Error(ev.message || 'The background remover stopped')); });
+    model.arrayBuffer().then(buf => w.postMessage({ type: 'init', js: u(files.js, 'text/javascript'), mjs: u(files.mjs, 'text/javascript'), wasm: u(files.wasm, 'application/wasm'), model: buf, ep, half }, [buf]));
+    return ready.then(() => w, e => { w.terminate(); throw e; });
+  }
+  async function start(opts = {}) {
+    if (W) return W; if (starting) return starting;
+    starting = (async () => {
+      if (state !== 'ready') await check(); if (state !== 'ready') throw new Error('The background remover is not downloaded yet.');
+      const [js, mjs, wasm] = await Promise.all(['js', 'mjs', 'wasm'].map(get)), files = { js, mjs, wasm }, say = t => hooks.status && hooks.status(t);
+      if (opts.cpu) return (W = await boot(files, await get('model'), 'wasm'));
+      const big = await get('model32');
+      if (big && (await get('need32'))) { try { return (W = await boot(files, big, 'webgpu')); } catch (e) { } }
+      try { return (W = await boot(files, await get('model'), undefined, true)); }
+      catch (e) {
+        if (!e.gpu) { say('No graphics card the browser can use: running on the processor, which takes a few minutes…'); return (W = await boot(files, await get('model'), 'wasm')); }
+        // the card cannot do the 16 bit model: the full precision copy
+        const m = man || await get('manifest'); if (!m || !m.model32) throw e;
+        let b32 = big; if (!b32) { say('Your graphics card needs the full precision copy of the remover: downloading it once (about 245 MB)…'); b32 = await fetchParts(m, m.model32.parts, q => say('Downloading the full precision remover (once): ' + Math.round(q * 100) + '%'), m.model32.sha256); await put('model32', b32); }
+        await put('need32', true); say('Starting the background remover…'); return (W = await boot(files, b32, 'webgpu'));
+      }
+    })();
+    try { return await starting; } finally { starting = null; }
   }
   function job(msg, transfer) { const j = ++jn; return new Promise((res, rej) => { jobs.set(j, { res, rej }); W.postMessage(Object.assign({ j }, msg), transfer || []); }); }
   // bm: an ImageBitmap (copied for the helper). Gives { w, h, mask: Blob, fg: Blob, ms, how }
   async function cut(bm, opts = {}) { await start(opts); const c = await createImageBitmap(bm); return job({ type: 'cut', bm: c, max: opts.max }, [c]); }
   async function refine(bm, maskBm) { await start(); const c = await createImageBitmap(bm), m = await createImageBitmap(maskBm); return job({ type: 'refine', bm: c, mask: m }, [c, m]); }
   function stop() { if (W) W.terminate(); W = null; jobs.forEach(J => J.rej(new Error('Stopped'))); jobs.clear(); urls.forEach(u => URL.revokeObjectURL(u)); urls = []; }
-  return { check, download, cut, refine, stop, get state() { return state; }, get how() { return how; } };
+  return { check, download, cut, refine, stop, hooks, get state() { return state; }, get how() { return how; } };
 })();

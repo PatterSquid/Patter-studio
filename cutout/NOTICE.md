@@ -16,3 +16,6 @@ limitation the rights to use, copy, modify, merge, publish, distribute, sublicen
 and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above
 copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+* `birefnet-lite-1024-fp32.onnx.part0..3`: the same model converted to 32 bit floats (every float16 weight, constant and
+  cast widened; outputs match), downloaded only when the graphics card cannot do 16 bit maths.

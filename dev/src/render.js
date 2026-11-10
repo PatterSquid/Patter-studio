@@ -137,6 +137,7 @@ const Render = (() => {
     } catch (e) { workers.forEach(w => w.terminate()); URL.revokeObjectURL(url); console.warn('Parallel export unavailable, using one thread:', e.message); return null; }
   }
   async function makePool(mod, cfg, look, W, H, fps, blur, n, t0 = 0) {
+    if (mod.noWorkers) return null;   // tabs that are not animations (the thumbnail)
     // his puppet's pictures live on the page: clips that use it hand the helpers a copy (workerData), else they draw on the page
     let extra = null; if (mod.mainThread && mod.mainThread(cfg)) { extra = mod.workerData ? mod.workerData(cfg) : null; if (!extra) return null; }
     const needsMap = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover' || !!(mod.needsMap && mod.needsMap(cfg));

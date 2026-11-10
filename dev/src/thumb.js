@@ -36,7 +36,7 @@ const Thumb = (() => {
   const newImage = o => base('image', Object.assign({ asset: '', crop: { l: 0, t: 0, r: 0, b: 0 }, adj: { br: 0, co: 0, sa: 0, wa: 0 }, cut: null, edge: { feather: 0, shrink: 0 }, outline: { on: false, c: '#ffffff', w: 12 } }, o));
   const newText = o => base('text', Object.assign({ text: 'YOUR\nWORDS', font: 'Oswald', size: 120, weight: 0, italic: false, cols: ['#ffffff'], align: 'center', lh: 1, ls: 0, upper: true, fit: false, stroke: { w: 0, c: '#000000' }, stroke2: { w: 0, c: '#ffffff' }, box: { on: false, c: '#e8322c', pad: 18, r: 10, op: 1 } }, o));
   const newShape = o => base('shape', Object.assign({ shape: 'rect', fill: '#e8322c', fillOn: true, stroke: '#ffffff', sw: 0, r: 0 }, o));
-  const defaults = () => ({ v: 1, fmt: '16:9', bg: { k: 'colour', c1: '#000000', c2: '#1d2b4f', ang: 90, asset: '', blur: 0, dim: 0 }, layers: TEMPLATES.split.make('16:9') });
+  const defaults = () => ({ v: 1, fmt: '16:9', bg: { k: 'colour', c1: '#000000', c2: '#1d2b4f', ang: 90, asset: '', blur: 0, dim: 0 }, layers: slotify(TEMPLATES.split.make('16:9')) });
 
   /* ---------- ready made layouts ---------- */
   const TEMPLATES = {
@@ -62,23 +62,33 @@ const Thumb = (() => {
           newText({ name: 'VS', text: 'VS', x: W / 2, y: H / 2, w: 220, size: 120, font: 'Anton', cols: ['#000000'] })]; } },
     news: { name: 'Breaking', note: 'Your picture full size with a red banner and a headline strip along the bottom.',
       bg: { k: 'colour', c1: '#111111' }, make: f => { const [W, H] = DIMS[f] || DIMS['16:9'], v = W < H;
-        return [newImage({ name: 'Picture', x: W / 2, y: H / 2, w: W, h: H, slot: true }),
+        return [newImage({ name: 'Picture', x: W / 2, y: H / 2, w: W, h: H, slot: true, cover: true }),
           newShape({ name: 'Strip', shape: 'rect', x: W / 2, y: v ? H * 0.82 : H * 0.84, w: W, h: v ? 260 : 170, fill: '#ffffff' }),
           newShape({ name: 'Banner', shape: 'rect', x: v ? W * 0.3 : W * 0.17, y: v ? H * 0.75 : H * 0.72, w: v ? 520 : 360, h: v ? 110 : 80, fill: '#e8322c' }),
           newText({ name: 'Banner words', text: 'BREAKING', x: v ? W * 0.3 : W * 0.17, y: v ? H * 0.75 : H * 0.72, w: v ? 480 : 330, size: v ? 80 : 58, font: 'Oswald', cols: ['#ffffff'], fit: true }),
           newText({ name: 'Headline', text: 'YOUR HEADLINE HERE', x: W / 2, y: v ? H * 0.84 : H * 0.865, w: W * 0.9, size: v ? 92 : 78, font: 'Oswald', cols: ['#111111'], fit: true })]; } }
   };
-  function applyTemplate(cfg, k) { const T = TEMPLATES[k]; if (!T) return; const old = (cfg.layers || []).filter(L => L.k === 'image' && L.asset).map(L => L.asset);
-    cfg.bg = Object.assign({ k: 'colour', c1: '#000000', c2: '#1d2b4f', ang: 90, asset: '', blur: 0, dim: 0 }, T.bg); cfg.layers = T.make(cfg.fmt);
+  const slotify = Ls => { Ls.forEach(L => { if (L.k === 'image' && L.slot) { L.box = { x: L.x, y: L.y, w: L.w, h: L.h }; if (L.autoCut && L.sit == null) L.sit = 'bottom'; } }); return Ls; };
+  function applyTemplate(cfg, k) { const T = TEMPLATES[k]; if (!T) return; const old = (cfg.layers || []).filter(L => L.k === 'image' && L.asset).map(L => ({ asset: L.asset, cut: L.cut, crop: L.crop }));
+    cfg.bg = Object.assign({ k: 'colour', c1: '#000000', c2: '#1d2b4f', ang: 90, asset: '', blur: 0, dim: 0 }, T.bg); cfg.layers = slotify(T.make(cfg.fmt));
     // keep his pictures: they go into the new slots in order
-    cfg.layers.filter(L => L.k === 'image' && L.slot).forEach((L, i) => { if (old[i]) { L.asset = old[i]; fitImage(L); } }); }
+    cfg.layers.filter(L => L.k === 'image' && L.slot).forEach((L, i) => { const o = old[i]; if (o) { L.asset = o.asset; if (L.autoCut || !L.cover) { L.cut = o.cut || null; L.crop = Object.assign({ l: 0, t: 0, r: 0, b: 0 }, o.crop || {}); } fitImage(L); } }); }
 
   /* ---------- drawing ---------- */
   const imgCache = new Map();   // composite of a picture with its cut out, edge and colour, keyed by what went into it
   const bmOf = id => (id && typeof CutMedia !== 'undefined') ? CutMedia.image(id) : null;
   const aspectOf = L => { const b = bmOf(L.asset); if (!b) return L.w / Math.max(1, L.h); const c = L.crop || {}; return (b.width * (1 - (c.l || 0) - (c.r || 0))) / Math.max(1, b.height * (1 - (c.t || 0) - (c.b || 0))); };
   // a new picture fills the slot it went into (contain), keeping its shape
-  function fitImage(L, cover) { const a = aspectOf(L); if (!isFinite(a) || a <= 0) return; const bw = L.w, bh = L.h; if ((bw / bh > a) !== !!cover) { L.h = bh; L.w = bh * a; } else { L.w = bw; L.h = bw / a; } if (cover) { } }
+  function fitImage(L, cover) { const a = aspectOf(L); if (!isFinite(a) || a <= 0) return; const B = L.box || { x: L.x, y: L.y, w: L.w, h: L.h }, bw = B.w, bh = B.h;
+    if ((bw / bh > a) !== !!(cover || L.cover)) { L.h = bh; L.w = bh * a; } else { L.w = bw; L.h = bw / a; }
+    L.x = B.x; L.y = L.sit === 'bottom' ? B.y + B.h / 2 - L.h / 2 : B.y; }
+  // after a cut out, the picture is cropped to the person (a little room left), so they fill their place in the layout
+  async function trimToSubject(L) { try { const m = await CutMedia.bitmap(L.cut.mask), s = Math.min(1, 1024 / Math.max(m.width, m.height)), w = Math.max(1, Math.round(m.width * s)), h = Math.max(1, Math.round(m.height * s)), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(m, 0, 0, w, h);
+      const d = g.getImageData(0, 0, w, h).data; let x0 = w, y0 = h, x1 = -1, y1 = -1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) return; const mx = 0.015 * w, my = 0.015 * h, c0 = { l: Math.max(0, (x0 - mx) / w), t: Math.max(0, (y0 - my) / h), r: Math.max(0, (w - 1 - x1 - mx) / w), b: Math.max(0, (h - 1 - y1 - my) / h) };
+      if (y1 >= h - 2) c0.b = 0; const old = L.crop || { l: 0, t: 0, r: 0, b: 0 }, ow = 1 - old.l - old.r, oh = 1 - old.t - old.b, nw = 1 - c0.l - c0.r, nh = 1 - c0.t - c0.b;
+      if (L.box) { L.crop = c0; fitImage(L); return; }
+      const k = L.w / ow, cx = L.x + ((c0.l + nw / 2) - (old.l + ow / 2)) * k * (L.flipH ? -1 : 1), cy = L.y + ((c0.t + nh / 2) - (old.t + oh / 2)) * (L.h / oh); L.crop = c0; L.w = nw * k; L.h = nh * L.h / oh; L.x = cx; L.y = cy; } catch (e) { } }
   function composite(L, dispScale) {
     const src = bmOf(L.asset); if (!src) return null; const cut = L.cut && L.cut.on !== false && L.cut.mask ? L.cut : null;
     const m = cut ? bmOf(cut.mask) : null, fg = cut ? bmOf(cut.fg) : null; if (cut && (!m || !fg)) return null;
@@ -140,7 +150,7 @@ const Thumb = (() => {
     g.save(); if (+S1.w > 0 || +S2.w > 0) g.shadowColor = 'transparent'; pass((q, i, y) => { g.fillStyle = cols[Math.min(i, cols.length - 1)]; g.fillText(q.s, ax, y); }); g.restore();
     return H2;
   }
-  function rr(g, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function rr(g, x, y, w, h, r) { w = Math.abs(w) || 0; h = Math.abs(h) || 0; r = Math.max(0, Math.min(+r || 0, w / 2, h / 2)); g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function shapePath(g, L) {
     const w = L.w, h = L.h, x = -w / 2, y = -h / 2; g.beginPath();
     switch (L.shape) {
@@ -173,7 +183,7 @@ const Thumb = (() => {
       if (opts.clean) return null; }
     if (L.k === 'text') sizeOf(L);
     const sw = L.k === 'text' ? 2 * ((+(L.stroke || {}).w || 0) + (+(L.stroke2 || {}).w || 0)) + (+L.size || 100) * 0.4 : L.k === 'shape' ? (+L.sw || 0) + 4 : 8;
-    const pw = L.w + sw * 2, ph = L.h + sw * 2, cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(pw * k)); cv.height = Math.max(1, Math.ceil(ph * k));
+    const pw = L.w + sw * 2, ph = L.h + sw * 2; if (!(pw > 0 && ph > 0 && pw * k < 16000 && ph * k < 16000)) return null; const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.ceil(pw * k)); cv.height = Math.max(1, Math.ceil(ph * k));
     const g = cv.getContext('2d'); g.setTransform(k, 0, 0, k, pw * k / 2, ph * k / 2);
     if (L.k === 'text') drawText(g, L);
     else if (L.k === 'shape') { shapePath(g, L); if (L.fillOn !== false) { g.fillStyle = L.fill || '#e8322c'; g.fill(); } if (+L.sw > 0) { g.lineJoin = 'round'; g.strokeStyle = L.stroke || '#fff'; g.lineWidth = +L.sw; g.stroke(); } }
@@ -187,8 +197,8 @@ const Thumb = (() => {
   // Draws the whole thumbnail into g at size W x H (picture pixels scaled by W / its width). opts.hideSel: a layer id left out (being brushed); opts.clean: no empty slots
   function render(g, cfg, W, H, opts = {}) {
     const [PW, PH] = dims(cfg), k = W / PW; g.save(); g.setTransform(k, 0, 0, k, 0, 0); drawBg(g, cfg, PW, PH);
-    for (const L of cfg.layers || []) { if (!L || L.hide || L.id === opts.hideSel) continue;
-      const A = layerArt(L, k, opts); if (!A) continue; const S = L.shadow || {}, G = L.glow || {}, op = cl(L.op == null ? 1 : +L.op, 0, 1);
+    for (const L of Array.isArray(cfg.layers) ? cfg.layers : []) { if (!L || typeof L !== 'object' || L.hide || L.id === opts.hideSel) continue; if (!(+L.w > 0 && +L.h > 0 && +L.w < 2e4 && +L.h < 2e4) && L.k !== 'text') continue;
+      let A = null; try { A = layerArt(L, k, opts); } catch (e) { A = null; } if (!A || !A.cv || !A.cv.width || !A.cv.height || !isFinite(A.w) || !isFinite(A.h)) continue; const S = L.shadow || {}, G = L.glow || {}, op = cl(L.op == null ? 1 : +L.op, 0, 1);
       const place = (dx, dy) => { g.translate((+L.x || 0) + dx, (+L.y || 0) + dy); if (L.rot) g.rotate(L.rot * Math.PI / 180); g.scale(L.flipH ? -1 : 1, L.flipV ? -1 : 1); };
       if (G.on && !A.slot) { const sil = silhouette(A.cv, G.c || '#ffffff'); g.save(); place(0, 0); g.globalAlpha = op; g.filter = 'blur(' + Math.max(0.5, (+G.b || 20) * k / 2) + 'px)'; g.drawImage(sil, A.x, A.y, A.w, A.h); g.drawImage(sil, A.x, A.y, A.w, A.h); g.restore(); }
       if (S.on && !A.slot) { const sil = silhouette(A.cv, S.c || '#000000'); g.save(); place(+S.x || 0, +S.y || 0); g.globalAlpha = op * (S.o == null ? 0.7 : cl(+S.o, 0, 1)); if (+S.b > 0) g.filter = 'blur(' + Math.max(0.5, (+S.b) * k / 2) + 'px)'; g.drawImage(sil, A.x, A.y, A.w, A.h); g.restore(); }
@@ -265,7 +275,7 @@ const Thumb = (() => {
           if (ax) { L.w = r1(Math.max(10, o.w + dl)); if (L.k === 'image') { L.h = r1(L.w / aspectOf(L)); } const dx = s * (L.w - o.w) / 2; L.x = r1(o.x + dx * Math.cos(a)); L.y = r1(o.y + dx * Math.sin(a)); }
           else { L.h = r1(Math.max(10, o.h + dl)); if (L.k === 'image') L.w = r1(L.h * aspectOf(L)); const dy = s * (L.h - o.h) / 2; L.x = r1(o.x - dy * Math.sin(a)); L.y = r1(o.y + dy * Math.cos(a)); } } }
       redraw(); });
-    const up = ev => { if (W.brush) return brushUp(ev); const D = W.drag; W.drag = null; W.guides = []; if (D && D.moved) { changed(); panels(); } redraw(); };
+    const up = ev => { if (W.brush) return brushUp(ev); const D = W.drag; W.drag = null; W.guides = []; if (D && D.moved) { if (D.L) delete D.L.box; changed(); panels(); } redraw(); };
     ov.addEventListener('pointerup', up); ov.addEventListener('pointercancel', up);
     ov.addEventListener('dblclick', ev => { const L = hitLayer(toPic(ev)) || selL(); if (!L) return; W.sel = L.id; if (L.k === 'image' && !L.asset) pickPicture(L); else if (L.k === 'text') { panels(); const t = W.root.querySelector('.th-text'); if (t) { t.focus(); t.select(); } } });
     // pictures dropped from the computer: into an empty slot under the pointer, else a new layer
@@ -274,7 +284,7 @@ const Thumb = (() => {
   // a picture into an empty slot (and cut out when the slot asks for it), or as a new layer
   async function addPicture(file, slot, at) {
     try { status('Adding the picture…'); const m = await CutMedia.importFile(file, null, { builtin: true }); await CutMedia.bitmap(m.id); const [PW, PH] = dims(W.cfg);
-      let L = slot; if (L) { L.asset = m.id; L.cut = null; fitImage(L); } else { L = newImage({ name: (file.name || 'Picture').replace(/\.\w+$/, '').slice(0, 30), asset: m.id, x: at ? at[0] : PW / 2, y: at ? at[1] : PH / 2, w: PW * 0.5, h: PH * 0.5 }); fitImage(L); W.cfg.layers.push(L); }
+      let L = slot; if (L) { L.asset = m.id; L.cut = null; L.crop = { l: 0, t: 0, r: 0, b: 0 }; fitImage(L); } else { L = newImage({ name: (file.name || 'Picture').replace(/\.\w+$/, '').slice(0, 30), asset: m.id, x: at ? at[0] : PW / 2, y: at ? at[1] : PH / 2, w: PW * 0.5, h: PH * 0.5 }); fitImage(L); W.cfg.layers.push(L); }
       W.sel = L.id; changed(true); layersBar(); status('');
       if (L.autoCut && (await Cutout.check()) === 'ready') removeBg(L); else if (L.autoCut) say('Picture in. Press Remove background on the right to cut it out.'); }
     catch (e) { status(''); say(e.message || String(e)); } }
@@ -284,12 +294,12 @@ const Thumb = (() => {
   const say = s => { W.say = s; const el = W.root && W.root.querySelector('.th-say'); if (el) { el.textContent = s; clearTimeout(say.t); say.t = setTimeout(() => { if (el.textContent === s) el.textContent = ''; }, 6000); } };
 
   /* ---------- background removal ---------- */
-  async function removeBg(L) {
+  async function removeBg(L, opts = {}) {
     if (!L || !L.asset) return; try {
       if ((await Cutout.check()) !== 'ready') { status('Downloading the background remover (once, about 140 MB)…'); await Cutout.download(q => status('Downloading the background remover (once): ' + Math.round(q * 100) + '%')); }
       status('Cutting out the background…'); const bm = await CutMedia.bitmap(L.asset), t0 = performance.now(), r = await Cutout.cut(bm);
       const mk = await CutMedia.importFile(new File([r.mask], 'cut-mask.png', { type: 'image/png' }), null, { builtin: true }), fg = await CutMedia.importFile(new File([r.fg], 'cut-colour.png', { type: 'image/png' }), null, { builtin: true });
-      await CutMedia.bitmap(mk.id); await CutMedia.bitmap(fg.id); L.cut = { mask: mk.id, fg: fg.id, on: true }; status('');
+      await CutMedia.bitmap(mk.id); await CutMedia.bitmap(fg.id); L.cut = { mask: mk.id, fg: fg.id, on: true }; if (opts.trim !== false) await trimToSubject(L); status('');
       say('Background removed in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s' + (Cutout.how === 'wasm' ? ' (on the processor: no graphics card was available)' : '') + '. Fix by hand if anything is wrong.'); changed(true);
     } catch (e) { status(''); say('Background removal failed: ' + (e.message || e)); } }
   // Fix by hand: paint Keep or Remove on the mask; the removed parts show in red
@@ -390,7 +400,7 @@ const Thumb = (() => {
     if (L.k === 'image') { L.adj = Object.assign({ br: 0, co: 0, sa: 0, wa: 0 }, L.adj || {}); L.edge = Object.assign({ feather: 0, shrink: 0 }, L.edge || {}); L.outline = Object.assign({ on: false, c: '#ffffff', w: 12 }, L.outline || {}); L.crop = Object.assign({ l: 0, t: 0, r: 0, b: 0 }, L.crop || {});
       const cut = L.cut && L.cut.mask;
       box.append(card('Picture', H('div', { className: 'btnrow' }, btn(L.asset ? 'Replace the picture' : 'Choose a picture', () => pickPicture(L), L.asset ? '' : 'primary'), L.asset ? btn('Original size shape', () => { const a = aspectOf(L); L.h = L.w / a; full(); }) : ''),
-        ...(L.asset ? [cut ? H('div', { className: 'th-col' }, onoff('Background removed', L.cut.on !== false, v => { L.cut.on = v; }), H('div', { className: 'btnrow' }, btn('Fix by hand', () => startBrush(L)), btn('Tidy stray bits', () => tidySpecks(L)), btn('Cut out again', () => removeBg(L))))
+        ...(L.asset ? [cut ? H('div', { className: 'th-col' }, onoff('Background removed', L.cut.on !== false, v => { L.cut.on = v; }), H('div', { className: 'btnrow' }, btn('Fix by hand', () => startBrush(L)), btn('Tidy stray bits', () => tidySpecks(L)), btn('Crop to the person', async () => { await trimToSubject(L); full(); }), btn('Cut out again', () => removeBg(L))))
           : btn('✂ Remove background', () => removeBg(L), 'primary th-big'),
           H('p', { className: 'hint th-cuthint', textContent: cut ? 'Edges below. Fix by hand paints back anything it got wrong.' : (Cutout.state === 'ready' ? 'Takes a second or two on your graphics card.' : 'The first time, it downloads the background remover (about 140 MB), then it works offline.') })] : [])));
       if (cut && L.cut.on !== false) box.append(card('Edges', slider('Soften the edge', L.edge.feather, 0, 12, 0.5, v => { L.edge.feather = v; }, px), slider('Pull the edge in', L.edge.shrink, 0, 12, 0.5, v => { L.edge.shrink = v; }, px),
@@ -424,7 +434,7 @@ const Thumb = (() => {
   function layersBar() {
     const box = W.root && W.root.querySelector('.th-layers'); if (!box) return; const { H } = UI; box.innerHTML = ''; const Ls = (W.cfg.layers || []).slice().reverse();
     box.append(H('span', { className: 'th-lhead', textContent: 'Layers' }));
-    Ls.forEach(L => { const c = document.createElement('canvas'); c.width = 44; c.height = 30; try { const g = c.getContext('2d'); if (L.k === 'image') { const C = composite(L, 0.1), b = C ? C.cv : null; if (b) { const s = Math.min(44 / b.width, 30 / b.height); g.drawImage(b, (44 - b.width * s) / 2, (30 - b.height * s) / 2, b.width * s, b.height * s); } else { g.strokeStyle = '#93a4c0'; g.setLineDash([3, 3]); g.strokeRect(4, 4, 36, 22); } } else { g.fillStyle = L.k === 'text' ? (L.cols && L.cols[0]) || '#fff' : L.fill || '#e8322c'; g.font = '700 18px Arial'; g.textAlign = 'center'; if (L.k === 'text') g.fillText((String(L.text || 'T').trim()[0] || 'T').toUpperCase(), 22, 22); else { g.translate(22, 15); shapePath(g, Object.assign({}, L, { w: 34, h: 22 })); g.fill(); } } } catch (e) { }
+    Ls.forEach(L => { const c = document.createElement('canvas'); c.width = 44; c.height = 30; try { const g = c.getContext('2d'); if (L.k === 'image') { const C = composite(L, 0.1), b = C ? C.cv : null; if (b) { const s = Math.min(44 / b.width, 30 / b.height); g.drawImage(b, (44 - b.width * s) / 2, (30 - b.height * s) / 2, b.width * s, b.height * s); } else { g.strokeStyle = '#93a4c0'; g.setLineDash([3, 3]); g.strokeRect(4, 4, 36, 22); } } else { g.fillStyle = L.k === 'text' ? (L.cols && L.cols[0]) || '#fff' : L.fill || '#e8322c'; g.font = '700 18px Arial'; g.textAlign = 'center'; if (L.k === 'text') g.fillText((Array.from(String(L.text || 'T').trim())[0] || 'T').toUpperCase(), 22, 22); else { g.translate(22, 15); shapePath(g, Object.assign({}, L, { w: 34, h: 22 })); g.fill(); } } } catch (e) { }
       const chip = H('div', { className: 'th-chip' + (L.id === W.sel ? ' on' : '') + (L.hide ? ' off' : ''), draggable: true, title: 'Click to select. Drag to put it in front of or behind others.', on: { click: () => { W.sel = L.id; panels(); layersBar(); redraw(); },
           dragstart: e => { e.dataTransfer.setData('text/plain', L.id); }, dragover: e => e.preventDefault(), drop: e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'), a = W.cfg.layers, src = a.find(x => x.id === id); if (!src || src === L) return; a.splice(a.indexOf(src), 1); a.splice(a.indexOf(L) + (e.offsetX > e.currentTarget.offsetWidth / 2 ? 0 : 1), 0, src); changed(true); layersBar(); } } },
         c, H('span', { className: 'th-cname', textContent: L.name || (L.k === 'image' ? 'Picture' : L.k === 'text' ? String(L.text || 'Words').split('\n')[0].slice(0, 18) : 'Shape') }),
@@ -469,7 +479,7 @@ const Thumb = (() => {
 
   /* ---------- the tab ---------- */
   function form(root0, cfg, changedFn) {
-    const { H, btn } = UI; linkFonts();
+    const { H, btn } = UI; linkFonts(); if (typeof Cutout !== 'undefined') Cutout.hooks.status = t => status(t);
     W.cfg = cfg; W.changed = changedFn; if (!Array.isArray(cfg.layers)) cfg.layers = []; if (!DIMS[cfg.fmt]) cfg.fmt = '16:9';
     if (W.sel && !layerById(W.sel)) W.sel = null; if (W.brush && !layerById(W.brush.id)) W.brush = null;
     let ws = document.getElementById('thumbWs'); if (!ws) { ws = H('div', { id: 'thumbWs' }); document.querySelector('main').append(ws); } W.root = ws; ws.innerHTML = '';
@@ -507,5 +517,5 @@ const Thumb = (() => {
   const duration = () => 1;
   // the app's small previews (project list) draw the thumbnail itself
   function draw(g, t, cfg, look, Wd, Hd) { g.fillStyle = '#000'; g.fillRect(0, 0, Wd, Hd); try { const [PW, PH] = dims(cfg), s = Math.min(Wd / PW, Hd / PH), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(PW * s)); c.height = Math.max(1, Math.round(PH * s)); render(c.getContext('2d'), cfg, c.width, c.height, { clean: true }); g.drawImage(c, (Wd - c.width) / 2, (Hd - c.height) / 2); } catch (e) { } }
-  return { id: 'thumb', name: 'Thumbnail', defaults, duration, draw, form, key, activate, exportDialog, hooks, render, dims, TEMPLATES, applyTemplate, _W: W, _blob: blobOf, _removeBg: removeBg, _addPicture: addPicture, _key: key };
+  return { id: 'thumb', name: 'Thumbnail', noWorkers: true, defaults, duration, draw, form, key, activate, exportDialog, hooks, render, dims, TEMPLATES, applyTemplate, _W: W, _blob: blobOf, _removeBg: removeBg, _addPicture: addPicture, _key: key, _fit: fitImage };
 })();

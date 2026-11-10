@@ -20,6 +20,20 @@
   "ort-wasm-simd-threaded.jsep.mjs": 46839,
   "ort-wasm-simd-threaded.jsep.wasm": 21663894,
   "birefnet-lite-1024-fp16.onnx.part0": 62000000,
-  "birefnet-lite-1024-fp16.onnx.part1": 60969369
+  "birefnet-lite-1024-fp16.onnx.part1": 60969369,
+  "birefnet-lite-1024-fp32.onnx.part0": 62000000,
+  "birefnet-lite-1024-fp32.onnx.part1": 62000000,
+  "birefnet-lite-1024-fp32.onnx.part2": 62000000,
+  "birefnet-lite-1024-fp32.onnx.part3": 58634113
+ },
+ "model32": {
+  "name": "BiRefNet lite, full precision (for graphics cards without 16 bit maths)",
+  "parts": [
+   "birefnet-lite-1024-fp32.onnx.part0",
+   "birefnet-lite-1024-fp32.onnx.part1",
+   "birefnet-lite-1024-fp32.onnx.part2",
+   "birefnet-lite-1024-fp32.onnx.part3"
+  ],
+  "sha256": "666ca22760c094652eee95bc96c6029b215841686e207a8bbc620c573c67e2d2"
  }
 }

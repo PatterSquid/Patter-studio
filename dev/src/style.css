@@ -616,3 +616,4 @@ body.thb main > :not(#thumbWs){display:none!important}
 .th-ftitle{font-size:14px;font-weight:600;line-height:1.35}.th-fsub{font-size:12px;color:#aaa;margin-top:3px}.th-flab{width:100%;font-size:11px;color:#7f8ea8;text-transform:uppercase;letter-spacing:.07em}
 .th-fcard:not(.big) .th-fmeta{flex:1 1 140px}
 .th-dlg{min-width:min(520px,94vw)}.th-dbody{padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+body:not(.thb) #thumbWs{display:none!important}
