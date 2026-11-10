@@ -4,9 +4,9 @@
   const SCRACT = {
     bangtv: { go: 1, imp: [0.3, 0.5, 0.7], stand: 'edge' }, kicktv: { go: 1, imp: 0.35, stand: 'edge' }, buttv: { go: 1, imp: 0.42, stand: 'edge' }, smashtv: { go: 1, imp: 0.45, stand: 'edge' },
     pishtv: { go: 1, imp: 0.35, stand: 'near' }, leantv: { go: 1, stand: 'edge' }, sittv: { go: 1, stand: 'centre' }, suckedtv: { go: 1, imp: 0.2, stand: 'front' }, chucktv: { go: 1, imp: 0.45, stand: 'edge' },
-    throwtv: { imp: 1 }, fingertv: {}, vsigntv: {}, moontv: {}, shouttv: {}, remote: { imp: 0.5 }, offtv: { imp: 0.5 }, droptv: { imp: 0.25 }, swipetv: { imp: 0.4 },
+    throwtv: { imp: 1 }, fingertv: {}, salutetv: {}, hearttv: {}, anthemtv: {}, sobtv: {}, vsigntv: {}, moontv: {}, shouttv: {}, remote: { imp: 0.5 }, offtv: { imp: 0.5 }, droptv: { imp: 0.25 }, swipetv: { imp: 0.4 },
   };
-  const SCRALIAS = { fingertv: 'finger', vsigntv: 'vsign', moontv: 'moon', pishtv: 'pish', shouttv: 'shout', throwtv: 'throw' };
+  const SCRALIAS = { salutetv: 'salute', hearttv: 'heart', anthemtv: 'anthem', sobtv: 'sob', fingertv: 'finger', vsigntv: 'vsign', moontv: 'moon', pishtv: 'pish', shouttv: 'shout', throwtv: 'throw' };
   const THROWABLES = [['bottle', 'Bottle'], ['pint', 'Pint'], ['tea', 'Cup of tea'], ['chips', 'Chips'], ['shoe', 'Shoe'], ['flowers', 'Flowers']];
   const impTimes = a => { const A = SCRACT[a.k]; if (!A || A.imp == null) return []; return [].concat(A.imp).map(f => a.start + a.dur * (A.go ? 0.3 + 0.7 * f : f)); };
   // The screen someone means: the one they picked, or the nearest

@@ -49,7 +49,7 @@
       // Props sit in the hand that grips them; carried bags go on the floor when someone sits or lies down
       Object.keys(Q.grips).forEach(pr => { const G = GRIP[pr] || {}, mine = pr === Q.ap; let hand = F.hands[Q.grips[pr]]; if (!hand) return;
         if (G.carry && (Q.sit > 0.5 || Q.rot > 0.5)) hand = [F.hip[0] + back * 0.2 * S, FL - 64];
-        const blade = pr === 'sword' || pr === 'axe' || pr === 'spear' || pr === 'torch', ang = mine ? (blade ? (Q.bladeA != null ? Q.bladeA : (Q.hold && Q.hold.a != null ? Q.hold.a : 0)) : pr === 'gun' || pr === 'rifle' ? (Q.aimUp || 0) : 0) : (G.a || 0);
+        const blade = pr === 'sword' || pr === 'axe' || pr === 'spear' || pr === 'torch' || pr === 'flag', ang = mine ? (blade ? (Q.bladeA != null ? Q.bladeA : (Q.hold && Q.hold.a != null ? Q.hold.a : 0)) : pr === 'gun' || pr === 'rifle' ? (Q.aimUp || 0) : 0) : (G.a || 0);
         if (Q.swimming && pr !== 'phone') return; propDraw(g, pr, hand, Q.dir, lt, ang); const tall = { umbrella: 230, flag: 255, sign: 275, spear: 300 }[pr]; if (tall && !mine) F.top = Math.min(F.top, hand[1] - tall); });
       if (Q.rot > 0.5 && !Q.swimming) Q.props.filter(pr => Q.grips[pr] == null).forEach((pr, i) => { if (GRIP[pr] && GRIP[pr].carry) propDraw(g, pr, [F.hip[0] + back * (0.25 + i * 0.1) * S, FL - 64], Q.dir, lt, 0); else if (i === 0) propDraw(g, pr, F.hands[front], Q.dir, lt, (GRIP[pr] || {}).a || 0); });
       Q.col = it.ch.colour; Q.fx.forEach(f => { if (f.k !== 'splash') drawFx(g, f, F, Q, lt); });

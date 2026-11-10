@@ -132,6 +132,7 @@
   // a: angle the prop points (0 = straight ahead in the facing direction, negative = up)
   function propDraw(g, name, h, dir, t, a = 0) {
     if (PACK.props[name]) { packPropDraw(g, name, h, dir); return; }
+    if (name === 'flag' && a) { g.save(); g.translate(h[0], h[1]); g.rotate(a * dir); g.translate(-h[0], -h[1]); propDraw(g, name, h, dir, t, 0); g.restore(); return; }
     const [x, y] = h, d = dir, R = (len, ang) => [x + Math.cos(ang) * len * d, y + Math.sin(ang) * len];
     switch (name) {
       case 'suitcase': line(g, rectP(x - 34, y + 10, 68, 52), CH.brown, 5); line(g, [[x - 10, y + 10], [x - 10, y - 2], [x + 10, y - 2], [x + 10, y + 10]], CH.brown, 4); line(g, [[x - 34, y + 30], [x + 34, y + 30]], CH.brown, 3); return;
