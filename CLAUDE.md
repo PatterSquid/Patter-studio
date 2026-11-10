@@ -144,7 +144,10 @@ layers along the bottom (`.th-layers`, drag to reorder). The header Export opens
   bubbles, boom, burst, star, heart and the basics, each a ready look in `PRESETS` (the Shapes drawer). A shape is a list
   of outlines (ribbons along smooth curves for strokes), each filled in turn so parts never cut holes in each other; the
   outline is drawn fat behind the fill; `fill2` gradient, `depth`/`depthC` 3D extrusion, `shine`, `bend`, `thick`,
-  `rough` (low frequency wobble, `seed`), `tail`. Words have 3D depth too (`depth: { d, c }`). The remover warms up
+  `rough` (low frequency wobble, `seed`), `tail`. Words have 3D depth too (`depth: { d, c }`), `slant` (degrees, each line leans
+  from its baseline) and any layer `grit` (brush edges: `gritty` moves the edge by a noise field stretched along the stroke).
+  He wanted the heavy slanted, rough edged red words with a brush swipe under them: Text has Brush slam (with a swipe),
+  Shapes has Brush swipe (`swipe`). The remover warms up
   (`Cutout.warm`) 1.5 s after the tab opens, so the first cut out is quick.
 * He asked for the Basic Logic channel's thumbnail style. Do not make layouts or test pictures that mock people for race
   or religion.
