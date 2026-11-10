@@ -99,19 +99,20 @@ const Render = (() => {
 
   // Main side: the web fonts the page uses, so workers can draw identical text.
   async function fontList() {
+    const lib = typeof FontLib !== 'undefined' ? (await FontLib.idle(), FontLib.forWorkers()) : [], libF = new Set(lib.map(f => f.family));
     const link = document.querySelector('link[href*="fonts.googleapis.com/css"]'), href = window.PATTER_FONT_CSS || (link && link.href);
     // fonts built into the bundle (PATTER_FONTS) the helpers load themselves; any other loaded web font they could not match
     const own = new Set(typeof PATTER_FONTS !== 'undefined' ? Object.keys(PATTER_FONTS).map(k => k.split('|')[0]) : []);
-    const usesWebFonts = () => { try { return !!document.fonts && [...document.fonts].some(ff => ff.status === 'loaded' && !own.has(ff.family.replace(/['"]/g, ''))); } catch (e) { return false; } };
-    if (!href) return usesWebFonts() ? null : [];
+    const usesWebFonts = () => { try { return !!document.fonts && [...document.fonts].some(ff => ff.status === 'loaded' && !own.has(ff.family.replace(/['"]/g, '')) && !libF.has(ff.family.replace(/['"]/g, ''))); } catch (e) { return false; } };
+    if (!href) return usesWebFonts() ? null : lib;
     try {
       const css = await (await fetch(href)).text(), out = [], re = /\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{([^}]*)\}/g; let mm;
       const get = (b, k) => { const r = new RegExp(k + '\\s*:\\s*([^;]+);').exec(b); return r ? r[1].trim() : ''; };
       while ((mm = re.exec(css))) { if (mm[1] !== 'latin') continue; const b = mm[2], src = /url\(([^)]+)\)/.exec(b); if (!src) continue;
         out.push({ family: get(b, 'font-family').replace(/['"]/g, ''), style: get(b, 'font-style'), weight: get(b, 'font-weight'), range: get(b, 'unicode-range'), url: new URL(src[1].replace(/['"]/g, ''), href).href }); }
       if (!out.length && /@font-face/.test(css)) { const re2 = /@font-face\s*\{([^}]*)\}/g; while ((mm = re2.exec(css))) { const b = mm[1], src = /url\(([^)]+)\)/.exec(b); if (src) out.push({ family: get(b, 'font-family').replace(/['"]/g, ''), style: get(b, 'font-style'), weight: get(b, 'font-weight'), range: get(b, 'unicode-range'), url: new URL(src[1].replace(/['"]/g, ''), href).href }); } }
-      return out;
-    } catch (e) { return usesWebFonts() ? null : []; }
+      return out.concat(lib);
+    } catch (e) { return usesWebFonts() ? null : lib; }
   }
   // Starts n helpers from the app's own code and waits until each has taken in its starting message (msg(fonts) builds it)
   async function spawn(n, msg) {

@@ -16,10 +16,11 @@ const Thumb = (() => {
     ['Oswald', 700, 'g'], ['Anton', 400, 'g'], ['Bebas Neue', 400, 'g'], ['Archivo Black', 400, 'g'], ['Roboto Condensed', 900, 'g'], ['Barlow Condensed', 800, 'g'], ['Montserrat', 900, 'g'], ['Poppins', 900, 'g'],
     ['Rubik', 900, 'g'], ['Bangers', 400, 'g'], ['Luckiest Guy', 400, 'g'], ['Permanent Marker', 400, 'g'], ['Bowlby One', 400, 'g'], ['Black Ops One', 400, 'g'],
     ['Big Shoulders', 700, 'b'], ['Erica One', 400, 'b'], ['Boldonse', 400, 'b'], ['Bricolage Grotesque', 700, 'b'], ['Impact', 400, 's'], ['Arial Black', 900, 's']];
-  const GURL = 'https://fonts.googleapis.com/css2?' + FONTS.filter(f => f[2] === 'g').map(f => 'family=' + f[0].replace(/ /g, '+') + (f[1] !== 400 ? ':wght@' + f[1] : '')).join('&') + '&display=swap';
   let fontsLinked = false; const mine = new Set();
-  function linkFonts() { if (fontsLinked || typeof document === 'undefined') return; fontsLinked = true; try { document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: GURL })); } catch (e) { } loadMyFonts(); }
-  const weightOf = f => { const x = FONTS.find(q => q[0] === f); return x ? x[1] : 700; };
+  function linkFonts() { if (fontsLinked || typeof document === 'undefined') return; fontsLinked = true; loadMyFonts(); if (typeof FontLib !== 'undefined') FontLib.onLoad(() => { redraw(); if (W.drawer === 'text') drawer(); }); }
+  const weightOf = f => { const x = FONTS.find(q => q[0] === f); return x ? x[1] : (typeof FontLib !== 'undefined' && FontLib.has(f)) ? FontLib.near(f, 700) : 700; };
+  // a library font is loaded the first time it is drawn; the picture draws again when it arrives
+  const want = L => { if (typeof FontLib !== 'undefined' && FontLib.has(L.font)) { const w = L.weight || weightOf(L.font); if (!FontLib.isReady(L.font, w, L.italic)) FontLib.ensure(L.font, w, L.italic); } };
   const nid = () => 'L' + Math.random().toString(36).slice(2, 8);
 
   /* ---------- his own fonts and templates (kept in this browser) ---------- */
@@ -27,8 +28,8 @@ const Thumb = (() => {
   const all = async st => { const d = await db(); return new Promise(res => { const out = [], q = d.transaction(st).objectStore(st).openCursor(); q.onsuccess = () => { const c = q.result; if (!c) return res(out); out.push([c.key, c.value]); c.continue(); }; q.onerror = () => res(out); }); };
   const putK = async (st, k, v) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction(st, 'readwrite'); t.objectStore(st).put(v, k); t.oncomplete = () => res(true); t.onerror = () => rej(t.error); }); };
   const delK = async (st, k) => { const d = await db(); return new Promise(res => { const t = d.transaction(st, 'readwrite'); t.objectStore(st).delete(k); t.oncomplete = () => res(true); t.onerror = () => res(false); }); };
-  async function loadMyFonts() { try { for (const [name, blob] of await all('fonts')) { if (mine.has(name)) continue; const ff = new FontFace(name, await blob.arrayBuffer()); await ff.load(); document.fonts.add(ff); mine.add(name); } redraw(); } catch (e) { } }
-  async function addFont(file) { const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '').replace(/[^\w ]+/g, ' ').trim().slice(0, 40) || 'My font'; const ff = new FontFace(name, await file.arrayBuffer()); await ff.load(); document.fonts.add(ff); mine.add(name); await putK('fonts', name, file); return name; }
+  async function loadMyFonts() { try { for (const [name, blob] of await all('fonts')) { if (mine.has(name)) continue; await FontLib.addFace(name, blob); mine.add(name); } redraw(); } catch (e) { } }
+  async function addFont(file) { const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '').replace(/[^\w ]+/g, ' ').trim().slice(0, 40) || 'My font'; await FontLib.addFace(name, file); mine.add(name); await putK('fonts', name, file); return name; }
 
   /* ---------- new layers ---------- */
   const FX0 = () => ({ shadow: { on: false, c: '#000000', b: 24, x: 0, y: 8, o: 0.7 }, glow: { on: false, c: '#ffffff', b: 30 } });
@@ -129,6 +130,7 @@ const Thumb = (() => {
   const fontStr = (L, size) => (L.italic ? 'italic ' : '') + (L.weight || weightOf(L.font)) + ' ' + Math.max(1, size) + 'px "' + (L.font || 'Oswald') + '", "Arial Black", Impact, sans-serif';
   // Lines of a text layer with their sizes and widths; fit stretches each line across the box width
   function textLayout(g, L) {
+    want(L);
     const lines = String(L.text == null ? '' : L.text).split('\n').map(s => L.upper ? s.toUpperCase() : s), out = []; let y = 0;
     g.letterSpacing = (L.ls || 0) + 'px';
     for (const s of lines) { let size = +L.size || 100; g.font = fontStr(L, size); let w = g.measureText(s || ' ').width;
@@ -412,7 +414,10 @@ const Thumb = (() => {
       box.append(...fxCards(L)); return; }
     if (L.k === 'text') { L.stroke = Object.assign({ w: 0, c: '#000000' }, L.stroke || {}); L.stroke2 = Object.assign({ w: 0, c: '#ffffff' }, L.stroke2 || {}); L.box = Object.assign({ on: false, c: '#e8322c', pad: 18, r: 10, op: 1 }, L.box || {}); if (!Array.isArray(L.cols) || !L.cols.length) L.cols = ['#ffffff'];
       const n = Math.max(1, String(L.text || '').split('\n').length), fonts = [...FONTS.map(f => f[0]), ...mine]; if (L.font && !fonts.includes(L.font)) fonts.push(L.font);
-      const fsel = H('select', { 'aria-label': 'Font', on: { change: e => { L.font = e.target.value; L.weight = 0; document.fonts.load(fontStr(L, 60)).then(redraw).catch(() => { }); full(); } } }, ...fonts.map(f => H('option', { value: f, selected: f === L.font, textContent: f, style: 'font-family:"' + f + '"' })));
+      const libF = typeof FontLib !== 'undefined' && FontLib.has(L.font), ws = libF ? FontLib.weightsOf(L.font) : [];
+      const fsel = H('div', { className: 'th-fontpick' }, H('button', { type: 'button', className: 'th-fontbtn', style: 'font-family:"' + (L.font || 'Oswald') + '"', textContent: L.font || 'Oswald', title: 'Choose from every Google Font', on: { click: () => FontLib.picker({ current: L.font, sample: L.text, onPick: (f, w) => { L.font = f; L.weight = w; FontLib.ensure(f, w, L.italic); full(); } }) } }),
+        ws.length > 1 ? H('select', { 'aria-label': 'Weight', on: { change: e => { L.weight = +e.target.value; FontLib.ensure(L.font, L.weight, L.italic); full(); } } }, ...ws.map(w => H('option', { value: w, selected: w === FontLib.near(L.font, L.weight || weightOf(L.font)), textContent: ({ 100: 'Thin', 200: 'Extra light', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semi bold', 700: 'Bold', 800: 'Extra bold', 900: 'Black' })[w] || w }))) : '',
+        mine.size ? H('select', { 'aria-label': 'Your fonts', on: { change: e => { if (!e.target.value) return; L.font = e.target.value; L.weight = 400; full(); } } }, H('option', { value: '', textContent: 'Your fonts…' }), ...[...mine].map(f => H('option', { value: f, selected: f === L.font, textContent: f }))) : '');
       box.append(card('Words', H('textarea', { className: 'th-text', rows: 3, value: L.text || '', 'aria-label': 'The words', on: { input: e => { L.text = e.target.value; live(); }, change: () => full() } }),
         H('p', { className: 'hint', textContent: 'Each line can have its own colour. Press Enter for a new line.' }),
         field('Font', fsel), slider('Size', L.size, 12, 400, 1, v => { const f = v / (L.size || 1); L.size = v; if (!L.fit) L.w = r1(L.w * f); }, px),
@@ -466,7 +471,7 @@ const Thumb = (() => {
           btn('Copy to the clipboard', async () => { try { const b = await blobOf({ fmt: 'png', scale: 1 }); await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); note.textContent = 'Copied. Paste it wherever you like.'; } catch (e) { note.textContent = 'The clipboard would not take it here.'; } }))));
     d.showModal(); }
   async function blobOf(o) {
-    await waitImages(); try { await document.fonts.ready; } catch (e) { }
+    await waitImages(); if (typeof FontLib !== 'undefined') { await Promise.all((W.cfg.layers || []).filter(L => L && L.k === 'text' && FontLib.has(L.font)).map(L => FontLib.ensure(L.font, L.weight || weightOf(L.font), L.italic))); } try { await document.fonts.ready; } catch (e) { }
     const [PW, PH] = dims(W.cfg), w = Math.round(PW * (o.scale || 1)), h = Math.round(PH * (o.scale || 1)), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
     if (o.fmt === 'jpg') { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); } imgCache.clear(); render(g, W.cfg, w, h, { clean: true }); imgCache.clear();
     if (o.fmt !== 'jpg') return new Promise(r => c.toBlob(r, 'image/png'));

@@ -124,13 +124,16 @@ const Layers = (() => {
 
   /* ---------- Text ---------- */
   const FONTS = { display: s => `${s}px Anton, Impact, sans-serif`, label: s => `700 ${s}px "Archivo Narrow", "Arial Narrow", sans-serif`, serif: s => `italic 500 ${s}px Lora, Georgia, serif`, hand: s => `700 ${s}px Kalam, cursive`, marker: s => `${s}px "Gochi Hand", cursive` };
+  // 'g:Family|700' is any font from the library (FontLib), loaded on first use
+  const libFont = k => { const m = /^g:(.+?)(?:\|(\d+))?$/.exec(String(k || '')); if (!m || typeof FontLib === 'undefined' || !FontLib.has(m[1])) return null; const w = FontLib.near(m[1], +m[2] || 700); if (!FontLib.isReady(m[1], w)) FontLib.ensure(m[1], w); return s => `${w} ${s}px "${m[1]}", Anton, Impact, sans-serif`; };
+  const fontFn = k => FONTS[k] || libFont(k) || FONTS.display;
   const FONT_OPTS = [['display', 'Headline (Anton)'], ['label', 'Narrow (Archivo)'], ['serif', 'Newspaper (Lora)'], ['hand', 'Handwriting (Kalam)'], ['marker', 'Marker (Gochi)']];
   const tlCache = new Map();
   // The width of the frame being drawn, so long text can wrap to fit it (a 9:16 frame is much narrower than 16:9)
   let FW = 1920;
   function textLayout(L, u) {
     const maxW = FW * 0.9 / Math.max(0.2, Math.abs(num(L.s, 1))), key = [L.text, L.font, L.size, L.caps, u, E.fontVersion || 0, Math.round(maxW)].join('|'); let T = tlCache.get(key); if (T) return T;
-    const sz = cl(num(L.size, 96), 4, 1200) * u, f = FONTS[L.font] || FONTS.display, raw = String(L.text ?? ''), m = measurer(); m.font = f(sz);
+    const sz = cl(num(L.size, 96), 4, 1200) * u, f = fontFn(L.font), raw = String(L.text ?? ''), m = measurer(); m.font = f(sz);
     // Lines you typed stay as they are; a line too wide for the frame breaks between words
     const lines = []; (L.caps ? raw.toUpperCase() : raw).split('\n').forEach(ln => { if (m.measureText(ln).width <= maxW || !/\s/.test(ln.trim())) { lines.push(ln); return; } let cur = ''; ln.split(/\s+/).forEach(w => { const tryL = cur ? cur + ' ' + w : w; if (cur && m.measureText(tryL).width > maxW) { lines.push(cur); cur = w; } else cur = tryL; }); if (cur) lines.push(cur); });
     const ws = lines.map(l => m.measureText(l).width), lh = sz * 1.14;
@@ -909,7 +912,7 @@ const Layers = (() => {
     if (isMeta(L)) return inspectMeta(root, cfg, L, changed, done, re, set, now);
     if (L.type === 'text') {
       kids.push(field('Text', area(L.text, v => set('text', v), 'Type here. Press Enter for a new line.', 2, 'Text')),
-        grid2(field('Font', sel(L.font || 'display', FONT_OPTS, v => set('font', v))), field('Style', sel(L.style || 'outline', [['outline', 'Ink outline'], ['banner', 'Banner'], ['highlight', 'Highlighter'], ['shadow', 'Drop shadow'], ['plain', 'Plain']], v => set('style', v)))),
+        grid2(field('Font', sel(L.font || 'display', [...FONT_OPTS, ...(/^g:/.test(L.font || '') ? [[L.font, L.font.slice(2).replace(/\|.*/, '')]] : []), ['more', 'More fonts…']], v => { if (v !== 'more') return set('font', v); if (typeof FontLib !== 'undefined') FontLib.picker({ current: /^g:/.test(L.font || '') ? L.font.slice(2).replace(/\|.*/, '') : '', sample: L.text, onPick: (f, w) => set('font', 'g:' + f + '|' + w) }); })), field('Style', sel(L.style || 'outline', [['outline', 'Ink outline'], ['banner', 'Banner'], ['highlight', 'Highlighter'], ['shadow', 'Drop shadow'], ['plain', 'Plain']], v => set('style', v)))),
         grid2(field('Text colour', colSel(L.colour || '#ffffff', v => set('colour', v))), field('Banner or highlight', colSel(L.bg || '#e3302c', v => set('bg', v)))),
         grid2(field('Size', numIn(num(L.size, 110), v => set('size', v), 10, 600, 1, 'Text size')), field('Capitals', yesno(!!L.caps, v => set('caps', v)))),
         textStyles(L, changed, re));

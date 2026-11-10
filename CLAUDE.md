@@ -118,7 +118,15 @@ layers along the bottom (`.th-layers`, drag to reorder). The header Export opens
   `stroke`, `stroke2`, `box`. Each layer is drawn flat then laid on (glow and shadow are blurred silhouettes), so soft edges
   and see through never double up.
 * Layouts in `TEMPLATES` (split, shock, word, versus, news); his own saved layouts and font files live in IndexedDB
-  `patter-thumb`. Fonts: Google Fonts for thumbnails are linked when the tab opens (`GURL`), plus the built in ones.
+  `patter-thumb`. A cut out is cropped to the person (`trimToSubject`) and sits on the bottom of its layout place
+  (`L.box`, `L.sit`); moving it by hand drops the box.
+* **Fonts** (`dev/src/fontlib.js` `FontLib`, list `src/gfonts.js` made by `dev/fontlist.py` from google-font-metadata):
+  every Google Font (about 1,900, free for any use) in a Canva style chooser (`FontLib.picker`: search, Great for
+  thumbnails, favourites, recent, kinds, each name drawn in its font as it scrolls into view). A font's latin woff2 comes
+  from cdn.jsdelivr.net/fontsource the first time it is used and is kept in IndexedDB `patter-fonts`. Video text can use
+  them too (`font: 'g:Family|700'` in layers.js, "More fonts…"). The export helpers get every loaded font (and his own
+  font files, `FontLib.addFace`) from `forWorkers()` through `fontList` in render.js: a web font the helpers cannot get
+  turns parallel export off, so route any new font loading through FontLib. Test: `tests/fonts_ui.py`.
 * **Background removal** (`Cutout`): BiRefNet lite (MIT, github.com/emoro24/birefnet-lite-onnx v2, float16 1024) run with
   ONNX Runtime Web 1.20.1 in a worker, WebGPU first, else the processor. Files in `cutout/` (model split in two for
   GitHub), downloaded once into IndexedDB `patter-cutout`. After the model: a guided filter on the picture's brightness
