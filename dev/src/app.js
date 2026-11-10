@@ -133,7 +133,7 @@
   const gfxBtn = document.querySelector('#tabs button[data-group=gfx]'), animBtn = document.querySelector('#tabs button[data-group=anim]'), rail = $('gfxRail'), arail = $('animRail');
   function drawTabs() { tabs.forEach(b => { const m = b.dataset.mod; b.disabled = !MODULES[m]; b.classList.toggle('on', m === state.module); b.setAttribute('aria-pressed', m === state.module); });
     const g = isGfx(state.module), a = isAnim(state.module); if (g) state.lastGfx = state.module; if (a) state.lastAnim = state.module; [[gfxBtn, g], [animBtn, a]].forEach(([b, on]) => { if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); } }); if (rail) rail.hidden = !g; if (arail) arail.hidden = !a; document.body.classList.toggle('gfx', g); document.body.classList.toggle('anim', a); const chalkOnly = state.module === 'story' || state.module === 'broll' || state.module === 'studio' || state.module === 'char'; [schemesEl.closest('.field'), $('texture').closest('label')].forEach(el => { if (el) el.style.display = chalkOnly ? 'none' : ''; }); }
-  function switchTab(m) { if (typeof Character !== 'undefined') Character.stopSound(); if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
+  function switchTab(m) { document.body.classList.remove('exp-open'); if (typeof Character !== 'undefined') Character.stopSound(); if (m === 'video' && state.edit) finishEdit(); state.module = m; hist = []; fut = []; lastSnap = null; commit(); drawTabs(); player.setLoop(null); syncLoopBtn(); if (ed) { ed.resetZoom(); ed.select(null); } refreshAll(); begin(); updateExportLabel(); save(); }
   tabs.forEach(b => b.addEventListener('click', () => { if (MODULES[b.dataset.mod]) switchTab(b.dataset.mod); }));
   if (gfxBtn) gfxBtn.addEventListener('click', () => { if (isGfx(state.module)) return; const e = state.edit; switchTab(e && isGfx(e.mod) ? e.mod : (isGfx(state.lastGfx) && MODULES[state.lastGfx] ? state.lastGfx : 'charts')); });
   if (animBtn) animBtn.addEventListener('click', () => { if (isAnim(state.module)) return; const e = state.edit; switchTab(e && isAnim(e.mod) ? e.mod : (isAnim(state.lastAnim) && MODULES[state.lastAnim] ? state.lastAnim : 'studio')); });
@@ -246,7 +246,6 @@
     const gBuild = ed.build; ed.build = () => { gBuild(); if (cutUI.active) cutUI.build(); };
     const gSel = ed.select; ed.select = (id, q) => { gSel(id, q); if (cutUI.active) cutUI.markSel(); };
     // Export from the Video tab goes through the editor's own exporter (sound, footage, every frame exact)
-    const xb = H('button', { type: 'button', className: 'cut-x', textContent: 'Export', title: 'Export the video (Ctrl+E)', on: { click: () => cutInsp.exportDialog() } }); document.querySelector('.transport').append(xb);
   }
   Object.assign(Layers.hooks, {
     time: () => player.t, selKey: () => ed.selKey,
@@ -280,7 +279,7 @@
     const ae = document.activeElement, typing = /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !(ae.type === 'checkbox' || ae.type === 'range'), ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (document.querySelector('dialog[open]')) return;
     if (ctrl && k === 's') { e.preventDefault(); autosave('version').then(() => say('Saved, with a version kept in History.')); return; }
-    if (ctrl && k === 'e') { e.preventDefault(); if (state.module === 'video' && cutInsp) cutInsp.exportDialog(); else if (state.module === 'intro' && cutInsp && typeof Intro !== 'undefined') Intro.exportWithSound(cfg()); else $('exportBtn').click(); return; }
+    if (ctrl && k === 'e') { e.preventDefault(); exportNow(true); return; }
     if (typing) return;
     if (state.module === 'audio' && typeof AudioTab !== 'undefined' && !ctrl && AudioTab.key(e)) return;
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
@@ -348,7 +347,7 @@
     const pgrid = H('div', { className: 'lib-grid' }, ...PIECES.map(pc => H('div', { className: 'lib-card' }, thumbEl(pc.thumb), H('div', { className: 'lib-meta' }, H('b', { textContent: pc.name }), H('span', { textContent: pc.layers.length + (pc.layers.length === 1 ? ' layer' : ' layers') })),
       H('div', { className: 'btnrow' }, UI.btn('Add at the playhead', () => { const id = Layers.insertPiece(cfg(), pc, player.t); save(); commit(); ed.build(); ed.select(id); dlg.close(); }), confirmBtn('Delete', async () => { await DB.del('templates', pc.id); await loadPieces(); openLibrary(); })))));
     openDlg('Projects',
-      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()), UI.btn('Packs and updates', () => openPacks()))),
+      H('section', { className: 'dlg-sec' }, H('label', { className: 'field' }, H('span', { className: 'lab', textContent: 'This project\'s name' }), name), H('div', { className: 'btnrow' }, UI.btn('New blank project', async () => { await newProject(); openLibrary(); }), UI.btn('Version history', () => openHistory()), UI.btn('Open a project file', () => $('openProj').click()), UI.btn('Save to a file', () => $('saveProj').click()), UI.btn('Packs and updates', () => openPacks()))),
       inboxSec(),
       H('h3', { textContent: 'Your projects' }), list.length ? grid : H('p', { className: 'hint', textContent: 'Nothing saved yet.' }),
       H('h3', { textContent: 'Templates' }), H('p', { className: 'hint', textContent: 'A template keeps this tab\'s settings, look and layers, so you can start new clips from it.' }),
@@ -482,6 +481,19 @@
   cancelBtn.addEventListener('click', () => abort && abort.abort());
 
   // Project files (to move projects between computers or keep backups)
+  /* The one Export button (top right): the Video tab, the intro and a talking character open the export window; the
+     graphics and animator tabs show their export panel (frame rate, motion blur, in and out points) to start from. */
+  function exportNow(go) {
+    if (state.module === 'video' && cutInsp) return cutInsp.exportDialog();
+    if (state.module === 'intro' || (state.module === 'char' && cfg().voice)) return $('exportBtn').click();
+    if (state.module === 'audio' && typeof AudioTab !== 'undefined') return AudioTab.send('wav');   // the cleaned up recording as a WAV
+    if (go) return $('exportBtn').click();
+    document.body.classList.toggle('exp-open');
+  }
+  $('hdrExport').addEventListener('click', () => exportNow(false)); $('expClose').addEventListener('click', () => document.body.classList.remove('exp-open'));
+  $('hdrUndo').addEventListener('click', () => undo()); $('hdrRedo').addEventListener('click', () => redo());
+  document.querySelectorAll('.aside-tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.aside-tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); }); document.querySelector('aside').dataset.at = b.dataset.at; }));
+  document.querySelector('aside').dataset.at = 'set';
   $('saveProj').addEventListener('click', () => E.saveBlob(new Blob([JSON.stringify(pruneAssets(JSON.parse(JSON.stringify(state))), null, 2)], { type: 'application/json' }), fileBase() + '.patter.json', [{ description: 'Patter project', accept: { 'application/json': ['.json'] } }]));
   $('openProj').addEventListener('click', () => $('projFile').click());
   $('projFile').addEventListener('change', async e => {

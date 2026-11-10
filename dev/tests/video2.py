@@ -11,7 +11,7 @@ async def main():
         await pg.evaluate("()=>document.querySelector('button[data-mod=video]').click()"); await pg.wait_for_timeout(1000)
         first=await pg.evaluate("()=>JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.video.items[2].id")
         await pg.evaluate(f"()=>Video.hooks.openItem('{first}')"); await pg.wait_for_timeout(1000)
-        async with pg.expect_file_chooser() as fc: await pg.evaluate("()=>[...document.querySelectorAll('.tl-bar button')].find(b=>/Image/.test(b.textContent)).click()")
+        async with pg.expect_file_chooser() as fc: await pg.evaluate("()=>(document.querySelector('.tl-add').click(), [...document.querySelectorAll('.tl-addmenu button')].find(b=>/Image/.test(b.textContent)).click())")
         await (await fc.value).set_files('/tmp/claude-0/s/big.png'); await pg.wait_for_timeout(1500)
         await pg.evaluate("()=>document.getElementById('editBanner').querySelector('button').click()"); await pg.wait_for_timeout(1500)
         st=json.loads(await pg.evaluate("()=>localStorage.getItem('patter-studio-v1')")); lay=st['cfg']['video']['items'][2]['cfg'].get('layers',[]); aid=[L.get('asset') for L in lay if L.get('asset')]; print('picture in clip', aid, 'edit cleared', st.get('edit'))
@@ -36,7 +36,7 @@ async def main():
         # 4. editing a clip, reload part way through, then go back: edits land in the video
         st=json.loads(await pg.evaluate("()=>localStorage.getItem('patter-studio-v1')")); cid=st['cfg']['video']['items'][0]['id']
         await pg.evaluate(f"()=>Video.hooks.openItem('{cid}')"); await pg.wait_for_timeout(1000)
-        await pg.evaluate("()=>[...document.querySelectorAll('.tl-bar button')].find(b=>/Action/.test(b.textContent)).click()"); await pg.wait_for_timeout(300)
+        await pg.evaluate("()=>(document.querySelector('.tl-add').click(), [...document.querySelectorAll('.tl-addmenu button')].find(b=>/Action/.test(b.textContent)).click())"); await pg.wait_for_timeout(300)
         await pg.evaluate("()=>[...document.querySelectorAll('.tl-pop button')].find(b=>/Shrugs/.test(b.title||b.textContent)).click()"); await pg.wait_for_timeout(1500)
         await pg.reload(); await pg.wait_for_timeout(3000)
         print('after reload, still editing:', await pg.locator('#editBanner').is_visible())

@@ -39,21 +39,32 @@ const Editor = (() => {
       pop = H('div', { className: 'tl-pop', role: 'menu', 'aria-label': a.title || a.label }); pop.dataset.for = a.label;
       a.choices().forEach(ch => { const cv = H('canvas', { 'aria-hidden': 'true' }); try { ch.icon && ch.icon(cv); } catch (e) { } pop.append(H('button', { type: 'button', role: 'menuitem', title: ch.label, on: { click: () => runAdd(a, ch) } }, cv, H('span', { textContent: ch.label }))); });
       o.tl.append(pop); const r = b.getBoundingClientRect(), tr = o.tl.getBoundingClientRect(); pop.style.left = Math.max(0, Math.min(r.left - tr.left, tr.width - pop.offsetWidth - 4)) + 'px'; pop.style.top = (r.bottom - tr.top + 4) + 'px';
+      if (pop.offsetHeight > window.innerHeight - r.bottom - 12) { pop.style.top = ''; pop.style.bottom = (tr.bottom - r.top + 4) + 'px'; pop.style.maxHeight = Math.max(160, r.top - 66) + 'px'; }   // the timeline sits at the bottom: open upwards
+      setTimeout(() => document.addEventListener('pointerdown', popAway, true), 0);
+    }
+    function openAdd(own, lay, b) {
+      if (pop && pop.dataset.for === '+add') { closePop(); return; } closePop();
+      pop = H('div', { className: 'tl-pop tl-addmenu', role: 'menu', 'aria-label': 'Add' }); pop.dataset.for = '+add';
+      const item = a => { const it = H('button', { type: 'button', role: 'menuitem', title: a.title || a.label, on: { click: () => { if (a.choices) { closePop(); openPop(a, b); } else runAdd(a); } } }, H('span', { textContent: a.label }), a.choices ? H('i', { textContent: '›' }) : ''); return it; };
+      const grp = (t, l) => { if (!l.length) return; pop.append(H('div', { className: 'tl-addh', textContent: t })); l.forEach(a => pop.append(item(a))); };
+      grp(own.length ? 'This tab' : '', own); grp('Layers', lay);
+      o.tl.append(pop); const r = b.getBoundingClientRect(), tr = o.tl.getBoundingClientRect(); pop.style.left = Math.max(0, r.left - tr.left) + 'px';
+      const below = r.bottom - tr.top + 4; pop.style.top = below + 'px'; const room = window.innerHeight - r.bottom - 12; if (pop.offsetHeight > room) { pop.style.top = ''; pop.style.bottom = (tr.bottom - r.top + 4) + 'px'; pop.style.maxHeight = Math.max(160, r.top - 66) + 'px'; }   // upwards, below the header
       setTimeout(() => document.addEventListener('pointerdown', popAway, true), 0);
     }
     function drawBar() {
       bar.innerHTML = ''; const e = ed(), btn = (txt, title, fn, dis) => H('button', { type: 'button', textContent: txt, title, 'aria-label': title, disabled: !!dis, on: { click: fn } });
       const mk = a => { const b = btn('+ ' + a.label + (a.choices ? ' ▾' : ''), a.title || 'Add ' + a.label.toLowerCase() + ' at the playhead', () => a.choices ? openPop(a, b) : runAdd(a)); if (a.choices) { b.dataset.pop = '1'; b.setAttribute('aria-haspopup', 'menu'); } return b; };
       const adds = (e && e.adds) || [], own = adds.filter(a => a.group !== 'layer'), lay = adds.filter(a => a.group === 'layer');
-      own.forEach(a => bar.append(mk(a)));
-      if (lay.length) { if (own.length) bar.append(H('span', { className: 'tl-gap' })); bar.append(H('span', { className: 'tl-lbl', textContent: 'Layers' })); lay.forEach(a => bar.append(mk(a))); }
-      if (e && (e.remove || e.duplicate)) { bar.append(H('span', { className: 'tl-gap' }));
+      // One Add menu: this tab's own things first, then the layers every tab has; a choice with options opens them
+      if (adds.length) { const addB = H('button', { type: 'button', className: 'tl-add', textContent: '+ Add', title: 'Add something at the playhead', 'aria-haspopup': 'menu' }); addB.dataset.pop = '1';
+        addB.addEventListener('click', () => openAdd(own, lay, addB)); bar.append(addB); }
+      if (e && (e.remove || e.duplicate) && sel) { bar.append(H('span', { className: 'tl-gap' }));
         bar.append(btn('Duplicate', 'Duplicate the selected item (Ctrl+D)', () => { if (!sel || !e.duplicate) return; const ids = multi.size > 1 ? [...multi] : [sel], out = ids.map(i => e.duplicate(o.getCfg(), i)).filter(Boolean); o.changed(true); select(out[0] || sel); if (out.length > 1) { out.forEach(i => multi.add(i)); markSel(); } }, !sel || !e.duplicate));
         bar.append(btn('Delete', 'Delete the selected item (Delete)', () => removeSel(), !sel || !e.remove));
         const lays = selLayers(); if (lays.length && typeof Layers !== 'undefined' && Layers.hooks.savePiece) bar.append(btn(lays.length > 1 ? 'Save ' + lays.length + ' as a piece' : 'Save as a piece', 'Keep the selected layers to drop into any clip later (from Saved)', () => Layers.hooks.savePiece(o.getCfg(), lays))); }
       if (e && e.addKey && sel && sel.startsWith('L:')) bar.append(btn('◆ Key', 'Add a keyframe to the selected layer at the playhead (K)', () => addKey()));
-      bar.append(H('span', { className: 'tl-gap' }), btn('Undo', 'Undo (Ctrl+Z)', () => o.undo()), btn('Redo', 'Redo (Ctrl+Shift+Z)', () => o.redo()));
-      bar.append(H('span', { className: 'tl-gap' }), btn('−', 'Zoom out the timeline', () => zoom(1 / 1.4)), btn('+', 'Zoom in the timeline', () => zoom(1.4)));
+      bar.append(H('span', { className: 'tl-fill' }), btn('−', 'Zoom out the timeline', () => zoom(1 / 1.4)), btn('+', 'Zoom in the timeline', () => zoom(1.4)));
       if (e && e.camera) bar.append(H('label', { className: 'check tl-cam', title: 'Untick to see the whole scene while you arrange things. The export always uses the camera.' }, H('input', { type: 'checkbox', checked: !camOff, on: { change: ev => { camOff = !ev.target.checked; } } }), 'Camera moves'));
       const sn = H('label', { className: 'check tl-snap' }, H('input', { type: 'checkbox', checked: snapOn, on: { change: ev => { snapOn = ev.target.checked; } } }), 'Snap'); bar.append(sn);
     }

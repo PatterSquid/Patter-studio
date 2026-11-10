@@ -234,7 +234,7 @@ const CutUI = (() => {
     const zoomIn = H('input', { type: 'range', min: '0', max: '1000', value: '400', 'aria-label': 'Timeline zoom', title: 'Zoom the timeline (Ctrl + wheel)', on: { input: e => { setZoom(Math.exp(Math.log(4) + (Math.log(800) - Math.log(4)) * e.target.value / 1000), true); } } });
     function drawBar() {
       bar.innerHTML = ''; const s = sel(), isC = s && String(s).startsWith('C:'), f = isC ? V().findItem(cfg(), s) : null, it = f && f.it, m = it && it.asset ? CutMedia.info(it.asset) : null;
-      bar.append(ic('undo', 'Undo (Ctrl+Z)', () => o.undo()), ic('redo', 'Redo (Ctrl+Shift+Z)', () => o.redo()), H('span', { className: 'ct-sep' }),
+      bar.append(   // undo and redo live in the header now, for every tab
         ic('split', 'Split at the playhead (S or Ctrl+B)', () => splitNow()), ic('del', 'Delete (Delete)', () => del(false), { disabled: !s }), ic('ripple', 'Delete and close the gap (Shift+Delete)', () => del(true), { disabled: !isC }),
         ic('dup', 'Duplicate (Ctrl+D)', () => dupNow(), { disabled: !isC }),
         ic('freeze', 'Freeze frame: hold this frame for 2 seconds (F)', () => freezeNow(), { disabled: !(m && m.kind === 'video') }),

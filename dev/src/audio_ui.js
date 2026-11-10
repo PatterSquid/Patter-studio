@@ -247,5 +247,5 @@ const AudioTab = (() => {
   function activate(on) { document.body.classList.toggle('aud', !!on); const ws = document.getElementById('audioWs'); if (ws) ws.hidden = !on; if (!on) { stop(); if (W.rec) W.rec.stop(); } }
   const duration = cfg => { const o = W.out; return o && W.cfg === cfg ? Math.max(0.5, o.y.length / SR) : 1; };
   function draw0(g, t, cfg, look, Wd, Hd) { g.fillStyle = '#0a1120'; g.fillRect(0, 0, Wd, Hd); }
-  return { id: 'audio', name: 'Audio', defaults, duration, draw: draw0, form, key, activate, hooks, _W: W, _render: render, _segmentsOf: segmentsOf, _srcRanges: srcRanges };
+  return { id: 'audio', name: 'Audio', defaults, duration, draw: draw0, form, key, activate, hooks, send, _W: W, _render: render, _segmentsOf: segmentsOf, _srcRanges: srcRanges };
 })();

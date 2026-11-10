@@ -13,7 +13,7 @@ async def main():
         await pg.screenshot(path='st/packs_dlg.png')
         await pg.evaluate("()=>document.querySelector('dialog').close()")
         await pg.evaluate("()=>document.querySelector('button[data-mod=story]').click()"); await pg.wait_for_timeout(800)
-        await pg.evaluate("()=>[...document.querySelectorAll('.tl-bar button')].find(b=>/Set piece/.test(b.textContent)).click()"); await pg.wait_for_timeout(400)
+        await pg.evaluate("()=>(document.querySelector('.tl-add').click(), [...document.querySelectorAll('.tl-addmenu button')].find(b=>/Set piece/.test(b.textContent)).click())"); await pg.wait_for_timeout(400)
         print('pop:', await pg.evaluate("()=>[...document.querySelectorAll('.tl-pop button')].map(b=>b.title||b.textContent)"))
         await pg.evaluate("()=>[...document.querySelectorAll('.tl-pop button')].find(b=>/Bank/.test(b.title||b.textContent)).click()"); await pg.wait_for_timeout(1200)
         st=await pg.evaluate("()=>{const c=JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.story; return {scenes:c.scenes.map(s=>s.place), cast:c.cast.map(x=>x.name), layers:(c.layers||[]).length}}"); print(st)

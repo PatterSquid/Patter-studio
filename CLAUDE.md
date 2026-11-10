@@ -64,15 +64,29 @@ git add -A && git commit && git push origin main
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
   after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).
 
-## Layout: Video, Graphics, Animator (then Audio)
+## Layout: one frame for every tab
 
-He asked for fewer, bigger tabs so the app does not feel cluttered. The header (`#tabs`) has **Video** (`data-mod=video`,
-the editor), **Graphics** (`data-group=gfx`: the nine clip makers, chosen in a slim icon strip down the left, `#gfxRail`,
-whose buttons keep their `data-mod`; `body.gfx` adds its grid column; it reopens the last maker used, `state.lastGfx`) and
-**Audio** (`data-mod=audio`, below) and **Animator** (`data-group=anim`, its own strip `#animRail`: Studio and Character). An **Audio** tab is planned next (voice
-clean up like Audacity's noise profile, cutting, then send to the video). Modules are unchanged underneath: tests still
-click `button[data-mod=...]` with JS (the rail buttons exist when hidden). Editing a Video clip opens its maker under
-Graphics (or Animator) with the "Back to the video" banner.
+He asked for fewer, bigger tabs and then for the whole app to be tidy, professional and easy (November 2026). Every tab uses
+the same frame; keep it that way:
+* **Header** (54 px, never wraps): logo, the four tabs (`#tabs`: **Video** `data-mod=video`, **Graphics** `data-group=gfx`,
+  **Audio** `data-mod=audio`, **Animator** `data-group=anim`), then on the right Saved, Undo and Redo (`#hdrUndo`,
+  `#hdrRedo`), the project button (`#libBtn`, the project's name; it opens the Projects window, which also has New,
+  Version history, Open a project file, Save to a file, Packs; `#histBtn`, `#openProj`, `#saveProj` stay in the DOM
+  hidden), shortcuts, and the one **Export** (`#hdrExport`, class `cut-x`): `exportNow` in app.js (Video and the intro
+  open the export window, a talking character too, Audio saves a WAV, Graphics and Animator open their export panel,
+  `body.exp-open` showing `.card.export` as a floating panel; Ctrl+E exports straight away).
+* **Red is only for Export and recording.** `button.primary` is solid cream; red stays on export buttons in dialogs.
+* **Graphics and Animator** (`body.gfx`, `body.anim`): grid areas "rail prev insp / rail trans insp / rail tl tl". The
+  tool strip (`#gfxRail` with the nine makers, `#animRail` with Studio and Character; buttons keep their `data-mod`) on
+  the left; the preview in `.pvbox` (a size container: `#prevWrap` fits with `cq` units); the play bar (`.transport`:
+  Play, scrubber, time, and the gear `.pvset` holding Preview quality, Autoplay, Smooth); the settings (`aside`) on the
+  right with **Settings** and **Look** tabs (`.aside-tabs`, `aside[data-at]`), cards drawn as flat sections, help text
+  clamped to two lines (all of it on hover); the timeline (`#timeline`) docked along the bottom. The timeline toolbar has
+  one **+ Add** menu (`.tl-add`, `.tl-addmenu`: this tab's own things, then the layers; one with options opens its grid
+  `.tl-pop`), Duplicate and Delete only while something is selected, zoom and Snap on the right. Menus open upwards.
+* **Video** keeps its CapCut frame (library left, inspector right, timeline below); undo is in the header now.
+* Nothing scrolls the page at 1366 by 768; only the panels scroll. Tests click tabs and rail buttons with JS
+  (`button[data-mod=...]`) and add things through `.tl-add` then `.tl-addmenu button`.
 
 ## The Audio tab (dev/src/audio_fx.js `AudioFX`, dev/src/audio_ui.js `AudioTab`, module `audio`)
 

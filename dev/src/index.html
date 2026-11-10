@@ -17,11 +17,14 @@
   </nav>
   <div class="hdr-tools">
     <span class="saved" id="savedNote" aria-live="polite"></span>
-    <button id="libBtn" class="proj" title="Your projects and templates"><small>Project</small><span id="projName">Untitled clip</span></button>
-    <button id="histBtn" title="Version history: roll back to an earlier version">History</button>
-    <button id="openProj" title="Open a project file from your computer">Open file</button>
-    <button id="saveProj" title="Save this project to a file, for backups or another computer">Save file</button>
+    <button id="hdrUndo" class="icon" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+    <button id="hdrRedo" class="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg></button>
+    <button id="libBtn" class="proj" title="Your projects: open, start a new one, history, save to a file"><span id="projName">Untitled clip</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button id="histBtn" hidden title="Version history: roll back to an earlier version">History</button>
+    <button id="openProj" hidden title="Open a project file from your computer">Open file</button>
+    <button id="saveProj" hidden title="Save this project to a file, for backups or another computer">Save file</button>
     <button id="keysBtn" class="icon" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+    <button id="hdrExport" class="cut-x" title="Export (Ctrl+E)">Export</button>
     <input id="projFile" type="file" accept=".json,application/json" hidden>
   </div>
 </header>
@@ -42,6 +45,7 @@
     <button data-mod="broll" title="B roll"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="1"/><path d="M16 10l6-3v10l-6-3"/><path d="M5 14l3-4 3 4"/></svg><span>B roll</span></button>
   </nav>
   <aside>
+    <div class="aside-tabs" role="tablist" aria-label="Settings"><button type="button" role="tab" data-at="set" class="on">Settings</button><button type="button" role="tab" data-at="look">Look</button></div>
     <section class="card" id="look">
       <h3>Look</h3>
       <div class="field"><span class="lab">Colour scheme</span><div class="swatches" id="schemes"></div></div>
@@ -59,19 +63,21 @@
     <button id="resetMod">Reset this clip to the example</button>
   </aside>
   <section class="stagecol">
-    <div class="preview" id="prevWrap"><canvas id="prev" role="img" aria-label="Live preview of the clip"></canvas></div>
+    <div class="pvbox"><div class="preview" id="prevWrap"><canvas id="prev" role="img" aria-label="Live preview of the clip"></canvas></div></div>
     <div class="transport">
       <button id="playBtn" aria-label="Play">Play</button>
       <button id="restartBtn" aria-label="Play from the start">Restart</button>
       <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the clip">
       <span class="time" id="time">0.0 / 0.0 s</span>
+      <details class="pvset"><summary title="Preview settings" aria-label="Preview settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></summary><div class="pvset-pop">
       <label class="pq" title="How sharp the preview is. Draft is fastest on slow laptops. Export is always full quality."><span class="lab">Preview</span><select id="pq" aria-label="Preview quality"><option value="draft">Draft</option><option value="normal">Normal</option><option value="full">Full</option></select></label>
       <label class="pq" title="Start playing the preview straight away when you open a clip"><input type="checkbox" id="autoplay"><span class="lab">Autoplay</span></label>
       <label class="pq" title="Draw the clip ahead in the background so playback is always smooth. The yellow bar on the scrubber shows how much is ready."><input type="checkbox" id="smooth"><span class="lab">Smooth</span></label>
+      </div></details>
     </div>
     <section class="card tl" id="timeline" aria-label="Timeline"></section>
-    <section class="card export">
-      <h3>Export</h3>
+    <section class="card export" aria-label="Export">
+      <div class="exp-head"><h3>Export</h3><button type="button" class="icon" id="expClose" title="Close" aria-label="Close">×</button></div>
       <div class="exprow">
         <label class="field" style="min-width:200px"><span class="lab">Motion blur</span><select id="blur"><option value="smart">Smart, only where things move fast</option><option value="off">Off, fastest</option><option value="full">Every frame, slowest</option></select></label>
         <label class="field" style="min-width:140px"><span class="lab">Frame rate</span><select id="fps"><option value="60">60 fps</option><option value="30">30 fps</option></select></label>
