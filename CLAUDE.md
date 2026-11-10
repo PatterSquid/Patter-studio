@@ -69,10 +69,24 @@ git add -A && git commit && git push origin main
 He asked for fewer, bigger tabs so the app does not feel cluttered. The header (`#tabs`) has **Video** (`data-mod=video`,
 the editor), **Graphics** (`data-group=gfx`: the nine clip makers, chosen in a slim icon strip down the left, `#gfxRail`,
 whose buttons keep their `data-mod`; `body.gfx` adds its grid column; it reopens the last maker used, `state.lastGfx`) and
-**Animator** (`data-group=anim`, its own strip `#animRail`: Studio and Character). An **Audio** tab is planned next (voice
+**Audio** (`data-mod=audio`, below) and **Animator** (`data-group=anim`, its own strip `#animRail`: Studio and Character). An **Audio** tab is planned next (voice
 clean up like Audacity's noise profile, cutting, then send to the video). Modules are unchanged underneath: tests still
 click `button[data-mod=...]` with JS (the rail buttons exist when hidden). Editing a Video clip opens its maker under
 Graphics (or Animator) with the "Back to the video" banner.
+
+## The Audio tab (dev/src/audio_fx.js `AudioFX`, dev/src/audio_ui.js `AudioTab`, module `audio`)
+
+Voice clean up and editing, its own top tab. `body.aud` gives `#audioWs` the whole of main; the module's `form()` draws the
+workspace (so the app's undo redraws it); keys go to `AudioTab.key` first (Space, Delete, arrows). The recording is never
+changed: `cfg.src` (a CutMedia file), `cfg.clean` (settings) and `cfg.edits` (`del`, `sil`, `fin`, `fout`, `gain`, in the
+recording's own seconds) are applied on top; the cleaned sound is cached by settings.
+* `AudioFX`: our own Audacity style noise reduction (profile learned from a quiet selection, STFT 2048/512 root Hann,
+  per bin gate with time and frequency smoothing), RNNoise (built in: `assets/rnnoise`, @jitsi/rnnoise-wasm, embedded by
+  build.py as `src/rnnoise_lib.js`; warmed on the first two seconds), rumble high pass, 50 Hz hum notches, de-esser,
+  click repair, leveller, LUFS loudness and a peak limiter, spectrogram and peaks. 48 kHz mono throughout.
+* "Clean my voice" learns the noise from the quietest half second and turns on the lot. "Send it on" renders a WAV into
+  CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
+* Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 
 ## The Video tab: the editor (dev/src/video.js and dev/src/cut_*.js)
 
