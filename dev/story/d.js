@@ -22,6 +22,8 @@
     caption: ['🔤', 'Caption', 'Scene', 2.5, 'text'], closeup: ['🎥', 'Close up', 'Camera', 2.5], timejump: ['⏱', 'Time jump', 'Scene', 2.3, 'text'],
   };
   const GROUPS = ['Talk', 'Move', 'Body', 'Props', 'Fight', 'Rough', 'Screen', 'Water', 'Feel', 'Camera'];
+  // Poses that stay put once done (the salute stays up) until that person's next action; the share of the action held
+  const HELD = { salute: 0.75, salutesob: 0.75, salutetv: 0.75, salutesobtv: 0.75, attention: 0.5, heart: 0.5, hearttv: 0.5 };
   const TALK = ['say', 'think', 'shout', 'whisper', 'phone', 'shouttv'], MOVES = ['walk', 'run', 'sneak', 'charge', 'swim', 'stagger'];
   // Rough stuff aimed at someone: the first 30% walks up to them (or winds up), then 'imp' of the rest is the moment it lands; r is how they react
   const HIT = { punch: { imp: 0.3, r: 'punched', d: 0.9 }, slap: { imp: 0.35, r: 'slapped', d: 1.1 }, headbutt: { imp: 0.42, r: 'butted', d: 1.6 }, haymaker: { imp: 0.45, r: 'decked', d: 1.4 }, uppercut: { imp: 0.42, r: 'lifted', d: 1.5 },
@@ -63,7 +65,7 @@
       if (e.k === 'rmx') st.props = st.props.filter(p => p !== e.prop);
       if (e.k === 'mv') { st.props = st.props.filter(p => p !== e.prop); if (out[e.to] && !out[e.to].props.includes(e.prop)) out[e.to].props.push(e.prop); } });
     sc.people.forEach(pe => { const st = out[pe.pid], acts = P.byWho[pe.pid] || [];
-      for (const a of acts) { if (a.start > t) break; const p = (t - a.start) / a.dur, cut = !a.synthetic && p < 1 && acts.some(h => h.synthetic && h.start > a.start && h.start <= t), done = p >= 1 || cut;
+      for (const a of acts) { if (a.start > t) break; st.held = null; const p = (t - a.start) / a.dur, cut = !a.synthetic && p < 1 && acts.some(h => h.synthetic && h.start > a.start && h.start <= t), done = p >= 1 || cut;
         if (!done) st.active = { a, p: cl(p, 0, 1), e: t - a.start, from: { x: st.x, dir: st.dir, wet: st.wet, lying: st.lying } };
         // Hugs, punches and hand-overs walk up to the other person first if they are standing apart
         if (a.k === 'shoot' && a.to && out[a.to] && out[a.to] !== st) { if (!done) { st.dir = out[a.to].x >= st.x ? 1 : -1; st.active.tx = out[a.to].x; st.active.miss = a.how === 'miss'; } }
@@ -80,7 +82,7 @@
           if (a.k === 'swim' && water) sp = { x: cl(sp.x, water.x0 + 60, water.x1 - 60), water: true };
           if (done) { st.dir = sp.x >= st.x ? 1 : -1; if (Math.abs(sp.x - st.x) < 1) st.dir = st.active ? st.dir : st.dir; st.x = sp.x; st.sit = !!sp.sit && !['charge', 'swim'].includes(a.k); st.lowSit = !!sp.low; st.behind = !!sp.behind; st.sleep = false; st.lying = false; st.kneel = false; st.wet = a.k === 'climbout' ? false : !!sp.water || (a.k === 'swim' && st.wet) || inW(st.x); }
           else { st.walkFrom = st.x; st.walkTo = sp.x; st.sitAt = !!sp.sit; st.toWater = !!sp.water; } }
-        if (done) { const k = a.k;
+        if (done) { const k = a.k; if (HELD[k] && !st.lying && !st.wet) st.held = a;
           if (k === 'sit') st.sit = true; if (k === 'stand' || k === 'getup') { st.sit = false; st.sleep = false; st.lying = false; st.kneel = false; st.lieSide = null; } if (k === 'kneel') st.kneel = true; if (k === 'lie' || k === 'fall') { st.lying = true; st.sit = false; st.lieSide = -st.dir; }
           if (k === 'sleep') st.sleep = true; if (k === 'wake') st.sleep = false; if (k === 'turn') st.dir = -st.dir;
           if (k === 'passout') { st.lying = true; st.sleep = true; st.sit = false; st.lieSide = -st.dir; } if (k === 'knockout') { st.lying = true; st.ko = true; st.sit = false; st.lieSide = -st.dir; }
@@ -97,6 +99,8 @@
     sc.people.forEach(pe => { const st = out[pe.pid], a = st.active; if (st.lying || st.wet) return; if (a && (MOVES.includes(a.a.k) || ['dive', 'cannonball', 'climbout', 'turn'].includes(a.a.k))) return;
       if (a && SCRACT[a.a.k] && !a.walking) { const q = scrFor(sc, a.a, st.x); if (q) { const dx = (+q.x || 960) - st.x; if (Math.abs(dx) > 20) st.dir = dx > 0 ? 1 : -1; } return; }
       if (st.perch) return;
+      // Holding a salute (or hand on heart): keep facing the same way, or the screen for the telly ones
+      if (!a && st.held) { if (SCRACT[st.held.k]) { const q = scrFor(sc, st.held, st.x); if (q) { const dx = (+q.x || 960) - st.x; if (Math.abs(dx) > 20) st.dir = dx > 0 ? 1 : -1; } } return; }
       // About to go for someone, or just walked up to them: keep facing them rather than turning away to the crowd and back
       if (!a) { const mine = P.byWho[pe.pid] || [], tgt = q => { const k2 = String(q.to || '').replace(/^@/, ''); return k2 && out[k2] && out[k2] !== st ? out[k2] : null; };
         const nx = mine.find(q => q.start > t && q.start - t < 0.8 && !q.synthetic && tgt(q)), pv = mine.filter(q => !q.synthetic && q.start + q.dur <= t && t - (q.start + q.dur) < 1.2 && String(q.to || '')[0] === '@' && tgt(q)).pop(), f = nx || pv;
@@ -208,7 +212,8 @@
     if (Q.sit) { Q.hands[front] = [front * 0.17 * S, 0.27 * S]; Q.hands[back] = [back * 0.02 * S + Q.dir * 0.12 * S, 0.28 * S]; }
     const wpn = holding(st, ['gun', 'rifle', 'sword', 'axe', 'spear', 'torch', 'bow']);
     if (st.wet && water) { Q.swimming = true; const ph = t * 4 + ch.i; Q.hop = -(0.58 * S + 14) + Math.sin(t * 2 + ch.i) * 5; Q.hands[front] = [front * 0.2 * S, 0.12 * S + Math.sin(ph) * 10]; Q.hands[back] = [back * 0.2 * S, 0.12 * S + Math.cos(ph) * 10]; Q.noLegs = true; }
-    const A0 = st.active; if (!A0) return Q;
+    let A0 = st.active; if (!A0 && st.held && !st.lying && !st.wet) A0 = { a: st.held, p: HELD[st.held.k], e: t - st.held.start, from: { x: st.x, dir: st.dir } };
+    if (!A0) return Q; if (HELD[A0.a.k] && A0.p > HELD[A0.a.k]) A0 = Object.assign({}, A0, { p: HELD[A0.a.k] });
     if (A0.ap) { const x0 = st.walkFrom, x1 = st.walkTo; Q.dir = x1 >= x0 ? 1 : -1; if (A0.walking != null) { Q.x = lerp(x0, x1, io(A0.walking)); Q.walk = Math.abs(Q.x - x0) / (0.12 * S) * Math.PI * 0.5; Q.bob = -Math.abs(Math.sin(Q.walk)) * 6; Q.eyes = null; Q.emote = null; return Q; } Q.x = x1; }
     const a = A0.a, p = A0.p, e = A0.e, g = SCRALIAS[a.k] || a.k, sn = Math.sin(p * Math.PI);
     if (SCRACT[a.k] && !SCRALIAS[a.k]) { poseScreen(Q, st, a, p, e, P); return Q; }
@@ -285,7 +290,7 @@
       // Sombre: the mouth turned down the whole time; the sobbing one adds quiet tears, a wee heave of the shoulders and a sniff
       case 'salute': case 'salutesob': { const sob = g === 'salutesob', up = p < 0.14 ? out3(p / 0.14) : p > 0.86 ? 1 - io((p - 0.86) / 0.14) : 1, os = p > 0.1 && p < 0.22 ? Math.sin((p - 0.1) / 0.12 * Math.PI) * 0.02 : 0, qv = p > 0.3 && p < 0.86 ? Math.sin(e * 19) * 0.006 : 0;
         Q.hands[front] = [front * lerp(0.07, 0.1, up) * S, (lerp(0.31, -0.2, up) - os + qv) * S]; Q.fingers = { [front]: up > 0.6 ? 'flat' : null }; Q.hands[back] = [back * 0.035 * S, 0.32 * S];
-        Q.lean = -0.12 * up; Q.tilt = -0.07 * up * Q.dir; Q.wide = 1 - 0.6 * up; Q.mood = 'sad'; if (p > 0.55 && p < 0.86) { Q.eyes = 'shut'; Q.hdx = Math.sin(e * 25) * 1.2; }
+        Q.lean = -0.12 * up; Q.tilt = -0.07 * up * Q.dir; Q.wide = 1 - 0.6 * up; Q.mood = 'sad'; if (p > 0.5 && p < 0.7) { Q.eyes = 'shut'; Q.hdx = Math.sin(e * 25) * 1.2; }
         if (sob && p > 0.2) { const hv = Math.max(0, Math.sin(e * 7)) * cl((p - 0.2) / 0.15, 0, 1) * (p > 0.86 ? 1 - io((p - 0.86) / 0.14) : 1); Q.emote = { k: 'tears', e: e * 0.6 }; Q.eyes = 'shut'; Q.hop = hv * 2.5; Q.hdy = 2 + hv * 2; Q.tilt = (-0.07 * up + 0.04 * hv) * Q.dir;
           if (p > 0.42 && p < 0.58) Q.fx.push({ k: 'word', s: '*sniff*', p: (p - 0.42) / 0.16, at: 'head', col: CH.white }); } break; }
       case 'attention': { const k = lift(p, 0.12, 0.9), clk = p < 0.14 ? Math.sin(p / 0.14 * Math.PI) : 0; Q.hop = clk * 14; [-1, 1].forEach(sd => Q.hands[sd] = [sd * lerp(0.07, 0.03, k) * S, lerp(0.31, 0.33, k) * S]); Q.wide = 1 - 0.8 * k; Q.lean = -0.14 * k; Q.tilt = -0.08 * k * Q.dir;
