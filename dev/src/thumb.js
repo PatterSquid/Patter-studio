@@ -145,7 +145,7 @@ const Thumb = (() => {
     g.textAlign = al; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; g.miterLimit = 2;
     if (B.on) { g.save(); g.globalAlpha *= B.op == null ? 1 : +B.op; g.fillStyle = B.c || '#e8322c'; const bw = L.fit ? L.w : Math.max(...T.lines.map(q => q.w), 1) + pad * 2, bx = al === 'left' ? -L.w / 2 : al === 'right' ? L.w / 2 - bw : -bw / 2; rr(g, bx, -H2 / 2, bw, H2, +B.r || 0); g.fill(); g.restore(); }
     const cols = Array.isArray(L.cols) && L.cols.length ? L.cols : ['#ffffff'];
-    const pass = (fn) => T.lines.forEach((q, i) => { g.font = fontStr(L, q.size); g.letterSpacing = (L.ls || 0) + 'px'; fn(q, i, top + q.y + q.asc); });
+    const sk = Math.tan((+L.slant || 0) * Math.PI / 180), pass = (fn) => T.lines.forEach((q, i) => { g.font = fontStr(L, q.size); g.letterSpacing = (L.ls || 0) + 'px'; const y = top + q.y + q.asc; if (sk) { g.save(); g.translate(0, y - q.asc * 0.4); g.transform(1, 0, -sk, 1, 0, 0); g.translate(0, -(y - q.asc * 0.4)); } fn(q, i, y); if (sk) g.restore(); });
     const S2 = L.stroke2 || {}, S1 = L.stroke || {}, D = L.depth || {};
     if (+D.d > 0) { const n = Math.ceil(+D.d / 1.5); for (let k = n; k >= 1; k--) { const o = +D.d * k / n; pass((q, i, y) => { const ow = 2 * ((+S1.w || 0) + (+S2.w || 0)); g.save(); g.translate(o * 0.45, o); if (ow > 0) { g.strokeStyle = (+S2.w > 0 ? S2.c : S1.c) || '#000'; g.lineWidth = ow; g.strokeText(q.s, ax, y); } g.fillStyle = D.c || '#7a0d0d'; g.fillText(q.s, ax, y); g.restore(); }); } }
     if (+S2.w > 0) pass((q, i, y) => { g.strokeStyle = S2.c || '#fff'; g.lineWidth = (2 * (+S1.w || 0) + 2 * +S2.w); g.strokeText(q.s, ax, y); });
@@ -181,7 +181,22 @@ const Thumb = (() => {
       g.setLineDash([18, 12]); g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 4; rr(g, -L.w / 2, -L.h / 2, L.w, L.h, 18); g.fillStyle = 'rgba(255,255,255,0.06)'; g.fill(); g.stroke(); g.setLineDash([]);
       g.fillStyle = 'rgba(255,255,255,0.75)'; g.font = '600 ' + Math.max(18, Math.min(34, L.w / 14)) + 'px Arial, sans-serif'; g.textAlign = 'center'; g.fillText(L.asset ? 'Loading…' : 'Drop a picture here', 0, -6);
       if (!L.asset) { g.font = Math.max(14, Math.min(24, L.w / 20)) + 'px Arial, sans-serif'; g.fillText('or double click to choose one', 0, 26); } }
+    if (+L.grit > 0) gritty(cv, +L.grit, k, L);
     return { cv, x: -pw / 2, y: -ph / 2, w: pw, h: ph, slot: L.k === 'image' };
+  }
+  /* Dry brush edges: the edge is moved in and out by a noise field stretched along the stroke (the slant of the words),
+     so edges go ragged and thin streaks break through near them, like paint dragged across with a stiff brush. */
+  function gritty(cv, amt, k, L) {
+    const w = cv.width, h = cv.height; if (w * h > 9e6) return; const g = cv.getContext('2d', { willReadFrequently: true }), src = g.getImageData(0, 0, w, h), d = src.data;
+    const bl = document.createElement('canvas'); bl.width = w; bl.height = h; const bg = bl.getContext('2d', { willReadFrequently: true }), r = Math.max(1.5, (L.k === 'text' ? (+L.size || 100) * 0.05 : Math.min(L.w, L.h) * 0.07) * k * (0.4 + amt)); bg.filter = 'blur(' + r + 'px)'; bg.drawImage(cv, 0, 0); const b = bg.getImageData(0, 0, w, h).data;
+    let seed = 0; const sid = String(L.seed != null ? L.seed : L.id || 'g'); for (let i = 0; i < sid.length; i++) seed = (seed * 31 + sid.charCodeAt(i)) | 0;
+    const hash = (x, y) => { let n = (x * 374761393 + y * 668265263 + seed * 2654435761) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967295; };
+    const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); return (hash(xi, yi) * (1 - u) + hash(xi + 1, yi) * u) * (1 - v) + (hash(xi, yi + 1) * (1 - u) + hash(xi + 1, yi + 1) * u) * v; };
+    const sk = Math.tan((+L.slant || 0) * Math.PI / 180), sc = (L.k === 'text' ? (+L.size || 100) / 200 : Math.min(L.w, L.h) / 150) * k, sx = 1 / (60 * sc), sy = 1 / (3.2 * sc), s2 = 1 / (14 * sc);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, a = d[i + 3]; if (!a) continue; const bb = b[i + 3] / 255; if (bb > 0.985) continue;
+      const xx = x + y * sk, n = vn(xx * sx, y * sy) * 0.65 + vn(xx * s2, y * s2) * 0.35, edge = 1 - Math.abs(bb - 0.5) * 2, t = bb + (n - 0.5) * amt * 2.3 * (0.3 + edge);
+      d[i + 3] = Math.round(a * Math.max(0, Math.min(1, (t - 0.42) * 7))); }
+    g.putImageData(src, 0, 0);
   }
   function silhouette(cv, col) { const s = document.createElement('canvas'); s.width = cv.width; s.height = cv.height; const g = s.getContext('2d'); g.drawImage(cv, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, s.width, s.height); return s; }
   // Draws the whole thumbnail into g at size W x H (picture pixels scaled by W / its width). opts.hideSel: a layer id left out (being brushed); opts.clean: no empty slots
@@ -328,6 +343,8 @@ const Thumb = (() => {
     double: { name: 'Double outline', o: { text: 'MENTAL', font: 'Bebas Neue', cols: ['#ffe14d'], stroke: { w: 10, c: '#000000' }, stroke2: { w: 14, c: '#ffffff' }, size: 190, w: 600 } },
     box: { name: 'Label in a box', o: { text: 'LABEL', font: 'Oswald', cols: ['#ffffff'], box: { on: true, c: '#e8322c', pad: 18, r: 10, op: 1 }, size: 70, w: 360 } },
     hand: { name: 'Scribbled', o: { text: 'wait for it', font: 'Permanent Marker', upper: false, cols: ['#ffffff'], size: 80, w: 520, rot: -6 } },
+    slam: { name: 'Brush slam', o: { text: 'FULL', font: 'Archivo Black', cols: ['#ff1a1a'], slant: 12, grit: 0.6, stroke: { w: 3, c: '#000000' }, size: 220, w: 640 } },
+    slamline: { name: 'Brush slam with a swipe under it', pair: { shape: 'swipe', fill: '#ff1a1a', sw: 0, grit: 0.6, bend: 0.3, thick: 0.6 }, o: { text: 'FULL', font: 'Archivo Black', cols: ['#ff1a1a'], slant: 12, grit: 0.6, stroke: { w: 3, c: '#000000' }, size: 220, w: 640 } },
     num: { name: 'Big number', o: { text: '£1,000,000', font: 'Archivo Black', cols: ['#7CFF4D'], stroke: { w: 10, c: '#000000' }, size: 120, w: 700 } } };
   function addLayer(L) { const [PW, PH] = dims(W.cfg); if (L.x == null || L.x === 640) L.x = PW / 2; if (L.y == null || L.y === 360) L.y = PH / 2; W.cfg.layers.push(L); W.sel = L.id; changed(true); layersBar(); }
   function drawer() {
@@ -346,7 +363,8 @@ const Thumb = (() => {
         const im = H('img', { alt: m.name || 'Picture' }); CutMedia.urlOf(m.id).then(u => { if (u) im.src = u; }); grid.append(H('button', { type: 'button', className: 'th-pic', title: m.name || 'Picture', on: { click: () => { const [PW, PH] = dims(W.cfg); const L = newImage({ name: (m.name || 'Picture').replace(/\.\w+$/, '').slice(0, 30), asset: m.id, w: PW * 0.5, h: PH * 0.5 }); CutMedia.bitmap(m.id).then(() => { fitImage(L); addLayer(L); }); } } }, im)); }); } catch (e) { } }
     else if (d === 'text') { box.append(head('Text'), H('p', { className: 'hint', textContent: 'Click one to add it, then type your words on the right.' })); const grid = H('div', { className: 'th-col' });
       Object.entries(TEXTS).forEach(([k, T]) => { const L = newText(JSON.parse(JSON.stringify(T.o))), c = document.createElement('canvas'); c.width = 240; c.height = 70; const g = c.getContext('2d'); sizeOf(L, g); const s = Math.min(220 / L.w, 60 / Math.max(1, L.h)); g.translate(120, 35); g.scale(s, s); drawText(g, L);
-        grid.append(H('button', { type: 'button', className: 'th-tline', title: T.name, on: { click: () => addLayer(newText(JSON.parse(JSON.stringify(T.o)))) } }, c)); }); box.append(grid); }
+        if (T.pair) { const P2 = newShape(Object.assign({}, T.pair, { w: L.w * 1.1, h: L.h * 0.5 })); g.save(); g.translate(L.w * 0.04, L.h * 0.5); try { ThumbShapes.draw(g, P2); } catch (e) { } g.restore(); }
+        grid.append(H('button', { type: 'button', className: 'th-tline', title: T.name, on: { click: () => { const t = newText(JSON.parse(JSON.stringify(T.o))); addLayer(t); if (T.pair) { sizeOf(t); const u = newShape(Object.assign({ name: 'Swipe' }, JSON.parse(JSON.stringify(T.pair)), { x: t.x + t.w * 0.04, y: t.y + t.h * 0.5, w: t.w * 1.1, h: Math.max(60, t.h * 0.5) })); W.cfg.layers.splice(W.cfg.layers.indexOf(t), 0, u); W.sel = t.id; changed(true); layersBar(); } } } }, c)); }); box.append(grid); }
     else if (d === 'shape') { box.append(head('Shapes'), H('p', { className: 'hint', textContent: 'Click one to add it. Then on the right: colours, outline, 3D depth, shine, and the bend of curved arrows.' }));
       ThumbShapes.PRESETS.forEach(([grp, list]) => { const grid = H('div', { className: 'th-sgrid' }); box.append(head(grp), grid);
         list.forEach(([n, o]) => { const c = document.createElement('canvas'), dpr = 2; c.width = 72 * dpr; c.height = 56 * dpr; c.style.width = '72px'; c.style.height = '56px'; const g = c.getContext('2d'), L = newShape(Object.assign({ id: 'p' + n }, JSON.parse(JSON.stringify(o)))), pad = 10 + (+L.sw || 0) + (+L.depth || 0), k = Math.min((72 * dpr - 12) / (L.w + pad * 2), (56 * dpr - 10) / (L.h + pad * 2));
@@ -417,6 +435,7 @@ const Thumb = (() => {
         slider('Letter spacing', L.ls || 0, -10, 40, 0.5, v => { L.ls = v; }, px), slider('Line spacing', L.lh == null ? 1 : L.lh, 0.6, 1.8, 0.02, v => { L.lh = v; }, v => v.toFixed(2))),
         card('Outline', slider('Outline', L.stroke.w, 0, 40, 1, v => { L.stroke.w = v; }, px), ...(L.stroke.w ? [colour('Outline colour', L.stroke.c, v => { L.stroke.c = v; })] : []),
           slider('Second outline', L.stroke2.w, 0, 40, 1, v => { L.stroke2.w = v; }, px), ...(L.stroke2.w ? [colour('Second outline colour', L.stroke2.c, v => { L.stroke2.c = v; })] : []),
+          slider('Slant', L.slant || 0, -25, 25, 1, v => { L.slant = v; }, v => v ? Math.round(v) + '°' : 'Off'), slider('Brush edges', L.grit || 0, 0, 1, 0.05, v => { L.grit = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
           slider('3D depth', (L.depth || {}).d || 0, 0, 40, 1, v => { L.depth = Object.assign({ c: '#7a0d0d' }, L.depth || {}, { d: v }); }, v => v ? Math.round(v) + ' px' : 'Off'), ...((L.depth || {}).d ? [colour('Depth colour', L.depth.c || '#7a0d0d', v => { L.depth.c = v; })] : [])),
         card('Box behind', onoff('Box behind the words', L.box.on, v => { L.box.on = v; }), ...(L.box.on ? [colour('Box colour', L.box.c, v => { L.box.c = v; }), slider('Padding', L.box.pad, 0, 80, 1, v => { L.box.pad = v; }, px), slider('Round corners', L.box.r, 0, 60, 1, v => { L.box.r = v; }, px), slider('Box see through', 1 - L.box.op, 0, 1, 0.05, v => { L.box.op = Math.round((1 - v) * 100) / 100; }, pct)] : [])),
         ...fxCards(L)); return; }
@@ -428,7 +447,7 @@ const Thumb = (() => {
           ...(SH.ROUGH.includes(L.shape) ? [slider('Hand drawn', L.rough || 0, 0, 1, 0.05, v => { L.rough = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'), ...(L.rough ? [btn('Draw it again differently', () => { L.seed = Math.floor(Math.random() * 1e6); full(); })] : [])] : []),
           ...(SH.TAILED.includes(L.shape) ? [slider('Tail along the bottom', L.tail == null ? 0.25 : L.tail, 0, 1, 0.01, v => { L.tail = v; }, pct)] : []),
           ...(L.shape === 'rect' ? [slider('Round corners', L.r || 0, 0, 200, 1, v => { L.r = v; }, px)] : [])),
-        card('Outline and 3D', slider('Outline', L.sw || 0, 0, 30, 1, v => { L.sw = v; }, px), ...(L.sw ? [colour('Outline colour', L.stroke, v => { L.stroke = v; })] : []),
+        card('Outline and 3D', slider('Brush edges', L.grit || 0, 0, 1, 0.05, v => { L.grit = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'), slider('Outline', L.sw || 0, 0, 30, 1, v => { L.sw = v; }, px), ...(L.sw ? [colour('Outline colour', L.stroke, v => { L.stroke = v; })] : []),
           slider('3D depth', L.depth || 0, 0, 40, 1, v => { L.depth = v; }, v => v ? Math.round(v) + ' px' : 'Off'), ...(L.depth ? [colour('Depth colour', L.depthC || '#7a0d0d', v => { L.depthC = v; })] : [])), ...fxCards(L)); }
   }
   function order(L, d) { const a = W.cfg.layers, i = a.indexOf(L), j = cl(i + d, 0, a.length - 1); if (i < 0 || i === j) return; a.splice(i, 1); a.splice(j, 0, L); changed(true); layersBar(); }

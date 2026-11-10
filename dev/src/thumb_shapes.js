@@ -69,6 +69,10 @@ const ThumbShapes = (() => {
       case 'scribble': { const pts = [], hw = [], n = 120, s = cl(+L.thick || 0.08, 0.02, 0.3) * m; for (let i = 0; i <= n; i++) { const t = i / n, a = -2.2 + t * (TAU * 1.22), r = 1 + nz(t * 0.09) * 0.04 * (1 + rough * 2) - t * 0.13; pts.push([Math.cos(a) * (w / 2 - s) * r, Math.sin(a) * (h / 2 - s) * r]); hw.push(s / 2 * Math.min(1, t * 8, (1 - t) * 6 + 0.25)); } ribbon(P, pts, hw, true); break; }
       case 'ring': { const s = cl(+L.thick || 0.1, 0.02, 0.4) * m; cur = part(); parts.eo = true; P.ellipse(0, 0, w / 2, h / 2, 0, 0, TAU); cur.moveTo(Math.max(1, w / 2 - s), 0); P.ellipse(0, 0, Math.max(1, w / 2 - s), Math.max(1, h / 2 - s), 0, 0, TAU, true); break; }
       case 'underline': { const s = cl(+L.thick || 0.35, 0.05, 1) * h, pts = cubic([x + s, s * 0.2], [x + w * 0.3, -h * 0.25 * bend], [x + w * 0.7, h * 0.2 * bend], [-x - s, -s * 0.3]), hw = pts.map((_, i) => s / 2 * Math.min(1, i / 6 + 0.3, (pts.length - 1 - i) / 4 + 0.15)); ribbon(P, wob(pts, rough * s * 0.3, nz), hw, true); break; }
+      // a brush swipe to underline words: starts thin on the left, fattens as the brush presses, a little rise along it
+      // a brush swipe to underline words: pressed on hard at the left, dragged up and away to the right, lifting off thin
+      case 'swipe': { const s = cl(+L.thick || 0.6, 0.15, 1) * h, pts = cubic([x + s * 0.3, -y - s * 0.55], [x + w * 0.38, -y - s * 0.6 - h * 0.05 * bend], [x + w * 0.68, y + s * 0.6 + h * 0.08 * bend], [-x - 2, y + s * 0.25], 80), n = pts.length - 1;
+        const hw = pts.map((_, i) => { const t = i / n; return s / 2 * Math.min(1, 0.55 + t * 6) * Math.pow(Math.max(0, 1 - t), 0.55) * (1 + nz(t * 0.4) * 0.1 * (1 + rough)) + 0.5; }); ribbon(P, wob(pts, rough * s * 0.06, nz), hw, false); break; }
       case 'xmark': { const s = cl(+L.thick || 0.16, 0.04, 0.4) * m, a = quad([x + s, y + s], [nz(0.1) * s, nz(0.2) * s], [-x - s, -y - s], 20), b = quad([-x - s, y + s * 1.2], [nz(0.3) * s, nz(0.4) * s], [x + s * 1.1, -y - s], 20), taper = p => p.map((_, i) => s / 2 * Math.min(1, i / 3 + 0.4, (p.length - 1 - i) / 3 + 0.4)); ribbon(P, a, taper(a), true); ribbon(P, b, taper(b), true); break; }
       case 'tick': { const s = cl(+L.thick || 0.18, 0.04, 0.4) * m, pts = [...quad([x + s, h * 0.05], [x + w * 0.28, h * 0.2], [x + w * 0.38, -y - s], 10), ...quad([x + w * 0.38, -y - s], [x + w * 0.55, -h * 0.05], [-x - s, y + s], 16).slice(1)], hw = pts.map((_, i) => s / 2 * Math.min(1, i / 3 + 0.5, (pts.length - 1 - i) / 4 + 0.3)); ribbon(P, pts, hw, true); break; }
       // a dry brush stroke for words to sit on: ragged ends and edges
@@ -116,6 +120,7 @@ const ThumbShapes = (() => {
     ['Circle it', [
       ['Scribbled circle', { shape: 'scribble', w: 340, h: 240, fill: RED, sw: 0, thick: 0.06, rough: 0.5 }],
       ['Ring', { shape: 'ring', w: 300, h: 300, fill: RED, sw: 5, stroke: '#ffffff', thick: 0.07 }],
+      ['Brush swipe', { shape: 'swipe', w: 620, h: 150, fill: '#ff1a1a', sw: 0, grit: 0.6, bend: 0.3, thick: 0.6 }],
       ['Underline', { shape: 'underline', w: 420, h: 60, fill: RED, sw: 0, thick: 0.4, bend: 0.5, rough: 0.3 }],
       ['Cross', { shape: 'xmark', w: 220, h: 220, fill: RED, sw: 7, stroke: '#ffffff', thick: 0.16 }],
       ['Tick', { shape: 'tick', w: 220, h: 200, fill: '#2ecc40', sw: 7, stroke: '#ffffff', thick: 0.17 }],
@@ -134,6 +139,6 @@ const ThumbShapes = (() => {
       ['Circle', { shape: 'circle', w: 220, h: 220, fill: RED }], ['Triangle', { shape: 'tri', w: 240, h: 210, fill: YEL, sw: 6, stroke: '#000000' }], ['Banner', { shape: 'banner', w: 460, h: 110, fill: RED, sw: 0 }], ['Line', { shape: 'line', w: 400, h: 60, fill: '#ffffff' }]]]];
   const NAMES = Object.fromEntries(PRESETS.flatMap(([, list]) => list.map(([n, o]) => [o.shape, n])));
   NAMES.carrow = 'Curved arrow'; NAMES.arrow = 'Straight arrow'; NAMES.round = 'Rounded box';
-  const BENDY = ['carrow', 'swoosh', 'harrow', 'underline'], TAILED = ['bubble', 'shout', 'thought'], THICK = ['carrow', 'swoosh', 'loop', 'harrow', 'darrow', 'scribble', 'ring', 'underline', 'xmark', 'tick'], ROUGH = ['carrow', 'swoosh', 'loop', 'harrow', 'scribble', 'underline'];
+  const BENDY = ['carrow', 'swoosh', 'harrow', 'underline', 'swipe'], TAILED = ['bubble', 'shout', 'thought'], THICK = ['carrow', 'swoosh', 'loop', 'harrow', 'darrow', 'scribble', 'ring', 'underline', 'swipe', 'xmark', 'tick'], ROUGH = ['carrow', 'swoosh', 'loop', 'harrow', 'scribble', 'underline', 'swipe'];
   return { geo, draw, PRESETS, NAMES, BENDY, TAILED, THICK, ROUGH, shade };
 })();
