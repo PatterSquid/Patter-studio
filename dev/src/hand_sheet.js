@@ -1,7 +1,7 @@
 /* His own hand drawings for talking (a green screen sheet he draws: an open explaining hand, a relaxed half curled hand,
    palms up, pointing at you, a steeple), cut off the green and fitted to his puppet: one size and one colour for the
-   whole sheet, measured against his puppet's own open palm, so every pose matches his hands. Each drawing keeps a bit
-   of sleeve, which is faded out at its cut end and laid over the end of the puppet's sleeve. Puppet keeps the sheet
+   whole sheet, measured against his puppet's own open palm, so every pose matches his hands. Any sleeve drawn with a hand is taken off: only the
+   hand is used, its wrist fading into the end of the puppet's own sleeve. Puppet keeps the sheet
    with the puppet (never uploaded) and calls fit() when it loads. Also: a plain black copy of each dark sleeve for when
    the forearm turns over (the hoodie's stripes run down the outside of the arm). */
 const HandSheet = (() => {
@@ -23,11 +23,27 @@ const HandSheet = (() => {
     const pieces = big.map(b => {
       const x0 = Math.max(0, b.x0 - 4), y0 = Math.max(0, b.y0 - 4), w = Math.min(W - 1, b.x1 + 4) - x0 + 1, h = Math.min(H - 1, b.y1 + 4) - y0 + 1, out = new ImageData(w, h), o = out.data;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y0 + y) * W + x0 + x, L = lab[i]; if (L && L !== b.n) continue; let a = al[i]; if (!L) { let near = false; for (let k = -3; k <= 3 && !near; k++) for (let m = -3; m <= 3; m++) { const yy = y0 + y + k, xx = x0 + x + m; if (yy >= 0 && yy < H && xx >= 0 && xx < W && lab[yy * W + xx] === b.n) { near = true; break; } } if (!near) a = 0; }
-        const r = d[i * 4], g = d[i * 4 + 1], bb = d[i * 4 + 2], j = (y * w + x) * 4; o[j] = r; o[j + 1] = Math.min(g, Math.max(r, bb) * 1.05); o[j + 2] = bb; o[j + 3] = a * 255 * Math.min(1, Math.max(0, (h - 6 - y) / (h * 0.16))); }   // green spill off the edges; the cut end of the sleeve faded
-      // the sleeve: dark cloth in the bottom part (a steeple has one each side)
-      const sl = [[0, 0, 0], [0, 0, 0]], cx = w / 2; for (let y = Math.floor(h * 0.6); y < h; y++) for (let x = 0; x < w; x++) { const j = (y * w + x) * 4; if (o[j + 3] > 200 && o[j] + o[j + 1] + o[j + 2] < 150) { const s = x < cx ? 0 : 1; sl[s][0] += x; sl[s][1] += y; sl[s][2]++; } }
-      const one = [(sl[0][0] + sl[1][0]) / Math.max(1, sl[0][2] + sl[1][2]), (sl[0][1] + sl[1][1]) / Math.max(1, sl[0][2] + sl[1][2])], two = sl.map(q => q[2] ? [q[0] / q[2], q[1] / q[2]] : one);
-      return { data: out, w, h, x: x0, y: y0, sleeve: one, sleeves: two, wide: w > h * 1.5 };
+        const r = d[i * 4], g = d[i * 4 + 1], bb = d[i * 4 + 2], j = (y * w + x) * 4; o[j] = r; o[j + 1] = Math.min(g, Math.max(r, bb) * 1.05); o[j + 2] = bb; o[j + 3] = a * 255; }   // green spill off the edges
+      // the sleeve: the big dark patch at the bottom (thin outlines are not sleeve: an opening takes them out); it is taken
+      // off, so only the hand is left, its wrist end fading out where it goes into his own sleeve
+      const n2 = w * h, dk = new Uint8Array(n2); for (let i = 0; i < n2; i++) dk[i] = o[i * 4 + 3] > 128 && o[i * 4] + o[i * 4 + 1] + o[i * 4 + 2] < 170 ? 1 : 0;
+      const grow = (m, r, on) => { let a = m; for (let it = 0; it < r; it++) { const b2 = a.slice(); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (a[i] === on) continue; if ((x > 0 && a[i - 1] === on) || (x < w - 1 && a[i + 1] === on) || (y > 0 && a[i - w] === on) || (y < h - 1 && a[i + w] === on)) b2[i] = on; } a = b2; } return a; };
+      let core = grow(grow(dk, 5, 0), 6, 1); for (let i = 0; i < n2; i++) core[i] &= dk[i] | (o[i * 4 + 3] < 128 ? 0 : 1);
+      // keep the dark patches that reach the bottom of the drawing (the sleeves)
+      const lab2 = new Int32Array(n2), keep = new Set(); let nn = 0; const st2 = [];
+      for (let s0 = 0; s0 < n2; s0++) { if (!core[s0] || lab2[s0]) continue; nn++; lab2[s0] = nn; st2.push(s0); let low = false; while (st2.length) { const i = st2.pop(), x = i % w, y = (i / w) | 0; if (y > h * 0.85) low = true; for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) if (j >= 0 && core[j] && !lab2[j]) { lab2[j] = nn; st2.push(j); } } if (low) keep.add(nn); }
+      let slv = new Uint8Array(n2); for (let i = 0; i < n2; i++) slv[i] = keep.has(lab2[i]) ? 1 : 0; slv = grow(slv, 2, 1);
+      const sl = [[0, 0, 0], [0, 0, 0]], wr = [[0, 0, 0], [0, 0, 0]], cx = w / 2;
+      // distance from the sleeve, for the fade (up to 10 px), and the wrist: skin touching the sleeve
+      const dist = new Float32Array(n2).fill(99), q2 = []; for (let i = 0; i < n2; i++) if (slv[i]) { dist[i] = 0; q2.push(i); }
+      for (let qi = 0; qi < q2.length; qi++) { const i = q2[qi], x = i % w, y = (i / w) | 0; if (dist[i] >= 10) continue; for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) if (j >= 0 && dist[j] > dist[i] + 1) { dist[j] = dist[i] + 1; q2.push(j); } }
+      for (let i = 0; i < n2; i++) { const x = i % w, y = (i / w) | 0, sd = x < cx ? 0 : 1;
+        if (slv[i]) { if (o[i * 4 + 3] > 128) { sl[sd][0] += x; sl[sd][1] += y; sl[sd][2]++; } o[i * 4 + 3] = 0; continue; }
+        if (dist[i] <= 3 && o[i * 4 + 3] > 128 && !dk[i]) { wr[sd][0] += x; wr[sd][1] += y; wr[sd][2]++; }
+        if (dist[i] < 10) o[i * 4 + 3] *= Math.max(0, (dist[i] - 1) / 9); }
+      const avg = A => { const t = A[0][2] + A[1][2]; return t ? [(A[0][0] + A[1][0]) / t, (A[0][1] + A[1][1]) / t] : [w / 2, h]; }, one = avg(sl), wone = wr[0][2] + wr[1][2] ? avg(wr) : one;
+      const two = wr.map(q => q[2] ? [q[0] / q[2], q[1] / q[2]] : wone);
+      return { data: out, w, h, x: x0, y: y0, sleeve: one, wrist: wone, wrists: two, wide: w > h * 1.5 };
     });
     // row by row (rows are the pieces whose middles are level), then left to right
     pieces.sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2)); const rows = []; pieces.forEach(p => { const r = rows.find(r => Math.abs(r.c - (p.y + p.h / 2)) < Math.max(p.h, r.h) * 0.45); if (r) r.p.push(p); else rows.push({ c: p.y + p.h / 2, h: p.h, p: [p] }); });
@@ -65,8 +81,8 @@ const HandSheet = (() => {
       const w = Math.max(1, Math.round(p.w * k)), h = Math.max(1, Math.round(p.h * k));
       const make = mir => { const c = mk(w, h), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; if (mir) { g.translate(w, 0); g.scale(-1, 1); } g.drawImage(c0, 0, 0, w, h); return c; };
       const [role, side] = roles[i], at = s => [(s[0]) * k, s[1] * k], flip = a => [w - a[0], a[1]];
-      if (role === 'steeple') { const [a, b] = p.sleeves.map(at); out.push({ role, side: 'L', canvas: make(false), w, h, anchor: b, other: [a[0] - b[0], a[1] - b[1]] }); return; }
-      const a = at(p.sleeve), sd = side === 'R' ? 'R' : 'L';
+      if (role === 'steeple') { const [a, b] = p.wrists.map(at); out.push({ role, side: 'L', canvas: make(false), w, h, anchor: b, other: [a[0] - b[0], a[1] - b[1]] }); return; }
+      const a = at(p.wrist), sd = side === 'R' ? 'R' : 'L';
       out.push({ role, side: sd, canvas: make(false), w, h, anchor: a });
       out.push({ role, side: sd === 'L' ? 'R' : 'L', canvas: make(true), w, h, anchor: flip(a), mirror: true });   // the other hand, unless he drew that one too
     });
