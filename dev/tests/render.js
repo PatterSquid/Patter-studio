@@ -1,4 +1,4 @@
-async()=>{ const mods={charts:Charts,timeline:Timeline,map:typeof MapMod!=='undefined'?MapMod:null,flights:typeof Flights!=='undefined'?Flights:null,flyover:typeof Flyover!=='undefined'?Flyover:null,picto:Picto,news:typeof News!=='undefined'?News:null,story:Story,broll:Broll};
+async()=>{ if(typeof Studio!=='undefined'&&Studio.ready) await Studio.ready(); if(typeof PatterFonts!=='undefined') await PatterFonts.ready(); const mods={charts:Charts,timeline:Timeline,map:typeof MapMod!=='undefined'?MapMod:null,flights:typeof Flights!=='undefined'?Flights:null,flyover:typeof Flyover!=='undefined'?Flyover:null,picto:Picto,news:typeof News!=='undefined'?News:null,story:Story,broll:Broll,studio:Studio,intro:Intro,char:Character};
  const out={}; const c=document.createElement('canvas'); const g=c.getContext('2d',{willReadFrequently:true});
  const hash=()=>{ const d=g.getImageData(0,0,c.width,c.height).data; let h=0; for(let i=0;i<d.length;i+=97) h=(h*31+d[i])|0; return h; };
  if (typeof GeoData!=='undefined') { GeoData.load(); for(let i=0;i<60&&GeoData.state.status!=='ready';i++) await new Promise(r=>setTimeout(r,250)); }
