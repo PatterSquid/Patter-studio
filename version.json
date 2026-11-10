@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.10.4",
+  "version": "2026.11.10.5",
   "file": "app/patter-studio.html",
-  "notes": "His mug now carries your PatterSquid logo."
+  "notes": "Smoother preview: your character and the Studio's busy moments (the plane, fires) draw lighter while the preview plays, full quality when paused and in every export. Faster exports: his drawings are resized once instead of every frame, and PNG frames are packed in the background."
 }

@@ -243,15 +243,19 @@ const E = (() => {
     if (mod.mediaFor && typeof Media !== 'undefined') await Media.ensure(mod.mediaFor(cfg));
     const lookX = Object.assign({}, look, { transparent: true, preview: false }), zip = dir ? null : Zip(), R = Render.frameRenderer(mod, cfg, lookX, W, H, fps, blur, true, t0);
     const toPng = c => c.convertToBlob ? c.convertToBlob({ type: 'image/png' }) : new Promise(r => c.toBlob(r, 'image/png'));
+    const pipe = typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function'; let chain = Promise.resolve(); const pend = [];
     for (let i = 0; i < n; i++) {
       if (signal && signal.aborted) throw new Error('Export cancelled.');
       if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, lookX));
       R.render(i);
-      const blob = await toPng(R.canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
-      if (dir) { const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(blob); await w.close(); }
-      else zip.add(name, new Uint8Array(await blob.arrayBuffer()));
+      // packed and saved in the background while the next frame is drawn (a few at once), in frame order
+      const name = 'frame_' + String(i).padStart(5, '0') + '.png', job = pipe ? createImageBitmap(R.canvas).then(bmp => { const oc = new OffscreenCanvas(bmp.width, bmp.height); oc.getContext('bitmaprenderer').transferFromImageBitmap(bmp); return oc.convertToBlob({ type: 'image/png' }); }) : toPng(R.canvas);
+      if (!pipe) await job;
+      chain = chain.then(async () => { const blob = await job; if (dir) { const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(blob); await w.close(); } else zip.add(name, new Uint8Array(await blob.arrayBuffer())); });
+      pend.push(chain); if (pend.length > 3) await pend.shift(); if (pipe) await new Promise(r => setTimeout(r, 0));
       if (i % 3 === 0) onProgress && onProgress(i / n);
     }
+    await chain;
     onProgress && onProgress(1); return dir ? null : zip.blob();
   }
   async function saveBlob(blob, name, types) {

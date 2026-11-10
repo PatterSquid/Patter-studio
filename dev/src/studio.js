@@ -209,7 +209,7 @@ const Studio = (() => {
     const holes = mk(W, Hh), hg = holes.getContext('2d', { willReadFrequently: true }), hd = hg.createImageData(W, Hh); for (let i = 0; i < W * Hh; i++) { if (big[i]) continue; hd.data[i * 4] = d[i * 4]; hd.data[i * 4 + 1] = d[i * 4 + 1]; hd.data[i * 4 + 2] = d[i * 4 + 2]; hd.data[i * 4 + 3] = 255; } hg.putImageData(hd, 0, 0);
     const fill = mk(W, Hh), fg = fill.getContext('2d', { willReadFrequently: true }); fg.filter = 'blur(5px)'; fg.drawImage(holes, 0, 0); const fd = fg.getImageData(0, 0, W, Hh).data;
     const out = g.createImageData(W, Hh); for (let i = 0; i < W * Hh; i++) { if (!big[i]) continue; const a = fd[i * 4 + 3] / 255 || 1; out.data[i * 4] = Math.min(255, fd[i * 4] / a * 0.85); out.data[i * 4 + 1] = Math.min(255, fd[i * 4 + 1] / a * 0.85); out.data[i * 4 + 2] = Math.min(255, fd[i * 4 + 2] / a * 0.9); out.data[i * 4 + 3] = 255; }
-    g.clearRect(0, 0, W, Hh); g.putImageData(out, 0, 0); return (R.outCv = c);
+    g.clearRect(0, 0, W, Hh); g.putImageData(out, 0, 0); const gpu = mk(W, Hh); gpu.getContext('2d').drawImage(c, 0, 0); return (R.outCv = gpu);   // drawn every frame: a copy that lives on the graphics chip, not the one made for reading pixels
   }
   // Light from outside thrown into the room through the window, in a colour
   /* Light from outside thrown into the room through the window: a wide soft glow from the window (one gradient), and the
@@ -257,7 +257,7 @@ const Studio = (() => {
     const bmp = roomBmp(cfg); ctx.save();
     if (!bmp) { ctx.fillStyle = '#0d1424'; ctx.fillRect(0, 0, W, H); if (look && look.preview) emptyCard(ctx, W, H); drawAvatarAlone(ctx, cfg, tAv, W, H); ctx.restore(); return; }
     const v = view(cfg, W, H, t), M = cfg.marks || {}, L = loopOf(cfg), w = WX[cfg.weather] || WX.rain, tl = pmod(t, L);
-    const base = ctx.getTransform ? Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1 : 1; ctx.transform(v.s, 0, 0, v.s, v.ox, v.oy); ctx.imageSmoothingQuality = 'low'; v.px = v.s * base;
+    const base = ctx.getTransform ? Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1 : 1; ctx.transform(v.s, 0, 0, v.s, v.ox, v.oy); ctx.imageSmoothingQuality = 'low'; v.px = v.s * base; v.moving = !!(look && look.preview && !look.paused);
     // What is going on outside: the state of the flats (the room picture loses the block once it is cut out and moved) and
     // the light it throws in
     const evOn = Ev && ((cfg.events || []).length || (cfg.tower && cfg.tower !== 'standing')), Pz = evOn ? Ev.pose(cfg, t) : null, kit = Pz && (Pz.gone || Pz.draw) ? towerKit(cfg, bmp) : null;
@@ -462,7 +462,7 @@ const Studio = (() => {
     const fr = isChar ? null : typeof Media !== 'undefined' ? Media.frame(A.id, cl(tAv, 0, 1e6)) : null; if (!fr && !isChar) return;
     const kx = R.w / R.fw, ky = R.h / R.fh, bx = R.x + R.box[0] * kx, by = R.y + R.box[1] * ky, bw = (R.box[2] - R.box[0]) * kx, bh = (R.box[3] - R.box[1]) * ky, flip = !!A.mirror;
     // Work at the size it appears on screen so the extra passes stay cheap
-    const px = v.px || v.s, sc = Math.min(1, 1100 / Math.max(1, bh * px)), cw = Math.max(2, bw * px * sc), ch = Math.max(2, bh * px * sc), a = buf('a', cw, ch), ag = a.getContext('2d');
+    const px = v.px || v.s, sc = Math.min(1, 1100 / Math.max(1, bh * px)) * (v.moving ? 0.6 : 1),   /* while the preview plays he is lit at a little over half the size (the lighting passes are what cost); paused and in exports, full */ cw = Math.max(2, bw * px * sc), ch = Math.max(2, bh * px * sc), a = buf('a', cw, ch), ag = a.getContext('2d');
     ag.setTransform(1, 0, 0, 1, 0, 0); ag.clearRect(0, 0, cw, ch); if (flip) { ag.translate(cw, 0); ag.scale(-1, 1); } if (isChar) { const b = R.box; ag.scale(cw / (b[2] - b[0]), ch / (b[3] - b[1])); ag.translate(-b[0], -b[1]); ag.imageSmoothingQuality = 'high'; Character.drawRig(ag, charCfg(), cl(tAv, 0, 1e6)); } else ag.drawImage(fr, 0, 0, cw, ch); ag.setTransform(1, 0, 0, 1, 0, 0);
     const grade = cl(A.grade == null ? 0.6 : +A.grade, 0, 1), warm = cl(A.warm == null ? 0.5 : +A.warm, 0, 1), cool = cl(A.cool == null ? 0.45 : +A.cool, 0, 1), shadow = cl(A.shadow == null ? 0.5 : +A.shadow, 0, 1);
     const lampAvg = lamps.length ? lamps.reduce((s, x) => s + Math.min(1.2, x.f), 0) / lamps.length : 1, dim = Math.min(room, lerp(1, lampAvg, 0.6));

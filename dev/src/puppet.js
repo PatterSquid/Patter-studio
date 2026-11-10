@@ -313,8 +313,22 @@ const Puppet = (() => {
      pose: { view, mouth, blink (0 open .. 1 shut), brow: { L: [dx, dy, rot], R: [...] }, pupil: [dx, dy] (fractions of the eye),
              head: [dx, dy, rot], body: [breath], swaps: { nodeId: kidIndex }, dangle: rot, arms: { R: { dx, dy, rot, sc } } (where the wrist goes, in puppet pixels, and the hand's turn) } */
   const scr = {}; const scratch = (k, w, h) => { let c = scr[k]; if (!c || c.width !== w || c.height !== h) { c = scr[k] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); } return c; };
+  /* Smaller copies of the layers for when he is drawn small (the preview, the Studio, an export below full size): each
+     layer is drawn from a copy made once at about the size it lands on screen (in steps of a sixteenth, made with high
+     quality resizing in the background), so a frame does not shrink 150 big pictures every time. The full picture is
+     used until a copy is ready, and whenever he is drawn at nearly full size. Two sizes are kept. */
+  function mipLevel(rig, g) {   // one size for the whole drawing, from the transform he is drawn with
+    const m = g.getTransform(), s = Math.hypot(m.a, m.b); if (!(s < 0.88)) return 0;
+    const lv = Math.max(1, Math.ceil(s * 16)) / 16, C = rig.mips || (rig.mips = { lv: [], at: {}, want: null, n: 0 });
+    if (C.at[lv]) { C.lv.splice(C.lv.indexOf(lv), 1); C.lv.push(lv); return lv; }
+    if (C.want === lv) C.n++; else { C.want = lv; C.n = 1; }
+    if (C.n >= 3) { const set = C.at[lv] = { bm: [], busy: true }; C.lv.push(lv); if (C.lv.length > 2) { const old = C.lv.shift(); delete C.at[old]; }
+      (async () => { for (let i = 0; i < rig.bm.length; i++) { const src = rig.bm[i]; if (!src) continue; const k = lv * (rig.layers[i] ? rig.layers[i].w / src.width : 1); if (k >= 0.95) { set.bm[i] = src; continue; } try { set.bm[i] = await createImageBitmap(src, { resizeWidth: Math.max(1, Math.round(src.width * k)), resizeHeight: Math.max(1, Math.round(src.height * k)), resizeQuality: 'high' }); } catch (e) { set.bm[i] = src; } } set.busy = false; })(); }
+    return lv;
+  }
+  function sized(rig, li, lv) { const set = lv && rig.mips && rig.mips.at[lv]; return (set && !set.busy && set.bm[li]) || rig.bm[li]; }
   function draw(g0, rig, pose) {
-    const P = pose || {}, sw = P.swaps || {}, N = rig.nodes, bm = rig.bm, L = rig.layers;
+    const lv0 = mipLevel(rig, g0), P = pose || {}, sw = P.swaps || {}, N = rig.nodes, bm = rig.bm, L = rig.layers;
     const visible = nd => {
       const par = N[nd.parent];
       if (par && par.views) return nd.view === (rig.views[P.view] != null ? P.view : 'front');
@@ -352,7 +366,7 @@ const Puppet = (() => {
         g.drawImage(c, hb[0], hb[1], w, h);
       }
       else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
-      else { const b = bm[nd.li], q = L[nd.li]; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }
+      else { const q = L[nd.li], b = q && bm[nd.li] ? sized(rig, nd.li, lv0) : null; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }
       g.restore();
     };
     paint(rig.tree);

@@ -57,8 +57,16 @@ const CutExport = (() => {
       /* PNG sequence (see through), for After Effects */
       if (o.png) {
         const toPng = c => c.convertToBlob ? c.convertToBlob({ type: 'image/png' }) : new Promise(r => c.toBlob(r, 'image/png')); const zip = o.dir ? null : E.Zip();
-        for (let i = 0; i < n; i++) { if (signal.aborted) throw new Error('Export cancelled.'); await drawFrame(i); const b = await toPng(canvas), name = 'frame_' + String(i).padStart(5, '0') + '.png';
-          if (o.dir) { const fh = await o.dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(b); await w.close(); } else zip.add(name, new Uint8Array(await b.arrayBuffer())); if (i % 3 === 0) prog(i); }
+        /* PNG packing is slow, so it runs alongside the drawing: each finished frame is copied off (fast, on the graphics chip)
+           and packed and saved in the background, up to a few at once, while the next frame is drawn. Saved in frame order. */
+        const store = async (i, b) => { const name = 'frame_' + String(i).padStart(5, '0') + '.png'; if (o.dir) { const fh = await o.dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(b); await w.close(); } else zip.add(name, new Uint8Array(await b.arrayBuffer())); };
+        const canPipe = typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function'; let chain = Promise.resolve(), pend = [];
+        for (let i = 0; i < n; i++) { if (signal.aborted) throw new Error('Export cancelled.'); await drawFrame(i);
+          if (!canPipe) { await store(i, await toPng(canvas)); if (i % 3 === 0) prog(i); continue; }
+          const bmp = await createImageBitmap(canvas), job = (async () => { const oc = new OffscreenCanvas(bmp.width, bmp.height); oc.getContext('bitmaprenderer').transferFromImageBitmap(bmp); return oc.convertToBlob({ type: 'image/png' }); })();
+          chain = chain.then(async () => store(i, await job)); pend.push(chain); if (pend.length > 3) await pend.shift();
+          if (i % 3 === 0) prog(i); }
+        await chain;
         let wav = null; if (o.wav && CutAudio.hasSound(cfg, lookX)) wav = await wavOnly(cfg, lookX, t0, t1, Object.assign({}, o, { signal })); ok = true;
         return { zip: zip ? zip.blob() : null, wav, frames: n, W, H };
       }
