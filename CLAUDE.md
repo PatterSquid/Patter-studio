@@ -275,6 +275,13 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   drawn behind him (he darkens himself). Studio and Character have `mainThread` (no render workers: the puppet's pictures
   live on the page) and `prepare`. In the Video tab his voice plays under every [ME] part from that part's place in the
   one take (`cut_audio.js` `voiceItem`, src0 = `Video.avStart`). Test: `tests/char_studio.py`.
+* **Speed** (he found the preview slow with his character and the plane): `Puppet.draw` picks one size per drawing
+  (`mipLevel`, sixteenths of full size, two sizes kept) and draws every layer from a copy resized once with high quality,
+  so nothing big is shrunk every frame (preview and exports). In the Studio, while the preview plays (`look.preview` and
+  not `paused`, `v.moving`), his lighting buffer is 0.6 of its size; paused and exports are full. Canvases made for
+  reading pixels (`willReadFrequently`) are CPU canvases: never draw one every frame, copy it to a plain canvas first.
+  PNG sequence exports pack frames in the background (createImageBitmap then convertToBlob, up to 3 at once, in order).
+  `tests/studio_prev_prof.py` (MODE=export for full size) and `tests/png_pipe.js` measure them.
 * Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
