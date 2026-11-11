@@ -536,7 +536,9 @@ const Thumb = (() => {
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function' && typeof window !== 'undefined' && !window.PATTER_WORKER) document.addEventListener('paste', e => { if (!document.body.classList.contains('thb') || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
     const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(f => /^image\//.test(f.type)); if (f) { e.preventDefault(); addPicture(f, null); return; }
     if (W.clip) { e.preventDefault(); const n = JSON.parse(JSON.stringify(W.clip)); n.id = nid(); n.x += 30; n.y += 30; W.cfg.layers.push(n); W.sel = n.id; changed(true); layersBar(); } });
-  function activate(on) { document.body.classList.toggle('thb', !!on); const ws = document.getElementById('thumbWs'); if (ws) ws.hidden = !on; if (on) { linkFonts(); redraw(); if (typeof Cutout !== 'undefined') setTimeout(() => Cutout.warm(), 1500); } else if (W.brush) W.brush = null; }
+  function activate(on) { document.body.classList.toggle('thb', !!on); const ws = document.getElementById('thumbWs'); if (ws) ws.hidden = !on; clearTimeout(W.warmT); clearTimeout(W.restT);
+    if (on) { linkFonts(); redraw(); if (typeof Cutout !== 'undefined') W.warmT = setTimeout(() => { if (document.body.classList.contains('thb')) Cutout.warm(); }, 1500); }
+    else { if (W.brush) W.brush = null; if (typeof Cutout !== 'undefined' && Cutout.rest) W.restT = setTimeout(() => Cutout.rest(), 120000); } }   // two minutes away from thumbnails lets the remover go
   const duration = () => 1;
   // the app's small previews (project list) draw the thumbnail itself
   function draw(g, t, cfg, look, Wd, Hd) { g.fillStyle = '#000'; g.fillRect(0, 0, Wd, Hd); try { const [PW, PH] = dims(cfg), s = Math.min(Wd / PW, Hd / PH), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(PW * s)); c.height = Math.max(1, Math.round(PH * s)); render(c.getContext('2d'), cfg, c.width, c.height, { clean: true }); g.drawImage(c, (Wd - c.width) / 2, (Hd - c.height) / 2); } catch (e) { } }

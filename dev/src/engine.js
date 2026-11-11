@@ -144,13 +144,21 @@ const E = (() => {
   // Live preview player.
   function Player(canvas, getState, onTime) {
     const ctx = canvas.getContext('2d'); let cache = null, playing = false, t = 0, last = performance.now(), dur = 5, scrubbing = false, quality = 1, avg = 0, count = 0, frozen = false, lastKey = '', mode = 'normal', loop = null;
+    // Resting: while paused with nothing changing and nobody touching anything, the preview checks a few times a second
+    // instead of every screen refresh, so the computer is left alone. Any click, key, typing or mouse move wakes it at once.
+    let active = performance.now(), sleepT = 0; const recent = []; let lastMod = '';
+    const nap = ms => { sleepT = setTimeout(() => { sleepT = 0; last = performance.now(); requestAnimationFrame(frame); }, ms); };
+    const wake = () => { active = performance.now(); if (sleepT) { clearTimeout(sleepT); sleepT = 0; last = active; requestAnimationFrame(frame); } };
+    ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'dragover', 'drop', 'focusin', 'resize'].forEach(k => window.addEventListener(k, wake, { capture: true, passive: true }));
     function frame(now) {
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
-      const st = getState(); if (!st || frozen) { requestAnimationFrame(frame); return; }
-      const { mod, cfg, look } = st, { W, H } = dims(look.format); dur = mod.duration(cfg, look);
+      const st = getState(); if (!st || frozen) { nap(250); return; }
+      const { mod, cfg, look } = st, { W, H } = dims(look.format);
+      if (mod.id !== lastMod) { lastMod = mod.id; recent.length = 0; }   // each tab's drawing time is its own
+      dur = mod.duration(cfg, look);
       if (playing && !scrubbing) { t += dt; if (loop) { if (t > loop[1] || t < loop[0] - 0.05) t = loop[0]; } else if (t >= dur) { t = dur; playing = false; } }
       // When paused, only redraw if something actually changed (time, settings or size), so the computer isn't kept busy
-      if (!playing) { const key = t.toFixed(4) + '|' + mode + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
+      if (!playing) { const key = t.toFixed(4) + '|' + mode + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { if (performance.now() - active > 700) { nap(200); return; } onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
       const dpr = mode === 'draft' ? Math.min(1, window.devicePixelRatio || 1) * 0.5 : Math.min(window.devicePixelRatio || 1, 2) * (mode === 'full' ? 1 : quality), cw = canvas.clientWidth, ch = canvas.clientHeight;
       if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
       const fs = performance.now();
@@ -164,14 +172,14 @@ const E = (() => {
       try { mod.draw(ctx, Math.min(t, dur), cfg, Object.assign({}, look, { preview: mode !== 'full', paused: !playing || scrubbing }), W, H); } catch (e) { console.error(e); }
       ctx.restore(); onTime && onTime(Math.min(t, dur), dur, playing);
       // Keep the preview smooth: drop the preview resolution a notch on slow frames, raise it again when there's headroom.
-      const ms = performance.now() - fs; avg = avg * 0.9 + ms * 0.1;
+      const ms = performance.now() - fs; avg = avg * 0.9 + ms * 0.1; if (!cf) { recent.push(ms); if (recent.length > 5) recent.shift(); }
       if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > 20 && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
     return {
-      setCache(c) { cache = c; }, play() { playing = true; }, pause() { playing = false; }, freeze(v) { frozen = !!v; }, toggle() { if (!playing && !loop && t >= dur - 1e-3) t = 0; playing = !playing; return playing; }, reset() { t = loop ? loop[0] : 0; playing = false; },
-      restart() { t = loop ? loop[0] : 0; playing = true; }, seek(v) { t = v; }, setMode(m) { mode = m; quality = 1; }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } }, get loop() { return loop; }, scrub(on) { scrubbing = on; }, get t() { return t; }, get playing() { return playing; },
+      setCache(c) { cache = c; wake(); }, play() { playing = true; wake(); }, pause() { playing = false; wake(); }, freeze(v) { frozen = !!v; wake(); }, toggle() { if (!playing && !loop && t >= dur - 1e-3) t = 0; playing = !playing; wake(); return playing; }, reset() { t = loop ? loop[0] : 0; playing = false; wake(); },
+      restart() { t = loop ? loop[0] : 0; playing = true; wake(); }, seek(v) { t = v; wake(); }, setMode(m) { mode = m; quality = 1; wake(); }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } wake(); }, get loop() { return loop; }, scrub(on) { scrubbing = on; wake(); }, wake, get drawMs() { if (!recent.length) return 0; const r = recent.slice().sort((a, b) => a - b); return r[r.length >> 1]; }, get t() { return t; }, get playing() { return playing; },
     };
   }
   function checker(ctx, x, y, w, h) { const s = 12; ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = '#cfcfcf'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#efefef'; for (let j = 0; j * s < h; j++) for (let i = (j % 2); i * s < w; i += 2) ctx.fillRect(x + i * s, y + j * s, s, s); ctx.restore(); }

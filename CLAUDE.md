@@ -60,6 +60,13 @@ git add -A && git commit && git push origin main
 * `tests/launch.py` makes its pretend releases from the current build, dated 2099, in `dev/fakehome/` (served by the
   test server, gitignored). `tests/video2.py` needs `dev/tmp_dogclip.webm` (any short WebM: `ffmpeg -f lavfi -i
   testsrc=size=640x360:rate=30 -t 4 -c:v libvpx dev/tmp_dogclip.webm`).
+* Keeping his computer free (he found it slow, November 2026): the preview player (`E.Player`) rests while paused with
+  nothing changing and nobody touching anything (checks five times a second instead of every refresh; any pointer, key,
+  typing or player call wakes it), and only writes the time and Play label when they change. The Smooth preview
+  (`SP` in app.js) only draws ahead when the tab's live drawing is slow (`player.drawMs` over 12 ms), with at most two
+  helpers, and for clips with his puppet (`mainThread`, a big copy per helper) only once he presses Play. The background
+  remover lets go of its model two minutes after he leaves the Thumbnail tab (`Cutout.rest`). Measure idle use with the
+  whole browser's CPU (renderer, GPU process), not just the page's scripts.
 * Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it
   after touching poses (it uses the `Story._pose`, `_figure` and `_plan` test hooks).

@@ -146,6 +146,8 @@ const Cutout = (() => {
   async function refine(bm, maskBm) { await start(); const c = await createImageBitmap(bm), m = await createImageBitmap(maskBm); return job({ type: 'refine', bm: c, mask: m }, [c, m]); }
   function stop() { if (W) W.terminate(); W = null; jobs.forEach(J => J.rej(new Error('Stopped'))); jobs.clear(); urls.forEach(u => URL.revokeObjectURL(u)); urls = []; }
   // started quietly when the Thumbnail tab opens, so the first cut out is quick
+  // Let the remover go (it holds a big model in the graphics card's memory) when nothing is being cut out
+  function rest() { if (W && !jobs.size) stop(); }
   async function warm() { try { if ((await check()) === 'ready' && !W) await start(); } catch (e) { } }
-  return { check, download, cut, refine, stop, hooks, warm, get state() { return state; }, get how() { return how; } };
+  return { check, download, cut, refine, stop, rest, hooks, warm, get state() { return state; }, get how() { return how; } };
 })();

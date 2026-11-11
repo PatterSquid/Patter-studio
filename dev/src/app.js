@@ -170,8 +170,9 @@
     if (ed) { ed.setTime(t); ed.drawOverlay(t); ed.syncPlay(playing); }
     if (cutUI && state.module === 'video') cutUI.frame(t, playing);
     { const mm = mod(); if (mm && typeof mm.tick === 'function') mm.tick(t, playing && !scrubbing, cfg()); }
-    if (!scrubbing) scrub.value = Math.round(t / d * 1000);
-    timeEl.textContent = t.toFixed(1) + ' / ' + d.toFixed(1) + ' s'; playBtn.textContent = playing ? 'Pause' : 'Play'; playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    // Only touch the page when something shows differently (writing the same text still makes the browser lay out again)
+    if (!scrubbing) { const v = Math.round(t / d * 1000); if (+scrub.value !== v) scrub.value = v; }
+    const tt = t.toFixed(1) + ' / ' + d.toFixed(1) + ' s', pl = playing ? 'Pause' : 'Play'; if (timeEl.textContent !== tt) timeEl.textContent = tt; if (playBtn.textContent !== pl) { playBtn.textContent = pl; playBtn.setAttribute('aria-label', pl); }
   });
   let scrubbing = false;
   // The preview waits paused on the first frame unless Autoplay is ticked (remembered on this computer)
@@ -188,18 +189,24 @@
     const keyNow = () => mod().id + '|' + (typeof Media !== 'undefined' ? Media.version : 0) + '|' + JSON.stringify(cfg()) + '|' + JSON.stringify(state.look) + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0) + '|' + Object.keys(state.assets || {}).length;
     const bar = () => { const p = total ? have / total * 100 : 0; scrub.style.setProperty('--buf', p.toFixed(1) + '%'); scrub.classList.toggle('buffering', on() && total > 0 && have < total); scrub.classList.toggle('cached', on() && total > 0 && have >= total); };
     const clear = () => { if (ctrl) ctrl.abort(); ctrl = null; blobs = []; bmps.forEach(b => b.close && b.close()); bmps.clear(); pend.clear(); total = 0; have = 0; bar(); };
-    async function start() {
-      if (held || !on() || state.look.transparent || typeof Render === 'undefined' || !Render.buildPreview || cutLive()) return; const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;
+    let waitPlay = false;
+    async function start(playing) {
+      waitPlay = false; if (held || !on() || state.look.transparent || typeof Render === 'undefined' || !Render.buildPreview || cutLive()) return;
+      // Only when this clip is too heavy to play smoothly as it is drawn: otherwise the helpers would keep the computer busy for nothing
+      if (player.drawMs < 12) { clear(); return; }
+      // Clips with his puppet hand every helper a big copy of it: do that only once he presses Play, not after every change
+      if (!playing) { const m0 = mod(); if (m0.mainThread && m0.mainThread(cfg())) { clear(); waitPlay = true; return; } }
+      const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;
       const m = mod(), { W } = E.dims(state.look.format), cw = $('prev').clientWidth * Math.min(2, window.devicePixelRatio || 1), scale = Math.max(0.25, Math.min(0.6, cw / W));
-      try { await Render.buildPreview(m, JSON.parse(JSON.stringify(cfg())), Object.assign({}, state.look, { transparent: false }), { fps: FPS, scale, signal: c.signal, workers: Math.max(1, Math.min(3, Render.cores() - 1)),
+      try { await Render.buildPreview(m, JSON.parse(JSON.stringify(cfg())), Object.assign({}, state.look, { transparent: false }), { fps: FPS, scale, signal: c.signal, workers: Math.max(1, Math.min(2, Math.floor(Render.cores() / 3))),
         onFrame: (i, blob, n) => { if (c.signal.aborted || key !== k) return; blobs[i] = blob; total = n; have++; if (have % 6 === 0 || have === n) bar(); } }); } catch (e) { }
     }
     return {
-      touch() { clearTimeout(timer); if (!on()) { clear(); return; } const k = keyNow(); if (k === key && total) return; clear(); key = ''; timer = setTimeout(start, 1400); },
+      touch() { clearTimeout(timer); waitPlay = false; if (!on()) { clear(); return; } const k = keyNow(); if (k === key && total) return; clear(); key = ''; timer = setTimeout(start, 1400); },
       hold(v) { held = v; if (v) { clearTimeout(timer); if (ctrl && have < total) clear(); } else this.touch(); },
       enabled: on,
       // Frame for time t if it's ready (decoding a few ahead so playback never waits)
-      frameAt(t) { if (!total || !on() || state.look.transparent || cutLive() || (ed && ed.camOff) || state.pq === 'full') return null; const i = Math.min(total - 1, Math.round(t * FPS));
+      frameAt(t) { if (waitPlay && !ctrl) start(true); if (!total || !on() || state.look.transparent || cutLive() || (ed && ed.camOff) || state.pq === 'full') return null; const i = Math.min(total - 1, Math.round(t * FPS));
         for (let j = i; j < Math.min(total, i + 10); j++) if (blobs[j] && !bmps.has(j) && !pend.has(j)) { pend.add(j); const kk = key; createImageBitmap(blobs[j]).then(b => { pend.delete(j); if (kk === key) bmps.set(j, b); else b.close(); }).catch(() => pend.delete(j)); }
         bmps.forEach((b, j) => { if (j < i - 2 || j > i + 20) { b.close && b.close(); bmps.delete(j); } });
         return bmps.get(i) || null; },
