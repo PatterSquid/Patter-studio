@@ -221,6 +221,7 @@
   scrub.addEventListener('input', () => { const d = mod().duration(cfg(), state.look); player.seek(scrub.value / 1000 * d); });
   const endScrub = () => { scrubbing = false; player.scrub(false); };
   scrub.addEventListener('pointerup', endScrub); scrub.addEventListener('change', endScrub);
+  { const pd = $('pdraw'); if (pd) { pd.value = E.previewOnCpu() ? 'cpu' : 'gpu'; pd.addEventListener('change', () => { try { localStorage.setItem('patter-draw', pd.value); } catch (e) { } player.wake(); }); } }
   const pq = $('pq'); pq.value = state.pq || 'normal'; player.setMode(pq.value); pq.addEventListener('change', () => { state.pq = pq.value; player.setMode(pq.value); save(); });
 
   // In and out points (per clip type)
@@ -432,6 +433,7 @@
     // Each tab: how long its current clip takes to draw at the preview's size, split into working it out (script) and
     // painting it, once through the graphics card (the normal way) and once on the processor (a canvas made for reading)
     const look = Object.assign({}, state.look, { transparent: false }), { W, H: Hh } = E.dims(look.format), pv = $('prev'), pw = pv && pv.width > 100 ? pv.width : 960;
+    say('Preview drawn on', E.previewOnCpu() ? 'processor' : 'graphics card');
     say('Preview size', pw + ' x ' + Math.round(pw * Hh / W) + ' pixels');
     for (const id of ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll', 'studio', 'char', 'video']) {
       const M = MODULES[id]; if (!M || !state.cfg[id]) continue; await nap(20);

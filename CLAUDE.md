@@ -65,7 +65,12 @@ git add -A && git commit && git push origin main
   typing or player call wakes it), and only writes the time and Play label when they change. The Smooth preview
   (`SP` in app.js) only draws ahead when the tab's live drawing is slow (`player.drawMs` over 12 ms), with at most two
   helpers, and for clips with his puppet (`mainThread`, a big copy per helper) only once he presses Play. The background
-  remover lets go of its model two minutes after he leaves the Thumbnail tab (`Cutout.rest`). Measure idle use with the
+  remover lets go of its model two minutes after he leaves the Thumbnail tab (`Cutout.rest`). **His laptop** (speed check,
+  November 2026): Intel Iris Plus, 8 cores, 16 GB, screen at scale 2. Painting through its graphics card was 2 to 6 times
+  slower than on the processor, so the player draws previews on a processor canvas (`willReadFrequently`) and copies the
+  finished frame to `#prev` (gear: Draw on, `patter-draw`, `E.previewOnCpu`), and normal previews are at most 1.5 pixels
+  per screen pixel. The Speed check (? then Speed check, `speedCheck` in app.js) reports script, graphics card and
+  processor time per tab and plays the current tab for real; ask him for it when he says something is slow. Measure idle use with the
   whole browser's CPU (renderer, GPU process), not just the page's scripts.
 * Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in
   `poseOf` (`dev/story/d.js`). `dev/tests/joints.js` tracks every joint of every action frame by frame and lists jumps; run it

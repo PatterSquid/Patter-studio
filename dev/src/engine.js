@@ -143,7 +143,7 @@ const E = (() => {
 
   // Live preview player.
   function Player(canvas, getState, onTime) {
-    const ctx = canvas.getContext('2d'); let cache = null, playing = false, t = 0, last = performance.now(), dur = 5, scrubbing = false, quality = 1, avg = 0, count = 0, frozen = false, lastKey = '', mode = 'normal', loop = null;
+    const vctx = canvas.getContext('2d'); let cpu = null, cctx = null; let cache = null, playing = false, t = 0, last = performance.now(), dur = 5, scrubbing = false, quality = 1, avg = 0, count = 0, frozen = false, lastKey = '', mode = 'normal', loop = null;
     // Resting: while paused with nothing changing and nobody touching anything, the preview checks a few times a second
     // instead of every screen refresh, so the computer is left alone. Any click, key, typing or mouse move wakes it at once.
     let active = performance.now(), sleepT = 0; const recent = []; let lastMod = '';
@@ -158,9 +158,15 @@ const E = (() => {
       dur = mod.duration(cfg, look);
       if (playing && !scrubbing) { t += dt; if (loop) { if (t > loop[1] || t < loop[0] - 0.05) t = loop[0]; } else if (t >= dur) { t = dur; playing = false; } }
       // When paused, only redraw if something actually changed (time, settings or size), so the computer isn't kept busy
-      if (!playing) { const key = t.toFixed(4) + '|' + mode + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { if (performance.now() - active > 700) { nap(200); return; } onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
-      const dpr = mode === 'draft' ? Math.min(1, window.devicePixelRatio || 1) * 0.5 : Math.min(window.devicePixelRatio || 1, 2) * (mode === 'full' ? 1 : quality), cw = canvas.clientWidth, ch = canvas.clientHeight;
-      if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
+      if (!playing) { const key = t.toFixed(4) + '|' + mode + (previewOnCpu() ? 'c' : 'g') + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { if (performance.now() - active > 700) { nap(200); return; } onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
+      // Normal previews are at most 1.5 pixels per screen pixel (a sharp laptop screen at scale 2 doesn't need 4 times the work)
+      const dpr = mode === 'draft' ? Math.min(1, window.devicePixelRatio || 1) * 0.5 : Math.min(window.devicePixelRatio || 1, mode === 'full' ? 2 : 1.5) * (mode === 'full' ? 1 : quality), cw = canvas.clientWidth, ch = canvas.clientHeight;
+      const pxW = Math.round(cw * dpr), pxH = Math.round(ch * dpr);
+      if (canvas.width !== pxW || canvas.height !== pxH) { canvas.width = pxW; canvas.height = pxH; }
+      // Draw on the processor and hand the finished picture over in one go: on built in graphics (his Intel laptop) painting
+      // thousands of chalk strokes through the graphics card was 2 to 6 times slower. "Graphics card" in the gear goes direct.
+      const onCpu = previewOnCpu(); let ctx = vctx;
+      if (onCpu) { if (!cpu) cpu = document.createElement('canvas'); if (cpu.width !== pxW || cpu.height !== pxH) { cpu.width = pxW; cpu.height = pxH; cctx = null; } if (!cctx) cctx = cpu.getContext('2d', { willReadFrequently: true }); ctx = cctx; }
       const fs = performance.now();
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
       const k = Math.min(canvas.width / W, canvas.height / H), ox = (canvas.width - W * k) / 2, oy = (canvas.height - H * k) / 2;
@@ -170,7 +176,7 @@ const E = (() => {
       const cf = cache && playing && !scrubbing && cache.frameAt ? cache.frameAt(Math.min(t, dur)) : null;
       if (cf) { ctx.drawImage(cf, 0, 0, W, H); } else
       try { mod.draw(ctx, Math.min(t, dur), cfg, Object.assign({}, look, { preview: mode !== 'full', paused: !playing || scrubbing }), W, H); } catch (e) { console.error(e); }
-      ctx.restore(); onTime && onTime(Math.min(t, dur), dur, playing);
+      ctx.restore(); if (onCpu) { vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.clearRect(0, 0, canvas.width, canvas.height); vctx.drawImage(cpu, 0, 0); } onTime && onTime(Math.min(t, dur), dur, playing);
       // Keep the preview smooth: drop the preview resolution a notch on slow frames, raise it again when there's headroom.
       const ms = performance.now() - fs; avg = avg * 0.9 + ms * 0.1; if (!cf) { recent.push(ms); if (recent.length > 5) recent.shift(); }
       if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > 20 && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }
@@ -285,5 +291,7 @@ const E = (() => {
   // Timing overrides from dragging bars on the timeline: cfg.timing[id] = seconds. Missing means automatic.
   const tm = (cfg, id) => { const v = cfg && cfg.timing && +cfg.timing[id]; return v > 0 && isFinite(v) ? v : undefined; };
   const setTm = (cfg, id, v) => { if (!cfg.timing || typeof cfg.timing !== 'object') cfg.timing = {}; cfg.timing[id] = Math.round(Math.max(0.1, Math.min(600, v)) * 100) / 100; };
-  return { tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
+  // Where previews are drawn: the processor by default (much faster on built in graphics), or straight on the graphics card
+  const previewOnCpu = () => { try { return localStorage.getItem('patter-draw') !== 'gpu'; } catch (e) { return true; } };
+  return { previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
 })();
