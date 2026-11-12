@@ -158,8 +158,10 @@ const Studio = (() => {
     g.putImageData(id, 0, 0); return (SPR[k] = c); }
   // Clouds drifting slowly across the sky; each layer moves a whole tile per loop so the loop is seamless
   const cloudBuf = {};
-  function clouds(ctx, R, tl, L, fl) {
-    if (!R.sky) return; const w = Math.max(2, Math.round(R.w / 2)), h = Math.max(2, Math.round(R.h / 2)); let c = cloudBuf.c; if (!c || c.width !== w || c.height !== h) c = cloudBuf.c = mk(w, h); const g = c.getContext('2d');
+  function clouds(ctx, R, tl, L, fl, v) {
+    // at the size the window shows on screen (soft clouds need no more), never above half the picture's own size
+    const k = Math.min(0.5, Math.max(0.1, ((v && (v.px || v.s)) || 0.5) * 0.75));
+    if (!R.sky) return; const w = Math.max(2, Math.round(R.w * k)), h = Math.max(2, Math.round(R.h * k)); let c = cloudBuf.c; if (!c || c.width !== w || c.height !== h) c = cloudBuf.c = mk(w, h); const g = c.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h);
     const layer = (tex, tw, th, y, tiles, a) => { const off = (tl / L) * tw * tiles; g.globalAlpha = a; for (let x = -tw + (off % tw); x < w; x += tw) g.drawImage(tex, x, y, tw, th); };
     layer(cloudTex(7, true), w * 1.4, h * 0.75, h * 0.02, 1, 0.42);
@@ -299,7 +301,7 @@ const Studio = (() => {
     const Q = M.glass.map(m => P(m, v)), R = roomBits(cfg, v, v.pic); if (!R) return; const amt = cl(+cfg.rain, 0, 2), fall = amt * (v.EL ? v.EL.rainK : 1);
     let X = null; if (v.Pz) { const tm = towerMarks(cfg), T = towerGeo(tm.t1, v) || guessTower(Q), R0 = w.snow && v.kit && v.pic !== roomBmp(cfg) ? roomBits(cfg, v, roomBmp(cfg)) : null; X = { snowT: R0 ? { c: snowCover(roomBmp(cfg), R0, Q, []), R: R0, a: cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1) } : null, snowy: !!w.snow, ctx, cfg, t, v, S: v.iw / 1920, L, Q, R, T, T2: towerGeo(tm.t2, v) || T, kit: v.kit, pose: v.Pz, squid: typeof Layers !== 'undefined' && Layers.assets['studio-squid'] ? Layers.assets['studio-squid'].bmp : null, road: (M.road || []).map(m => P(m, v)), spots: tm.spots }; v.tbox = (v.Pz.gone || v.Pz.draw) ? [T.x0 - 3, T.top - 40, T.x1 + 3, T.base + 3] : null; } else v.tbox = null;
     ctx.save(); pathOf(ctx, Q); ctx.clip();
-    if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl);
+    if (cfg.clouds !== false) clouds(ctx, R, tl, L, fl, v);
     if (w.snow) { const sc = snowCover(v.pic, R, M.glass.map(m => P(m, v)), (M.ground || (hasBuiltin && cfg.room && cfg.room.asset === BUILTIN ? STUDIO_MARKS.ground : null) || []).map(poly => poly.map(m => P(m, v)))); ctx.save(); ctx.globalAlpha = cl(0.55 + 0.35 * Math.max(0.3, amt), 0, 1); ctx.drawImage(sc, R.x0, R.y0, R.w, R.h); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(70,80,105,0.18)'; ctx.fillRect(R.x0, R.y0, R.w, R.h); ctx.restore(); }
     if (cfg.outside !== false) outside(ctx, cfg, M, v, t, L, fl);
     { const dth = Dc && Dc.themeOf(cfg); if (dth) Dc.outsidePass(ctx, dth, { t, L, R, Q }); }

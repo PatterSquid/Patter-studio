@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.12.4",
+  "version": "2026.11.12.5",
   "file": "app/patter-studio.html",
-  "notes": "Previews drawn on the processor and at a sensible size: much faster on laptops with built in graphics"
+  "notes": "Studio and every tab: scratch pictures drawn on the processor too, so nothing is copied back from the graphics card each frame; lighter clouds"
 }

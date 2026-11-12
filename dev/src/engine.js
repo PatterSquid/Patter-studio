@@ -1,4 +1,16 @@
 /* Patter Studio engine: maths, colour schemes, comic drawing kit, renderer, preview player, exporters. */
+/* Drawing on the processor (the default, see previewOnCpu below): every 2D canvas the page makes is a processor canvas, so the
+   scratch pictures the tabs draw into (clouds, wet glass, his lighting, puppet layers) never have to be copied back from the
+   graphics card into the preview, which on his Intel laptop cost a fixed 40 ms a frame whatever the preview size. A canvas
+   that asks otherwise keeps its own setting; the render helpers and WebGL are untouched. Read when each canvas is first used,
+   so switching "Draw on" fully takes effect after reopening the app. */
+(() => {
+  if (typeof document === 'undefined' || (typeof self !== 'undefined' && self.PATTER_WORKER)) return;
+  const cpu = () => { try { return localStorage.getItem('patter-draw') !== 'gpu'; } catch (e) { return true; } };
+  const patch = C => { if (!C || !C.prototype || C.prototype.getContext.__patter) return; const gc = C.prototype.getContext;
+    const f = function (type, o) { if (type === '2d' && cpu()) o = Object.assign({ willReadFrequently: true }, o || {}); return gc.call(this, type, o); }; f.__patter = true; C.prototype.getContext = f; };
+  patch(typeof HTMLCanvasElement !== 'undefined' ? HTMLCanvasElement : null); patch(typeof OffscreenCanvas !== 'undefined' ? OffscreenCanvas : null);
+})();
 const E = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -176,7 +188,7 @@ const E = (() => {
       const cf = cache && playing && !scrubbing && cache.frameAt ? cache.frameAt(Math.min(t, dur)) : null;
       if (cf) { ctx.drawImage(cf, 0, 0, W, H); } else
       try { mod.draw(ctx, Math.min(t, dur), cfg, Object.assign({}, look, { preview: mode !== 'full', paused: !playing || scrubbing }), W, H); } catch (e) { console.error(e); }
-      ctx.restore(); if (onCpu) { vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.clearRect(0, 0, canvas.width, canvas.height); vctx.drawImage(cpu, 0, 0); } onTime && onTime(Math.min(t, dur), dur, playing);
+      ctx.restore(); if (onCpu && pxW > 0 && pxH > 0) { vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.clearRect(0, 0, canvas.width, canvas.height); vctx.drawImage(cpu, 0, 0); } onTime && onTime(Math.min(t, dur), dur, playing);
       // Keep the preview smooth: drop the preview resolution a notch on slow frames, raise it again when there's headroom.
       const ms = performance.now() - fs; avg = avg * 0.9 + ms * 0.1; if (!cf) { recent.push(ms); if (recent.length > 5) recent.shift(); }
       if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > 20 && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }

@@ -438,7 +438,7 @@
     for (const id of ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll', 'studio', 'char', 'video']) {
       const M = MODULES[id]; if (!M || !state.cfg[id]) continue; await nap(20);
       try { const c = state.cfg[id]; if (M.prepare) { try { await Promise.race([M.prepare(c, look), nap(4000)]); } catch (e) { } } const d = M.duration(c, look), lk = Object.assign({}, look, { preview: true, paused: false });
-        const time = (cpu, read) => { const cv = document.createElement('canvas'); cv.width = pw; cv.height = Math.round(pw * Hh / W); const g = cv.getContext('2d', cpu ? { willReadFrequently: true } : undefined); const ms = [];
+        const time = (cpu, read) => { const cv = document.createElement('canvas'); cv.width = pw; cv.height = Math.round(pw * Hh / W); const g = cv.getContext('2d', { willReadFrequently: !!cpu }); const ms = [];
           for (let i = -1; i < 5; i++) { const t0 = performance.now(); g.save(); g.scale(cv.width / W, cv.width / W); M.draw(g, d * (0.15 + Math.max(0, i) * 0.15), c, lk, W, Hh); g.restore(); if (read) g.getImageData(0, 0, 1, 1); if (i >= 0) ms.push(performance.now() - t0); } return med(ms); };
         const js = time(false, false), gpu = time(false, true), cpu = time(true, true);
         say('Draw: ' + (TAB_NAMES[id] || id), 'script ' + js.toFixed(0) + ' ms, with graphics card ' + gpu.toFixed(0) + ' ms, on processor ' + cpu.toFixed(0) + ' ms', Math.min(gpu, cpu) > 40 ? true : Math.min(gpu, cpu) > 16 ? 'warn' : false);

@@ -7,7 +7,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/thumb_ui'; os.makedirs(OUT, ex
 async def main():
   async with async_playwright() as p:
     b = await p.chromium.launch(args=['--no-proxy-server']); pg = await b.new_page(viewport={'width': 1366, 'height': 768}); errs = []; bad = []
-    pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.on('pageerror', lambda e: errs.append(str(e)+' '+(e.stack or '')[:600]))
     await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort()); await pg.route('**/fonts.googleapis.com/**', lambda r: r.abort())
     await pg.goto('http://127.0.0.1:8765/dist/test.html'); await pg.wait_for_timeout(2500)
     await pg.evaluate("document.querySelector('#tabs button[data-mod=thumb]').click()"); await pg.wait_for_timeout(800)

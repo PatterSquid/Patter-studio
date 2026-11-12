@@ -69,7 +69,9 @@ git add -A && git commit && git push origin main
   November 2026): Intel Iris Plus, 8 cores, 16 GB, screen at scale 2. Painting through its graphics card was 2 to 6 times
   slower than on the processor, so the player draws previews on a processor canvas (`willReadFrequently`) and copies the
   finished frame to `#prev` (gear: Draw on, `patter-draw`, `E.previewOnCpu`), and normal previews are at most 1.5 pixels
-  per screen pixel. The Speed check (? then Speed check, `speedCheck` in app.js) reports script, graphics card and
+  per screen pixel. With that on, the top of engine.js makes every 2D canvas the page creates a processor canvas (scratch
+  buffers made on the graphics card had to be copied back every frame: a fixed 40 ms in his Studio); helpers untouched.
+  Studio clouds are drawn at the window's size on screen. The Speed check (? then Speed check, `speedCheck` in app.js) reports script, graphics card and
   processor time per tab and plays the current tab for real; ask him for it when he says something is slow. Measure idle use with the
   whole browser's CPU (renderer, GPU process), not just the page's scripts.
 * Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in
