@@ -160,14 +160,16 @@ const AudioTab = (() => {
     const long = r.reduce((m, q) => q[1] - q[0] > m[1] - m[0] ? q : m, r[0]), pre = preNR(x, cfg.clean), prof = AudioFX.profile(pre, SR, long[0], long[1]); if (!prof) return;
     cfg.clean.nr = Object.assign({ reduce: 12, sens: 6, smooth: 3 }, cfg.clean.nr || {}, { on: true, profile: prof }); if (cfg.clean.ai) cfg.clean.ai.on = false; W.changed(true); say('Noise learned from ' + (long[1] - long[0]).toFixed(2) + ' s. It is now taken out of the whole recording.' + (long[1] - long[0] < 0.25 ? ' A longer quiet bit (half a second or more) learns it better.' : ''));
   }
-  /* One press: rumble cut, hum only if there is some, ONE noise remover (the AI when it is downloaded, else the Audacity
-     style one at Audacity's gentle 12 dB), a light voice EQ, light de-essing, gentle compression and loudness for video.
-     He found the old version (two removers at full strength) horrendous: this keeps the voice natural and a little room. */
+  /* One press, kept simple and transparent (he found the fuller version, with EQ, de-essing and compression on top, scrambled
+     his voice; the AI cleaner on its own is what he likes): rumble cut, hum only if there is some, the AI voice cleaner (at
+     the strength he last chose, natural the first time; or the Audacity style remover at 12 dB when the AI is not
+     downloaded), and loudness for video with a gentle peak limit. EQ, de-essing and the compressor stay as they were. */
   async function cleanMyVoice() {
     const cfg = W.cfg; if (!cfg || !cfg.src) return; const x = await loadRaw(cfg.src), pre = preNR(x, Object.assign({}, cfg.clean, { rumble: true, hum: false })), q = AudioFX.quietest(pre, SR, 0.5), prof = AudioFX.profile(pre, SR, q[0], q[1]), humOn = AudioFX.hasHum(prof);
-    const ai = typeof DeepFilter !== 'undefined' && (await DeepFilter.check()) === 'ready';
-    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: humOn, declick: false, ai: { on: ai, atten: 20 }, nr: { on: !ai, reduce: 12, sens: 6, smooth: 3, profile: prof }, eq: Object.assign(CLEAN0().eq, { on: true }), deess: 0.3, comp: 0.4, level: 0, loud: -16 }); W.changed(true);
-    say('Cleaned: rumble cut' + (humOn ? ', mains hum taken out' : '') + ', ' + (ai ? 'background noise taken down with the AI voice cleaner (natural)' : 'background noise turned down 12 dB (learned from the quietest half second at ' + fmt(q[0]) + '; get the AI voice cleaner for better results)') + ', a light voice EQ, S sounds softened, gently compressed and set to a good loudness. Press Before to hear the difference, or Removed to hear only what was taken out.');
+    const ai = typeof DeepFilter !== 'undefined' && (await DeepFilter.check()) === 'ready', was = cfg.clean || {};
+    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: humOn, declick: false, ai: { on: ai, atten: was.ai && was.ai.atten != null ? was.ai.atten : 20 }, nr: { on: !ai, reduce: 12, sens: 6, smooth: 3, profile: prof },
+      eq: Object.assign(CLEAN0().eq, was.eq || {}, { on: !!(was.eq && was.eq.on) }), deess: +was.deess || 0, comp: +was.comp || 0, level: 0, loud: -16 }); W.changed(true);
+    say('Cleaned: rumble cut' + (humOn ? ', mains hum taken out' : '') + ', ' + (ai ? 'background noise taken out with the AI voice cleaner' : 'background noise turned down 12 dB (get the AI voice cleaner for better results)') + ', and set to a good loudness for video. Nothing else is changed. Press Before to hear the difference.');
   }
 
   /* ---------- the mouse on the waveform: drag to choose, click to place the playhead, wheel to zoom ---------- */
@@ -242,7 +244,7 @@ const AudioTab = (() => {
     // the clean up panel
     const nr = C.nr, prof = nr.profile;
     const side = H('div', { className: 'au-side' },
-      card('Clean up', H('button', { type: 'button', className: 'primary au-big', textContent: '✨ Clean my voice', title: 'Cuts rumble and hum, learns the noise from the quietest bit and takes it out, fixes clicks, softens S sounds, evens it out and sets the loudness', on: { click: cleanMyVoice } }),
+      card('Clean up', H('button', { type: 'button', className: 'primary au-big', textContent: '✨ Clean my voice', title: 'Cuts rumble (and hum if there is any), takes the background noise out with the AI voice cleaner, and sets the loudness for video', on: { click: cleanMyVoice } }),
         H('p', { className: 'hint', textContent: 'One press does the lot. Then fine tune below, and use Before and After to hear the difference.' })),
       card('AI voice cleaner', aiBox(C)),
       card('Background noise, Audacity style', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
