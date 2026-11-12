@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.12.5",
+  "version": "2026.11.12.6",
   "file": "app/patter-studio.html",
-  "notes": "Studio and every tab: scratch pictures drawn on the processor too, so nothing is copied back from the graphics card each frame; lighter clouds"
+  "notes": "Intro plays much faster in the Video tab: the squid and the ink are drawn at the preview's size"
 }

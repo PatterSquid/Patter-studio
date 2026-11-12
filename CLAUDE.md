@@ -71,7 +71,8 @@ git add -A && git commit && git push origin main
   finished frame to `#prev` (gear: Draw on, `patter-draw`, `E.previewOnCpu`), and normal previews are at most 1.5 pixels
   per screen pixel. With that on, the top of engine.js makes every 2D canvas the page creates a processor canvas (scratch
   buffers made on the graphics card had to be copied back every frame: a fixed 40 ms in his Studio); helpers untouched.
-  Studio clouds are drawn at the window's size on screen. The Speed check (? then Speed check, `speedCheck` in app.js) reports script, graphics card and
+  Studio clouds, the intro's squid (with its 12 outline copies) and its ink are drawn at the size they appear on screen
+  (exports unchanged). Scratch buffers sized from the frame (1920) rather than the screen are the usual fixed cost to look for. The Speed check (? then Speed check, `speedCheck` in app.js) reports script, graphics card and
   processor time per tab and plays the current tab for real; ask him for it when he says something is slow. Measure idle use with the
   whole browser's CPU (renderer, GPU process), not just the page's scripts.
 * Smooth motion matters to him. Story eases every change of pose (actions starting and ending, turning round) in

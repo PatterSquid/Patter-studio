@@ -38,8 +38,10 @@ const IntroScenes = (() => {
 
   /* ---------- his icon with a thick cartoon outline ---------- */
   const SB = { a: null, b: null };
-  function squidComic(g, x, y, h, pose, k) { if (typeof Squid === 'undefined') return; const s = Math.ceil(h * 2.9 * Math.max(1, k)), sc = s / (h * 2.9);
-    if (!SB.a || SB.a.width < s) { SB.a = mk(s, s); SB.b = mk(s, s); } const a = SB.a.getContext('2d'), b = SB.b.getContext('2d'); a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, SB.a.width, SB.a.height);
+  function squidComic(g, x, y, h, pose, k) { if (typeof Squid === 'undefined') return;
+    // drawn at the size he really appears (in a small preview that is a fraction of full HD); exports are as sharp as before
+    const m = g.getTransform ? g.getTransform() : null, kk = m ? Math.hypot(m.a, m.b) : Math.max(1, k), s = Math.ceil(h * 2.9 * Math.max(0.25, kk)), sc = s / (h * 2.9);
+    if (!SB.a || SB.a.width < s || SB.a.width > s * 1.5) { SB.a = mk(s, s); SB.b = mk(s, s); } const a = SB.a.getContext('2d'), b = SB.b.getContext('2d'); a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, SB.a.width, SB.a.height);
     if (!Squid.draw(a, s / 2, s * 0.5, h * sc, pose)) return; b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, SB.b.width, SB.b.height); b.drawImage(SB.a, 0, 0); b.globalCompositeOperation = 'source-in'; b.fillStyle = INK; b.fillRect(0, 0, s, s); b.globalCompositeOperation = 'source-over';
     const ox = x - s / 2 / sc, oy = y - s * 0.5 / sc, ow = h * 0.016; for (let i = 0; i < 12; i++) { const an = i / 12 * TAU; g.drawImage(SB.b, 0, 0, s, s, ox + Math.cos(an) * ow, oy + Math.sin(an) * ow, s / sc, s / sc); }
     g.drawImage(SB.a, 0, 0, s, s, ox, oy, s / sc, s / sc); }
@@ -167,7 +169,7 @@ const IntroScenes = (() => {
     g.globalAlpha = 1; }
 
   /* ---------- ink on the lens: blobs merged soft then cut sharp, then it takes the whole screen ---------- */
-  let IC = null; function inkSplat(g, W, H, k, seed, cx, cy) { if (k <= 0) return; const w = Math.ceil(W / 3), h = Math.ceil(H / 3); if (!IC || IC.a.width !== w || IC.a.height !== h) IC = { a: mk(w, h), b: mk(w, h) };
+  let IC = null; function inkSplat(g, W, H, k, seed, cx, cy) { if (k <= 0) return; g.save(); ST(g, 1, 0, 0, 1, 0, 0); const m0 = g.getTransform ? g.getTransform() : null; g.restore(); const ds = m0 ? cl(Math.hypot(m0.a, m0.b), 0.35, 1) : 1, w = Math.ceil(W / 3 * ds), h = Math.ceil(H / 3 * ds); /* smaller in a small preview */ if (!IC || IC.a.width !== w || IC.a.height !== h) IC = { a: mk(w, h), b: mk(w, h) };
     const a = IC.a.getContext('2d'), r = rng(seed), R = h * (0.3 + 0.55 * eo((k - 0.12) / 0.4)) * eo(k / 0.12); a.clearRect(0, 0, w, h); a.fillStyle = '#000'; a.beginPath(); a.ellipse(w * cx, h * cy, R * 1.45, R, 0, 0, TAU); a.fill();
     for (let i = 0; i < 48; i++) { const an = r() * TAU, L = R * (0.9 + r() * 1.3) * eo(k / (0.1 + r() * 0.14)); for (let s = 0; s < 8; s++) { const f = s / 7, d = R * 0.5 + (L - R * 0.5) * f, rad = R * (0.18 - 0.12 * f) * (0.6 + r() * 0.6); a.beginPath(); a.arc(w * cx + Math.cos(an) * d * 1.45, h * cy + Math.sin(an) * d, rad, 0, TAU); a.fill(); }
       if (r() < 0.6) { a.beginPath(); a.arc(w * cx + Math.cos(an) * (L + R * 0.3) * 1.45, h * cy + Math.sin(an) * (L + R * 0.3), R * 0.04 + r() * R * 0.05, 0, TAU); a.fill(); } }
