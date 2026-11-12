@@ -205,7 +205,10 @@ standard and as easy to use.
   intro too since November 2026: `cutinit` readies `Intro` and his bottle label) and hand back ImageBitmaps; the page draws
   the footage moments and the old cone intro (`Video.pageOnlyAt`) and keeps the order. The export canvas is a graphics card
   canvas (`willReadFrequently: false`) because it feeds the encoder. After an export, "Copy the export report"
-  (`CutExport.report`) gives where the time went: ask him for it when exports feel slow.
+  (`CutExport.report`) gives where the time went: ask him for it when exports feel slow. The encoder is fed on its
+  `dequeue` signal (Windows timers fire late), and `pickVideo` tries the codec with the graphics chip and on the processor,
+  best quality and fast modes, once per computer and size (`patter-enc:` in localStorage), keeping the quickest. AAC is
+  asked for at 256 then 192, 160, 128 kbps (Windows offers at most 192).
   The helpers get the video, the studio, his puppet (`Character.workerData`, `Studio.workerData`), pictures, the file list
   (`CutMedia.forWorkers`/`seed`), packs and B roll. `workers: false` turns them off; `tests/cut_workers.js` (runjs) checks
   the frames match and times both.

@@ -8,12 +8,39 @@ const CutExport = (() => {
   const qWait = enc => new Promise(r => { let done = false; const f = () => { if (done) return; done = true; try { enc.removeEventListener('dequeue', f); } catch (e) { } r(); }; try { enc.addEventListener('dequeue', f); } catch (e) { } setTimeout(f, 50); });
   const RES = { '720': 720, '1080': 1080, '1440': 1440, '2160': 2160 };
   const QUAL = { low: 0.07, normal: 0.12, high: 0.2, master: 0.32 };
+  /* The encoder: the best codec this computer has, then (once per computer, size and codec) a second or two trying it with the
+     graphics chip and on the processor, in best quality and fast modes, keeping the quickest (best quality unless it is much
+     slower). On his Intel laptop the encoder, not the drawing, was what an export waited for. */
+  let lastBench = null;
+  async function benchOne(c, W, H, fps) {
+    const N = 40; let out = 0, err = null; const enc = new VideoEncoder({ output: () => { out++; }, error: e => { err = e; } });
+    try { enc.configure(c); } catch (e) { return 0; }
+    const cv = new OffscreenCanvas(W, H), g = cv.getContext('2d', { willReadFrequently: false }), t0 = performance.now();
+    for (let i = 0; i < N && !err; i++) { g.fillStyle = `hsl(${i * 9},60%,40%)`; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; for (let k = 0; k < 40; k++) g.fillRect((i * 37 + k * 97) % W, (k * 53 + i * 11) % H, 120, 60);
+      const bmp = await createImageBitmap(cv), vf = new VideoFrame(bmp, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); bmp.close(); enc.encode(vf, { keyFrame: i === 0 }); vf.close();
+      while (enc.encodeQueueSize > 16) await qWait(enc); if (performance.now() - t0 > 6000) break; }
+    try { await enc.flush(); } catch (e) { err = e; } const ms = performance.now() - t0; try { enc.close(); } catch (e) { }
+    return err || !out ? 0 : out / (ms / 1000); }
   async function pickVideo(W, H, fps, quality) {
     const br = Math.round(cl(W * H * fps * (QUAL[quality] || QUAL.high), 2e6, 120e6));
     const list = [['avc1.640034', 'avc'], ['avc1.640033', 'avc'], ['avc1.64002A', 'avc'], ['avc1.640028', 'avc'], ['avc1.4D402A', 'avc'], ['hvc1.1.6.L153.B0', 'hevc'], ['vp09.00.41.08', 'vp9'], ['av01.0.08M.08', 'av1']];
-    for (const [codec, fam] of list) for (const hw of ['prefer-hardware', 'no-preference']) {
-      const c = { codec, width: W, height: H, framerate: fps, bitrate: br, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration: hw }; if (fam === 'avc') c.avc = { format: 'avc' }; if (fam === 'hevc') c.hevc = { format: 'hevc' };
-      try { const s = await VideoEncoder.isConfigSupported(c); if (s.supported) return Object.assign(s.config, { fam }); } catch (e) { }
+    const make = (codec, fam, hw, lat) => { const c = { codec, width: W, height: H, framerate: fps, bitrate: br, bitrateMode: 'variable', latencyMode: lat, hardwareAcceleration: hw }; if (fam === 'avc') c.avc = { format: 'avc' }; if (fam === 'hevc') c.hevc = { format: 'hevc' }; return c; };
+    for (const [codec, fam] of list) {
+      const ok = [];
+      for (const hw of ['prefer-hardware', 'prefer-software', 'no-preference']) for (const lat of ['quality', 'realtime']) { try { const s = await VideoEncoder.isConfigSupported(make(codec, fam, hw, lat)); if (s.supported) ok.push(Object.assign(s.config, { fam })); } catch (e) { } }
+      if (!ok.length) continue;
+      const key = 'patter-enc:' + codec + ':' + W + 'x' + H + ':' + fps + ':' + (navigator.userAgent.match(/Edg\/\d+|Chrome\/\d+/) || [''])[0]; let best = null;
+      try { best = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { }
+      if (best) { const m = ok.find(c => c.hardwareAcceleration === best.hw && c.latencyMode === best.lat); if (m) { lastBench = best.results || null; return m; } }
+      if (ok.length === 1 || typeof OffscreenCanvas === 'undefined') return ok[0];
+      const results = []; const seen = new Set();
+      for (const c of ok) { const k = c.hardwareAcceleration + '/' + c.latencyMode; if (seen.has(k)) continue; seen.add(k); results.push([c, await benchOne(c, W, H, fps)]); }
+      results.sort((a, b) => b[1] - a[1]); const top = results[0][1]; let pick = results[0][0];
+      const q = results.find(r => r[0].latencyMode === 'quality' && r[1] >= top * 0.85); if (q) pick = q[0];   // best quality mode when it is nearly as quick
+      if (top <= 0) pick = ok[0];
+      lastBench = results.map(([c, f]) => c.hardwareAcceleration + ' ' + c.latencyMode + ': ' + f.toFixed(0) + ' fps');
+      try { localStorage.setItem(key, JSON.stringify({ hw: pick.hardwareAcceleration, lat: pick.latencyMode, results: lastBench })); } catch (e) { }
+      return pick;
     }
     return null;
   }
@@ -101,7 +128,7 @@ const CutExport = (() => {
       }
       /* MP4 */
       if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot encode video. Use Microsoft Edge or Google Chrome.');
-      const vcfg = await pickVideo(W, H, fps, o.quality || 'high'); if (!vcfg) throw new Error('No video encoder is available at ' + W + ' x ' + H + '. Try a lower resolution.');
+      say(0, 'Choosing the quickest encoder…'); const vcfg = await pickVideo(W, H, fps, o.quality || 'high'); step('choosing the encoder'); R.loopStart = performance.now(); if (!vcfg) throw new Error('No video encoder is available at ' + W + ' x ' + H + '. Try a lower resolution.');
       const withAudio = o.audio !== false && CutAudio.hasSound(cfg, lookX), acfg = withAudio ? await CutAudio.pickEncoder() : null;
       sink = o.sink || MP4Out.blobSink();
       let vdesc = null, err = null; const vq = [];
@@ -141,7 +168,7 @@ const CutExport = (() => {
       await mux.finish(); await sink.close();
       if (wavSink) { if (wavSink.patch) await wavSink.patch(0, CutAudio.wavHeader(wavFrames)); await wavSink.close(); }
       ok = true; const blob = sink.blob ? await sink.blob('video/mp4') : null;
-      lastReport = report(R, { kind: 'MP4', W, H, fps, n, dur: t1 - t0, codec: vcfg.codec + (vcfg.hardwareAcceleration ? ' (' + vcfg.hardwareAcceleration + ')' : ''), audio: acfg ? acfg.codec : 'none', helpers: pool ? pool.size : 0, cores: typeof Render !== 'undefined' && Render.cores ? Render.cores() : '?', bytes: mux.bytes, quality: o.quality || 'high', toDisk: !sink.blob });
+      lastReport = report(R, { kind: 'MP4', W, H, fps, n, dur: t1 - t0, codec: vcfg.codec + (vcfg.hardwareAcceleration ? ' (' + vcfg.hardwareAcceleration + ')' : ''), lat: vcfg.latencyMode, bench: lastBench, audio: acfg ? acfg.codec : 'none', helpers: pool ? pool.size : 0, cores: typeof Render !== 'undefined' && Render.cores ? Render.cores() : '?', bytes: mux.bytes, quality: o.quality || 'high', toDisk: !sink.blob });
       return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, helpers: pool ? pool.size : 0, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
     } finally {
       if (pool) { pool.close(); pending.forEach(p => p.then(b => b && b.close && b.close())); pending.clear(); }
@@ -175,7 +202,7 @@ const CutExport = (() => {
     const end = performance.now(), tot = (end - R.t) / 1000, loop = ((R.loopEnd || end) - (R.loopStart || R.t)) / 1000, s1 = v => (v / 1000).toFixed(1) + ' s', pc = v => Math.round(v / 1000 / Math.max(0.01, loop) * 100) + '%';
     const L = ['Patter Studio export report', 'App ' + (window.PATTER_APP_VERSION || '?') + ', ' + new Date().toLocaleString('en-GB'),
       x.kind + ' ' + x.W + ' x ' + x.H + ' at ' + x.fps + ' fps, ' + x.dur.toFixed(1) + ' s of video, ' + x.n + ' frames' + (x.quality ? ', quality ' + x.quality : '') + (x.toDisk ? ', straight to disk' : ''),
-      'Video ' + x.codec + ', sound ' + x.audio + (x.bytes ? ', ' + (x.bytes / 1e6).toFixed(1) + ' MB' : ''), 'Helpers ' + x.helpers + ' of ' + x.cores + ' cores',
+      'Video ' + x.codec + (x.lat ? ' ' + x.lat : '') + ', sound ' + x.audio + (x.bytes ? ', ' + (x.bytes / 1e6).toFixed(1) + ' MB' : ''), 'Helpers ' + x.helpers + ' of ' + x.cores + ' cores', ...(x.bench ? ['Encoder test: ' + x.bench.join(', ')] : []),
       'Total ' + tot.toFixed(1) + ' s (' + (x.dur / tot).toFixed(2) + 'x real time, ' + (x.n / Math.max(0.01, loop)).toFixed(1) + ' frames a second while rendering)', '', 'Before rendering:'];
     R.steps.forEach(([k, ms]) => L.push('  ' + k + ': ' + s1(ms)));
     L.push('', 'Rendering ' + loop.toFixed(1) + ' s:', '  waiting for helpers: ' + s1(R.helperWait) + ' (' + pc(R.helperWait) + ')', '  drawn on the page (footage, intro): ' + s1(R.pageDraw) + ' (' + pc(R.pageDraw) + '), of which reading footage ' + s1(R.footage),
