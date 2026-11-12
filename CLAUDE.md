@@ -241,6 +241,13 @@ standard and as easy to use.
   run once per frame. The playhead line can be dragged over a clip's middle (a plain click there still selects the clip).
   Everything in the library drags (sound effects, text and stickers, other projects' files), onto the timeline or the
   picture (`dropThing`). Test: `tests/cut_timeline_edit.py` (24 real mouse steps).
+* **Professional transitions** (November 2026, he found the first ones novice and approved these from a preview): `Video.PRO`
+  is what the library and the transition panel offer first (whoosh left, right, up, down `swL..swD`, `whip2`, `punch`,
+  `spinB`, `smash`, `glitch2`, `stretch`, `cover`, `leak`, `burn`, `ink`, then fade and dips); the older ones sit under
+  "Simple ones" and stay so old videos play (`punchOut` is hidden). `TRLEN` is each one's starting length. `mblur` draws
+  motion blur from sub frame samples spaced a few pixels apart (14 at most live, 48 in exports, `trHQ`) with a light blur
+  to melt the steps; `transition(g, A, B, kind, p, W, H, { dur, hq })`. Tiles play on hover (`animIcon`). No sounds on
+  transitions: he did not want them.
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
