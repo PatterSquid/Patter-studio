@@ -1,6 +1,13 @@
 {
   "projects": [
     {
+      "id": "too-many-refugees",
+      "name": "Too Many Refugees (draft)",
+      "note": "Hook, Setup and Point 1 laid out. Record the whole script as one take and Claude lines it up to your voice.",
+      "file": "too-many-refugees.patter.json",
+      "rev": "d6ac2a85ea1c"
+    },
+    {
       "id": "buckie-ambush",
       "name": "Buckie ambush",
       "note": "Two neds, a goth and a bottle of Buckie",
