@@ -72,7 +72,9 @@ const CutUI = (() => {
           fg.append(drag0(H('button', { type: 'button', className: 'cl-tile tr', title: l, on: { click: () => applyFade(w, col) } }, cv, H('span', { textContent: l })), { type: 'fade', w, col })); });
         libBody.append(fg, H('h4', { className: 'cl-sub', textContent: 'Between two clips' }));
         libBody.append(H('p', { className: 'hint', textContent: 'Click to put it on the cut nearest the playhead, or drag it onto any cut (the diamond between two clips on the main track).' }));
-        const g = H('div', { className: 'cl-grid' }); Object.entries(V().TRANS).filter(([k]) => k !== 'none').forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile tr', title: l, on: { click: () => applyTrans(k) } }, transIcon(k), H('span', { textContent: l })), { type: 'trans', k }))); libBody.append(g); return; }
+        const tile = ([k, l]) => { const ic = transIcon(k); const b = drag0(H('button', { type: 'button', className: 'cl-tile tr', title: l + ' (hover to see it move)', on: { click: () => applyTrans(k), mouseenter: () => animIcon(ic, k, true), mouseleave: () => animIcon(ic, k, false) } }, ic, H('span', { textContent: l })), { type: 'trans', k }); return b; };
+        const T = V().TRANS, pro = V().PRO.filter(k => T[k]), g = H('div', { className: 'cl-grid' }); pro.forEach(k => g.append(tile([k, T[k]]))); libBody.append(g);
+        const more = H('details', { className: 'cl-other' }, H('summary', { textContent: 'Simple ones' })), g2 = H('div', { className: 'cl-grid' }); Object.entries(T).filter(([k]) => k !== 'none' && !pro.includes(k) && k !== 'punchOut').forEach(e2 => g2.append(tile(e2))); more.append(g2); libBody.append(more); return; }
       if (libTab === 'looks') { libBody.append(H('p', { className: 'hint', textContent: 'Click to grade the selected clip, or drag onto a clip. With nothing selected it grades everything from the playhead for 5 seconds (an adjustment clip you can stretch).' }));
         const g = H('div', { className: 'cl-grid looks' }); Object.entries(CutGL.LOOKS).forEach(([k, L]) => { const cv = H('canvas', { width: 96, height: 54 }); lookThumb(cv, k); g.append(drag0(H('button', { type: 'button', className: 'cl-tile lk', title: L.label, on: { click: () => applyLook(k) } }, cv, H('span', { textContent: L.label })), { type: 'look', k })); }); libBody.append(g); return; }
       if (libTab === 'patter') return drawPatter();
@@ -106,8 +108,12 @@ const CutUI = (() => {
     function lookThumb(cv, k) { const g = cv.getContext('2d'), w = cv.width, h = cv.height, src = H('canvas', { width: w, height: h }), sg = src.getContext('2d');
       const gr = sg.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#d9a066'); gr.addColorStop(0.5, '#4a7bb5'); gr.addColorStop(1, '#2e4d2e'); sg.fillStyle = gr; sg.fillRect(0, 0, w, h); sg.fillStyle = '#f3d2b3'; sg.beginPath(); sg.arc(w * 0.35, h * 0.45, h * 0.22, 0, 7); sg.fill(); sg.fillStyle = '#a33'; sg.fillRect(w * 0.6, h * 0.3, w * 0.25, h * 0.5);
       try { const out = CutGL.process(src, w, h, w, h, CutGL.params({ col: { look: k } }, 0)); g.drawImage(out, 0, 0); } catch (e) { g.drawImage(src, 0, 0); } }
-    function transIcon(k) { const cv = H('canvas', { width: 96, height: 54 }), g = cv.getContext('2d'), A = H('canvas', { width: 96, height: 54 }), B = H('canvas', { width: 96, height: 54 }); A.getContext('2d').fillStyle = '#2f6fb5'; A.getContext('2d').fillRect(0, 0, 96, 54); const bg = B.getContext('2d'); bg.fillStyle = '#e3302c'; bg.fillRect(0, 0, 96, 54); bg.fillStyle = '#fff'; bg.font = 'bold 20px sans-serif'; bg.fillText('B', 40, 35);
-      try { V().transition(g, A, B, k, 0.45, 96, 54); } catch (e) { } return cv; }
+    // A transition tile plays itself while the pointer is over it
+    function animIcon(cv, k, on) { cancelAnimationFrame(cv._raf); if (!on) { drawTransIcon(cv, k, 0.45); return; } const t0 = performance.now(), len = ((V().TRLEN || {})[k] || 0.5) * 1000;
+      const step = () => { const t = (performance.now() - t0) % (len + 900), p = Math.min(1, Math.max(0, (t - 300) / len)); drawTransIcon(cv, k, p); cv._raf = requestAnimationFrame(step); }; step(); }
+    let tIcons = null; const iconAB = () => tIcons || (tIcons = ['#2f6fb5', '#e3302c'].map((col, i) => { const c = H('canvas', { width: 96, height: 54 }), g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 96, 54); g.fillStyle = 'rgba(255,255,255,0.25)'; for (let x = 6; x < 96; x += 16) g.fillRect(x, 0, 5, 54); g.fillStyle = '#fff'; g.font = 'bold 22px sans-serif'; g.fillText(i ? 'B' : 'A', 38, 35); return c; }));
+    function drawTransIcon(cv, k, p) { const g = cv.getContext('2d'), [A, B] = iconAB(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, 96, 54); g.fillStyle = '#000'; g.fillRect(0, 0, 96, 54); try { V().transition(g, A, B, k, p, 96, 54, { dur: (V().TRLEN || {})[k] || 0.5 }); } catch (e) { } }
+    function transIcon(k) { const cv = H('canvas', { width: 96, height: 54 }); drawTransIcon(cv, k, 0.45); return cv; }
     function drawLayers(which) {
       const W2 = Layers.wrap(Video), adds = (W2.editor.adds || []).filter(a => a.group === 'layer'), want = which === 'text' ? a => /text|caption|title|label/i.test(a.label) : a => !/text|caption|title|label/i.test(a.label);
       libBody.append(H('p', { className: 'hint', textContent: which === 'text' ? 'Adds at the playhead, on its own track above the video. Click it on the preview to move it, and change it on the right.' : 'Stickers, shapes, props, pictures and camera moves, at the playhead.' }));
@@ -194,7 +200,7 @@ const CutUI = (() => {
       f.it.col = Object.assign({}, f.it.col || {}, { look: k === 'none' ? undefined : k, lookAmt: 100 }); inspTab[f.it.id] = 'col'; changed(); select('C:' + f.it.id); }
     function applyTrans(k, afterId) { const c = cfg(), L = V().layout(c, look()); if (L.length < 2) { o.say('Transitions go between two clips on the main track. Add another clip first.'); return; }
       let i; if (afterId) i = L.findIndex(x => x.it.id === afterId); else { const t = o.player.t; let best = 1e9; L.slice(0, -1).forEach((x, j) => { const d = Math.abs(x.t0 + x.d - t); if (d < best) { best = d; i = j; } }); }
-      if (i == null || i < 0 || i >= L.length - 1) return; o.commit(); L[i].it.tr = { k, d: (L[i].it.tr && L[i].it.tr.d) || 0.5 }; changed(); build(); select('T:' + L[i].it.id); }
+      if (i == null || i < 0 || i >= L.length - 1) return; o.commit(); L[i].it.tr = { k, d: Math.min((V().TRLEN || {})[k] || (L[i].it.tr && L[i].it.tr.d) || 0.5, Math.max(0.1, V().TRMAX(L[i].it, L[i + 1].it, look()))) }; changed(); build(); select('T:' + L[i].it.id); }
 
     /* ---------- Sound effects, made on the spot ---------- */
     const SFX = {
