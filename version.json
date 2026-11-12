@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.11.1",
+  "version": "2026.11.12.1",
   "file": "app/patter-studio.html",
-  "notes": "Faster and lighter: the preview rests when nothing is happening, smooth preview only for heavy clips, background remover lets go when not in use"
+  "notes": "Video tab: the clip settings panel scrolls again (the intro's settings were cut off below the name)"
 }

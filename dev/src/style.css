@@ -365,7 +365,7 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-menu button:hover{background:#1e2f50}
 .ct-resize{position:absolute;left:0;right:0;top:-4px;height:8px;cursor:ns-resize;z-index:10}
 /* inspector */
-.card.cs{padding:0;gap:0;overflow:hidden}
+.card.cs{padding:0;gap:0;overflow:hidden;flex-shrink:0}  /* never squashed: the panel around it scrolls */
 .cs-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
 .cs-head i{width:10px;height:10px;border-radius:3px;flex:none}
 .cs-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
