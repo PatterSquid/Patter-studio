@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.12.7",
+  "version": "2026.11.12.8",
   "file": "app/patter-studio.html",
-  "notes": "Export report: after a Video export, Copy the export report shows where the time went"
+  "notes": "Faster Video exports: the intro is drawn by the helpers on every core, frames go to the encoder without an extra copy"
 }

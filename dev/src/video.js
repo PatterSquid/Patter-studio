@@ -332,7 +332,7 @@ const Video = (() => {
   }
   // Moments the export draws on the page itself: his own footage (decoded there) or the intro; everything else the helpers can draw
   function pageOnlyAt(cfg, look, t) { if (framesAt(cfg, look, t).length) return true;
-    return allPlaced(cfg, look).some(p => t >= p.t0 - 1e-9 && t < p.t0 + p.d && (p.it.kind === 'intro' || (p.it.kind === 'clip' && (p.it.mod === 'intro' || !modOf(p.it.mod))))); }
+    return allPlaced(cfg, look).some(p => t >= p.t0 - 1e-9 && t < p.t0 + p.d && (p.it.kind === 'intro' || (p.it.kind === 'clip' && !modOf(p.it.mod)))); }
   // Pictures (still images) used anywhere, so the export can load them first
   function imagesUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.kind === 'media') { const m = M(it.asset); if (m && m.kind === 'image') ids.add(it.asset); } }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }
   function assetsUsed(cfg) { const ids = new Set(); const f = it => { if (it && it.asset) ids.add(it.asset); }; (cfg.items || []).forEach(f); (cfg.tracks || []).forEach(T => (T.items || []).forEach(f)); return [...ids]; }

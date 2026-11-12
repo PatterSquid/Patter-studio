@@ -57,6 +57,9 @@ const Render = (() => {
           Object.assign(Video.hooks, { look: () => m.appLook, studio: () => m.studio });
           if (m.studioX && Studio.adoptWorker) Studio.adoptWorker(m.studioX);
           (m.chars || []).forEach(d => Character.adoptWorker(d));
+          // The intro is drawn here too: its street, logo, squid and fonts, and his own bottle label if he has one
+          const intros = [...(m.cfg.items || []), ...(m.cfg.tracks || []).flatMap(T => (T && T.items) || [])].filter(it => it && it.kind === 'clip' && it.mod === 'intro' && it.cfg);
+          if (intros.length && typeof Intro !== 'undefined') { await Intro.ready(); if (typeof IntroScenes !== 'undefined') for (const it of intros) if (it.cfg.label) { IntroScenes.useLabel(it.cfg.label); for (let k = 0; k < 50 && !IntroScenes.useLabel(it.cfg.label); k++) await new Promise(r => setTimeout(r, 20)); } }
           const Vw = Layers.wrap(Video), cv = new OffscreenCanvas(m.W, m.H);
           C = { Vw, cfg: m.cfg, look: m.look, m, cv, g: cv.getContext('2d', { alpha: !!m.look.transparent }), images: new Map(m.images || []), blurN: m.blur ? CutExport.blurN(m.fps, m.bW, m.bH) : null };
           Vw.duration(m.cfg, m.look);

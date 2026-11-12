@@ -47,7 +47,7 @@ const CutExport = (() => {
     if (typeof Media !== 'undefined' && Video.mediaFor) await Media.ensure(Video.mediaFor(cfg));
     if (Video.needsMap(cfg) && typeof GeoData !== 'undefined') { GeoData.load(); if (GeoData.full) { say(0, 'Loading the full detail map…'); try { await GeoData.full; } catch (e) { } } }
     step('loading your files and pictures');
-    const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H }), ctx = canvas.getContext('2d', { alpha: !!lookX.transparent });
+    const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H }), ctx = canvas.getContext('2d', { alpha: !!lookX.transparent, willReadFrequently: false });   /* on the graphics card: it goes straight to the encoder */
     const readers = new Map(), lastUse = new Map();
     const getFrame = async f => { let R = readers.get(f.id); if (!R) { R = await CutMedia.videoReader(f.asset); readers.set(f.id, R); } lastUse.set(f.id, performance.now()); return { img: await R.frame(f.src), rot: R.rot || 0 }; };
     const closeIdle = live => { readers.forEach((R, id) => { if (!live.has(id)) { try { R.close(); } catch (e) { } readers.delete(id); } }); };

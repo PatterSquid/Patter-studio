@@ -201,8 +201,11 @@ standard and as easy to use.
   export mix (OfflineAudioContext in blocks, crossfaded joins), voice enhance, noise reduction, ducking, WSOLA time stretch
   for speed with the pitch kept, AAC (else Opus) encoding, WAV.
 * `cut_export.js` (`CutExport.run`): renders with exact frames, mixes sound alongside, streams to disk. Helpers on the other
-  cores (`Render.cutPool`, worker messages `cutinit`/`cutframe`) draw every moment without his footage or the intro ahead of
-  time and hand back ImageBitmaps; the page draws the footage and intro moments (`Video.pageOnlyAt`) and keeps the order.
+  cores (`Render.cutPool`, worker messages `cutinit`/`cutframe`) draw every moment without his footage ahead of time (the
+  intro too since November 2026: `cutinit` readies `Intro` and his bottle label) and hand back ImageBitmaps; the page draws
+  the footage moments and the old cone intro (`Video.pageOnlyAt`) and keeps the order. The export canvas is a graphics card
+  canvas (`willReadFrequently: false`) because it feeds the encoder. After an export, "Copy the export report"
+  (`CutExport.report`) gives where the time went: ask him for it when exports feel slow.
   The helpers get the video, the studio, his puppet (`Character.workerData`, `Studio.workerData`), pictures, the file list
   (`CutMedia.forWorkers`/`seed`), packs and B roll. `workers: false` turns them off; `tests/cut_workers.js` (runjs) checks
   the frames match and times both.
