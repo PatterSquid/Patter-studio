@@ -228,6 +228,19 @@ standard and as easy to use.
   Normal and Curve, with presets and a graph to drag. Footage with a curve plays its picture only (no sound).
 * The old cone and seagull intro (`dev/src/cut_intro.js`, main track kind `intro`) is kept only so videos that used it
   still play. He found it too basic and cheesy; the Intro tab replaced it.
+* **Editing on the timeline** (November 2026, he wanted CapCut's ease): every clip with sound has a volume line (`envelope`
+  in cut_ui.js, an SVG per sound clip; `dbY`/`yDb` map dB to height, 0 dB a third down): drag it (moves every volume point
+  together when there are some), double click it to add a point (`kf.vol`), drag points, double click to remove. Round
+  handles in the top corners: sound clips set `fadeIn`/`fadeOut`, picture clips set the picture fade `vfIn`/`vfOut`
+  (`vfCol` 'white' or black; on the main track it dips to that colour, on overlays to see through; `vfSound !== false`
+  fades the sound too: `Video.picFade`, `cut_audio.js` `clipGain`). The Transitions drawer has Fade from/to black and
+  white tiles (drop on a clip's start or end half). Keyframes show as one diamond per moment (`keyDiamonds`): click goes
+  there, drag moves every setting keyed there, right click sets the ease (io, lin, in, out, hold), Delete removes. The
+  playhead snaps to keyframes. Trimming picks the end by pointer position (up to 10 px), ignores the edges of clips that
+  move with it as snap points, and the zoom fits once then stays put (re-fitting mid-drag was what cut clips short); moves
+  run once per frame. The playhead line can be dragged over a clip's middle (a plain click there still selects the clip).
+  Everything in the library drags (sound effects, text and stickers, other projects' files), onto the timeline or the
+  picture (`dropThing`). Test: `tests/cut_timeline_edit.py` (24 real mouse steps).
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and

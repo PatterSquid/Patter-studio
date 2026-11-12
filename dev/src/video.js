@@ -290,8 +290,13 @@ const Video = (() => {
     if (left != null) { ctx.font = `600 ${Math.round(34 * u)}px system-ui, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText(left.toFixed(1) + ' s left, not in the export', W / 2, H * 0.86); }
     ctx.restore();
   }
-  // One main track clip, whole frame: background, the clip, (its gap card for avatars)
-  function drawMain(g, o, t, cfg, look, W, H, env, slot) {
+  /* Picture fades on the clip itself: vfIn / vfOut seconds, vfCol 'black' or 'white'. On the main track the picture dips from
+     or to that colour; on an overlay track it fades to see through. vfSound (on unless false) fades its sound with it. */
+  function picFade(it, local, d) { const fi = +it.vfIn || 0, fo = +it.vfOut || 0; let a = 0; if (fi > 0 && local < fi) a = Math.max(a, 1 - cl(local / fi, 0, 1)); if (fo > 0 && local > d - fo) a = Math.max(a, 1 - cl((d - local) / fo, 0, 1)); return a; }
+  const fadeCol = it => it.vfCol === 'white' ? '#ffffff' : '#000000';
+  // One main track clip, whole frame: background, the clip, (its gap card for avatars), then its fade from or to black
+  function drawMain(g, o, t, cfg, look, W, H, env, slot) { drawMain0(g, o, t, cfg, look, W, H, env, slot); const a = picFade(o.it, t - o.t0, o.d); if (a > 0.001) { g.save(); g.globalAlpha = a; g.globalCompositeOperation = 'source-over'; g.fillStyle = fadeCol(o.it); g.fillRect(0, 0, W, H); g.restore(); } }
+  function drawMain0(g, o, t, cfg, look, W, H, env, slot) {
     const it = o.it, local = t - o.t0;
     if (it.kind === 'avatar') return drawGap(g, o, t, cfg, look, W, H);
     if (cfg.mainHide) { if (!look.transparent) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); } return; }
@@ -317,7 +322,7 @@ const Video = (() => {
     } else if (A) drawMain(ctx, A, t, cfg, look, W, H, env, '');
     else if (!look.transparent) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
     // Overlay tracks, bottom to top
-    (cfg.tracks || []).forEach(T => { if (!T || T.kind !== 'video' || T.hide) return; (T.items || []).forEach(it => { const s = +it.start || 0, d = lenOf(it, look); if (t < s - 1e-9 || t >= s + d) return; const box = drawItem(ctx, it, t - s, d, look, W, H, env, ''); if (env.boxes && box) env.boxes.push({ id: it.id, box }); }); });
+    (cfg.tracks || []).forEach(T => { if (!T || T.kind !== 'video' || T.hide) return; (T.items || []).forEach(it => { const s = +it.start || 0, d = lenOf(it, look); if (t < s - 1e-9 || t >= s + d) return; const pf = picFade(it, t - s, d); if (pf >= 0.999) return; ctx.save(); ctx.globalAlpha = 1 - pf; const box = drawItem(ctx, it, t - s, d, look, W, H, env, ''); ctx.restore(); if (env.boxes && box) env.boxes.push({ id: it.id, box }); }); });
     if (env.boxes) env.boxes.main = A ? A.it.id : null;
     if (look.preview && typeof CutMedia !== 'undefined' && !look.cutEnv) CutMedia.endFrame();
   }
@@ -402,6 +407,6 @@ const Video = (() => {
 
   return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
-    natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, pageOnlyAt, studioCfg, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
+    picFade, natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, pageOnlyAt, studioCfg, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
     runsOn, CURVES, curvePts, curveMul, hasCurve, rateOf, pinCurve, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };
 })();

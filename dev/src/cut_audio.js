@@ -16,7 +16,7 @@ const CutAudio = (() => {
   // the same object each time for the same part, so the live preview keeps its player for it
   const vItems = new Map();
   function voiceItem(it, cc, src0) { const k = it.id + '|' + cc.voice; let v = vItems.get(k); if (!v) { v = { id: it.id + '~voice', kind: 'audio' }; vItems.set(k, v); if (vItems.size > 400) vItems.delete(vItems.keys().next().value); }
-    Object.assign(v, { asset: cc.voice, src0, src1: null, vol: (+cc.vol || 0) + (+it.vol || 0), mute: !!it.mute, fadeIn: it.fadeIn, fadeOut: it.fadeOut, enhance: it.enhance, denoise: it.denoise }); return v; }
+    Object.assign(v, { asset: cc.voice, src0, src1: null, vol: (+cc.vol || 0) + (+it.vol || 0), mute: !!it.mute, fadeIn: it.fadeIn, fadeOut: it.fadeOut, vfIn: it.vfIn, vfOut: it.vfOut, vfSound: it.vfSound, kf: it.kf && it.kf.vol ? { vol: it.kf.vol.map(q => [q[0], q[1] + (+cc.vol || 0), q[2]]) } : null, enhance: it.enhance, denoise: it.denoise }); return v; }
   function sources(cfg, look) {
     const out = [], tracks = cfg.tracks || [], anySolo = tracks.some(T => T.solo) || !!cfg.mainSolo;
     const add = (it, t0, d, T, main, A) => { A = A || it.asset; if (!it || !A || it.mute) return; const m = M(A); if (!m || m.kind === 'image' || m.hasAudio === false || it.still != null || (it.kind === 'media' && V().hasCurve(it))) return;   // a speed curve plays the picture only
@@ -35,6 +35,8 @@ const CutAudio = (() => {
     const fi = +it.fadeIn || 0, fo = +it.fadeOut || 0;
     if (fi > 0 && local < fi) g *= Math.sin(cl(local / fi, 0, 1) * Math.PI / 2);
     if (fo > 0 && local > s.d - fo) g *= Math.sin(cl((s.d - local) / fo, 0, 1) * Math.PI / 2);
+    // a picture fade from or to black takes the sound with it unless he turned that off
+    if ((it.vfIn || it.vfOut) && it.vfSound !== false) { const pf = V().picFade(it, local, s.d); if (pf > 0) g *= 1 - pf; }
     // Transitions on the main track crossfade the sound too
     if (s.trIn > 0 && local < s.trIn) g *= Math.sin(cl(local / s.trIn, 0, 1) * Math.PI / 2);
     if (s.trOut > 0 && local > s.d - s.trOut) g *= Math.sin(cl((s.d - local) / s.trOut, 0, 1) * Math.PI / 2);

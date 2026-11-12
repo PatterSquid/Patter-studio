@@ -336,10 +336,13 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-clip.st{background:transparent}
 .ct-clip.st.moving{background:color-mix(in srgb,var(--c) 70%,#000)}
 .ct-clip .lbl{position:absolute;left:6px;top:2px;right:6px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px #000,0 0 3px #000;pointer-events:none;z-index:1}
-.ct-clip .hl,.ct-clip .hr{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2}
+.ct-clip .hl,.ct-clip .hr{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:8}
 .ct-clip .hl{left:0}.ct-clip .hr{right:0}
 .ct-clip.on .hl,.ct-clip.on .hr,.ct-clip:hover .hl,.ct-clip:hover .hr{background:rgba(255,255,255,.55)}
 .ct-clip .kf{position:absolute;bottom:2px;width:7px;height:7px;margin-left:-3px;background:#f7c531;transform:rotate(45deg);z-index:2;pointer-events:none}
+.ct-clip .kf.live{pointer-events:auto;cursor:ew-resize;width:10px;height:10px;margin-left:-5px;bottom:3px;border:1.5px solid #3b2a00;box-shadow:0 0 0 1px rgba(255,255,255,.35);z-index:5}
+.ct-clip .kf.live:hover{background:#ffe07a;transform:rotate(45deg) scale(1.2)}
+.ct-clip .kf.live.on{background:#fff;border-color:#f7c531;box-shadow:0 0 0 2px #f7c531}
 .ct-clip .fdi,.ct-clip .fdo{position:absolute;top:0;height:100%;pointer-events:none;z-index:1}
 .ct-clip .fdi{left:0;background:linear-gradient(to bottom right,rgba(0,0,0,.55) 50%,transparent 50%)}
 .ct-clip .fdo{right:0;background:linear-gradient(to bottom left,rgba(0,0,0,.55) 50%,transparent 50%)}
@@ -354,8 +357,8 @@ button.sm{font-size:14px;padding:5px 12px}
 .ct-trs .hl,.ct-trs .hr{position:absolute;top:0;bottom:0;width:7px;pointer-events:auto;cursor:ew-resize;background:rgba(255,255,255,.35)}
 .ct-trs .hl{left:-3px;border-radius:3px 0 0 3px}.ct-trs .hr{right:-3px;border-radius:0 3px 3px 0}
 .ct-trs.on .hl,.ct-trs.on .hr,.ct-row.k-main:hover .ct-trs .hl,.ct-row.k-main:hover .ct-trs .hr{background:var(--bru)}
-.ct-play{position:absolute;top:0;width:2px;margin-left:-1px;background:#ff3b5c;z-index:5;pointer-events:none}
-.ct-play i{position:absolute;top:0;left:-6px;width:14px;height:14px;background:#ff3b5c;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%);pointer-events:auto;cursor:ew-resize}
+.ct-play{position:absolute;top:0;width:2px;margin-left:-1px;background:#ff3b5c;z-index:9;pointer-events:none}
+.ct-play i{position:absolute;top:0;left:-8px;width:18px;height:18px;background:#ff3b5c;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%);pointer-events:auto;cursor:ew-resize}
 .ct-snapl{position:absolute;top:0;width:1px;background:#ffd34d;z-index:5;pointer-events:none}
 .ct-box{position:absolute;border:1px solid var(--bru);background:rgba(245,130,31,.12);z-index:6;pointer-events:none}
 .ct-ghost{position:absolute;top:2px;bottom:2px;border:2px dashed var(--bru);border-radius:6px;background:rgba(245,130,31,.15);pointer-events:none;z-index:4}
@@ -629,3 +632,16 @@ body:not(.thb) #thumbWs{display:none!important}
 .fp-more{height:2px}.fp-foot{padding:6px 16px 10px;margin:0}
 
 .speed-t tr.bad td{color:#ff8a80}.speed-t tr.warn td{color:#ffd180}.speed-t td:first-child{white-space:nowrap;color:var(--muted)}.speed-t tr.bad td:first-child,.speed-t tr.warn td:first-child{color:inherit}
+
+/* volume line, its points and fade handles on the timeline */
+.ct-env{position:absolute;inset:0;width:100%;height:100%;z-index:3;overflow:visible;pointer-events:none}
+.ct-env .ln{fill:none;stroke:#ffe9a8;stroke-width:1.6;opacity:.9}
+.ct-env .fill{fill:none;stroke:rgba(0,0,0,.45);stroke-width:3.5}
+.ct-env .hit{fill:none;stroke:transparent;stroke-width:12;pointer-events:stroke;cursor:ns-resize}
+.ct-clip:hover .ct-env .ln{stroke:#fff;opacity:1}
+.ct-clip .vk{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:#ffe9a8;border:1.5px solid #2a2000;z-index:6;cursor:move}
+.ct-clip .vk:hover{background:#fff;transform:scale(1.25)}
+.ct-clip .fh{position:absolute;top:1px;width:9px;height:9px;margin:0 -4.5px;border-radius:50%;background:#fff;border:1.5px solid #222;z-index:9;cursor:ew-resize;opacity:0;transition:opacity .12s}
+.ct-clip:hover .fh,.ct-clip .fh.on,.ct-clip.on .fh{opacity:.95}
+.ct-clip .fdi.wh{background:linear-gradient(to bottom right,rgba(255,255,255,.5) 50%,transparent 50%)}
+.ct-clip .fdo.wh{background:linear-gradient(to bottom left,rgba(255,255,255,.5) 50%,transparent 50%)}

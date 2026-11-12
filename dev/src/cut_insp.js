@@ -63,6 +63,15 @@ const CutInspect = (() => {
       ({ basic, anim, speed, col, fx, mask, key, audio, clip, title, avatar, colour, intro })[tab](body, c, it, m, ch, cm, f);
       root.append(H('section', { className: 'card cs' }, head, tb, body));
     }
+    function fadeSect(body, c, it, f, ch, cm) {
+      { const pp = placed(c, it), D = pp ? pp.d : 10, main = f.track === 'main';
+          body.append(sect(main ? 'Fade from or to black' : 'Fade in and out',
+            slider(main ? 'Fade in from ' + (it.vfCol === 'white' ? 'white' : 'black') : 'Fade in', () => +it.vfIn || 0, v => { if (v <= 0.001) delete it.vfIn; else it.vfIn = r2(v); }, 0, Math.min(10, D), 0.05, v => v <= 0.001 ? 'off' : r2(v) + ' s', { onChange: ch, commit: cm, reset: 0 }),
+            slider(main ? 'Fade out to ' + (it.vfCol === 'white' ? 'white' : 'black') : 'Fade out', () => +it.vfOut || 0, v => { if (v <= 0.001) delete it.vfOut; else it.vfOut = r2(v); }, 0, Math.min(10, D), 0.05, v => v <= 0.001 ? 'off' : r2(v) + ' s', { onChange: ch, commit: cm, reset: 0 }),
+            main ? chips(it.vfCol === 'white' ? 'white' : 'black', [['black', 'Black'], ['white', 'White']], v => { cm(); if (v === 'white') it.vfCol = 'white'; else delete it.vfCol; ch(true); o.rebuildInspector(); }) : '',
+            chips(it.vfSound === false ? 'pic' : 'both', [['both', 'Fade its sound too'], ['pic', 'Picture only']], v => { cm(); if (v === 'pic') it.vfSound = false; else delete it.vfSound; ch(true); o.rebuildInspector(); }),
+            H('p', { className: 'hint', textContent: 'Or drag the round handles at the top corners of the clip on the timeline.' }))); }
+    }
     function basic(body, c, it, m, ch, cm, f) {
       const k = (prop, get) => keyBtn(c, it, prop, get, ch), adj = it.kind === 'adjust';
       if (!adj) {
@@ -73,6 +82,7 @@ const CutInspect = (() => {
           slider('Rotate', () => r2(valAt(c, it, 'rot', +it.rot || 0)), v => setAt(c, it, 'rot', r2(v)), -360, 360, 0.5, v => r2(v) + '°', { onChange: ch, commit: cm, reset: 0, key: k('rot', () => valAt(c, it, 'rot', +it.rot || 0)) }),
           it.kind === 'media' ? H('div', { className: 'btnrow' }, UI.btn('Replace the footage…', () => ui.replacePick(it.id))) : '',
         H('div', { className: 'btnrow' }, UI.btn('Flip across', () => { cm(); it.flipH = !it.flipH; ch(); }), UI.btn('Flip upside down', () => { cm(); it.flipV = !it.flipV; ch(); }), UI.btn('Reset', () => { cm(); ['x', 'y', 's', 'rot', 'flipH', 'flipV', 'crop'].forEach(q => delete it[q]); if (it.kf) ['x', 'y', 's', 'rot'].forEach(q => delete it.kf[q]); ch(true); o.rebuildInspector(); }))));
+        fadeSect(body, c, it, f, ch, cm);
         if (it.kind !== 'colour') body.append(sect('Fit in the frame', chips(it.fit || (it.kind === 'clip' ? 'stretch' : 'fit'), [['fit', 'Whole picture'], ['fill', 'Fill the frame'], ['stretch', 'Stretch']], v => { cm(); it.fit = v; ch(true); o.rebuildInspector(); })));
         if (f.track === 'main' && it.kind === 'media') body.append(sect('Background (where the clip doesn\'t fill the frame)', chips(it.bg || 'auto', [['auto', 'As the project'], ['black', 'Black'], ['blur', 'Blurred'], ['white', 'White']], v => { cm(); if (v === 'auto') delete it.bg; else it.bg = v; ch(true); o.rebuildInspector(); })));
         const cr = it.crop || [0, 0, 0, 0], setCr = (i, v) => { const a = (it.crop || [0, 0, 0, 0]).slice(), other = i % 2 ? 4 - i : 2 - i; a[i] = r3(Math.min(v / 100, 0.95 - a[other])); if (a.some(Boolean)) it.crop = a; else delete it.crop; };
@@ -208,7 +218,8 @@ const CutInspect = (() => {
         H('p', { className: 'hint', textContent: 'This clip is its own copy, made when you added it, so changes in the ' + (V().NAMES[it.mod] || '') + ' tab since then are not in it. Edit it with the button above (double click it on the timeline does the same), or bring in what the tab has now.' }),
         H('div', { className: 'btnrow' }, UI.btn('Use what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab now', () => { const src = o.tabCfg(it.mod); if (!src) return; cm(); it.cfg = JSON.parse(JSON.stringify(src)); if (!V().runsOn(it)) { const [a2, , d2] = V().clipSpan(it, look()); if (it.outPt != null && +it.outPt > d2) delete it.outPt; if (a2 >= d2 - 0.2) it.inPt = 0; } ch(true); o.rebuildInspector(); o.say('The clip now has what\u2019s in the ' + (V().NAMES[it.mod] || '') + ' tab, keeping its place, trims and effects.'); }))));
     }
-    function avatar(body, c, it, m, ch, cm) {
+    function avatar(body, c, it, m, ch, cm, f) {
+      fadeSect(body, c, it, f || { track: 'main' }, ch, cm);
       body.append(sect('', UI.field('What you say here (preview only)', UI.area(it.text, v => { it.text = v; ch(false); }, 'Your line to camera', 3, 'Avatar line')),
         slider('Length', () => +it.dur || 3, v => { it.dur = r2(v); }, 0.3, 120, 0.1, v => r2(v) + ' s', { onChange: ch, commit: cm }),
         H('div', { className: 'btnrow' }, UI.btn('Fit the length to the words', () => { cm(); it.dur = V().fitWords(it.text); ch(true); o.rebuildInspector(); })),

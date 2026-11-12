@@ -41,7 +41,7 @@ const CutUI = (() => {
     /* o: { getCfg, getLook, setLook(k, v), player, ed, changed(full), commit, say, tabCfg(k), openItem(id), assetsChanged() } */
     const look = () => o.getLook(), cfg = () => o.getCfg();
     let active = false, pps = 60, fitted = false, altKey = false, curT = 0, drag = null, libTab = 'media', inspTab = {}, clipboard = null;
-    const sel = () => o.ed.selected, select = id => { o.ed.select(id); markSel(); };
+    const sel = () => o.ed.selected, select = id => { if (kfSel && id !== 'C:' + kfSel.id) kfSel = null; o.ed.select(id); markSel(); };
     const changed = full => o.changed(full !== false);
 
     /* ---------- Workspace ---------- */
@@ -64,7 +64,14 @@ const CutUI = (() => {
       if (libTab === 'text' || libTab === 'stickers') return drawLayers(libTab);
       if (libTab === 'effects') { libBody.append(H('p', { className: 'hint', textContent: 'Click to add to the selected clip, or drag onto a clip. With nothing selected it goes on its own track at the playhead, over everything under it.' }));
         const g = H('div', { className: 'cl-grid' }); Object.entries(CutGL.EFFECTS).forEach(([k, e]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile fx', title: e.label, on: { click: () => applyFx(k) } }, H('i', { textContent: e.icon }), H('span', { textContent: e.label })), { type: 'fx', k }))); libBody.append(g); return; }
-      if (libTab === 'trans') { libBody.append(H('p', { className: 'hint', textContent: 'Click to put it on the cut nearest the playhead, or drag it onto any cut (the diamond between two clips on the main track).' }));
+      if (libTab === 'trans') {
+        // Fades on a clip's own start or end: no other clip needed
+        libBody.append(H('h4', { className: 'cl-sub', textContent: 'Fade a clip in or out' }), H('p', { className: 'hint', textContent: 'Click for the selected clip (the end nearest the playhead), or drag onto a clip: its start or its end, whichever is nearer.' }));
+        const fg = H('div', { className: 'cl-grid' }); [['in', 'black', 'Fade from black'], ['out', 'black', 'Fade to black'], ['in', 'white', 'Fade from white'], ['out', 'white', 'Fade to white']].forEach(([w, col, l]) => {
+          const cv = H('canvas', { width: 96, height: 54 }), g0 = cv.getContext('2d'), gr = g0.createLinearGradient(0, 0, 96, 0), cA = col === 'white' ? '#ffffff' : '#000000'; gr.addColorStop(w === 'in' ? 0 : 1, cA); gr.addColorStop(w === 'in' ? 1 : 0, '#2f6fb5'); g0.fillStyle = gr; g0.fillRect(0, 0, 96, 54);
+          fg.append(drag0(H('button', { type: 'button', className: 'cl-tile tr', title: l, on: { click: () => applyFade(w, col) } }, cv, H('span', { textContent: l })), { type: 'fade', w, col })); });
+        libBody.append(fg, H('h4', { className: 'cl-sub', textContent: 'Between two clips' }));
+        libBody.append(H('p', { className: 'hint', textContent: 'Click to put it on the cut nearest the playhead, or drag it onto any cut (the diamond between two clips on the main track).' }));
         const g = H('div', { className: 'cl-grid' }); Object.entries(V().TRANS).filter(([k]) => k !== 'none').forEach(([k, l]) => g.append(drag0(H('button', { type: 'button', className: 'cl-tile tr', title: l, on: { click: () => applyTrans(k) } }, transIcon(k), H('span', { textContent: l })), { type: 'trans', k }))); libBody.append(g); return; }
       if (libTab === 'looks') { libBody.append(H('p', { className: 'hint', textContent: 'Click to grade the selected clip, or drag onto a clip. With nothing selected it grades everything from the playhead for 5 seconds (an adjustment clip you can stretch).' }));
         const g = H('div', { className: 'cl-grid looks' }); Object.entries(CutGL.LOOKS).forEach(([k, L]) => { const cv = H('canvas', { width: 96, height: 54 }); lookThumb(cv, k); g.append(drag0(H('button', { type: 'button', className: 'cl-tile lk', title: L.label, on: { click: () => applyLook(k) } }, cv, H('span', { textContent: L.label })), { type: 'look', k })); }); libBody.append(g); return; }
@@ -87,10 +94,10 @@ const CutUI = (() => {
           H('button', { type: 'button', className: 'rm', title: 'Remove from this project', 'aria-label': 'Remove ' + m.name, textContent: '×', on: { click: e => { e.stopPropagation(); removeAsset(id); } } })), { type: 'asset', id });
         g.append(card); });
       libBody.append(g);
-      if (audioOnly) { libBody.append(H('h4', { className: 'cl-sub', textContent: 'Sound effects' })); const s = H('div', { className: 'cl-grid' }); Object.entries(SFX).forEach(([k, f]) => s.append(H('button', { type: 'button', className: 'cl-tile', title: 'Make and add at the playhead', on: { click: () => addSfx(k) } }, H('i', { textContent: f.icon }), H('span', { textContent: f.label })))); libBody.append(s); }
+      if (audioOnly) { libBody.append(H('h4', { className: 'cl-sub', textContent: 'Sound effects' })); const s = H('div', { className: 'cl-grid' }); Object.entries(SFX).forEach(([k, f]) => s.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: 'Click to add at the playhead, or drag it onto the timeline', on: { click: () => addSfx(k) } }, H('i', { textContent: f.icon }), H('span', { textContent: f.label })), { type: 'sfx', k }))); libBody.append(s); }
       // Other footage on this computer, from other projects
       const others = CutMedia.list().filter(m => !ids.includes(m.id) && (!audioOnly || m.kind === 'audio'));
-      if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(H('div', { className: 'cl-orow' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })))); libBody.append(d); }
+      if (others.length) { const d = H('details', { className: 'cl-other' }, H('summary', { textContent: 'From your other projects (' + others.length + ')' })); others.slice(0, 60).forEach(m => d.append(drag0(H('div', { className: 'cl-orow', title: 'Drag onto the timeline, or Use to add it to this project' }, H('span', { textContent: m.name }), H('button', { type: 'button', textContent: 'Use', on: { click: () => { cfg().bin.push(m.id); changed(); drawLib(); } } })), { type: 'asset', id: m.id }))); libBody.append(d); }
       const libDraw = libBody._n; CutMedia.usage().then(u => { if (libBody._n !== libDraw || (libTab !== 'media' && libTab !== 'audio')) return; libBody.querySelectorAll('.cl-use').forEach(x => x.remove()); if (u && u.usage) libBody.append(H('p', { className: 'hint cl-use', textContent: 'Footage stored in this browser: ' + (u.usage / 1e9).toFixed(1) + ' GB of ' + (u.quota / 1e9).toFixed(0) + ' GB available.' })); });
     }
     function paintCard(cv, m) { const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#0b1424'; g.fillRect(0, 0, 160, 90);
@@ -106,9 +113,9 @@ const CutUI = (() => {
       libBody.append(H('p', { className: 'hint', textContent: which === 'text' ? 'Adds at the playhead, on its own track above the video. Click it on the preview to move it, and change it on the right.' : 'Stickers, shapes, props, pictures and camera moves, at the playhead.' }));
       adds.filter(want).forEach(a => {
         const g = H('div', { className: 'cl-grid' }); libBody.append(H('h4', { className: 'cl-sub', textContent: a.label }), g);
-        const run = ch => { try { o.commit(); const id = a.fn(cfg(), o.player.t, sel(), ch); Promise.resolve(id).then(x => { changed(); if (x) select(x); }); } catch (e) { console.warn(e); } };
-        if (a.choices) a.choices().forEach(ch => { const cv = H('canvas', { width: 64, height: 40 }); try { ch.icon && ch.icon(cv); } catch (e) { } g.append(H('button', { type: 'button', className: 'cl-tile', title: ch.label, on: { click: () => run(ch) } }, cv, H('span', { textContent: ch.label }))); });
-        else g.append(H('button', { type: 'button', className: 'cl-tile', title: a.title || a.label, on: { click: () => run() } }, H('i', { textContent: '+' }), H('span', { textContent: a.label })));
+        const run = (ch, t) => { try { o.commit(); const id = a.fn(cfg(), t == null ? o.player.t : t, sel(), ch); Promise.resolve(id).then(x => { changed(); if (x) select(x); }); } catch (e) { console.warn(e); } };
+        if (a.choices) a.choices().forEach((ch, ci) => { const cv = H('canvas', { width: 64, height: 40 }); try { ch.icon && ch.icon(cv); } catch (e) { } g.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: ch.label + ' (click to add at the playhead, or drag onto the timeline or the picture)', on: { click: () => run(ch) } }, cv, H('span', { textContent: ch.label })), { type: 'layer', a: a.label, ci })); });
+        else g.append(drag0(H('button', { type: 'button', className: 'cl-tile', title: (a.title || a.label) + ' (click to add at the playhead, or drag it)', on: { click: () => run() } }, H('i', { textContent: '+' }), H('span', { textContent: a.label })), { type: 'layer', a: a.label, ci: -1 }));
       });
     }
     function drawPatter() {
@@ -225,7 +232,7 @@ const CutUI = (() => {
       const kk = peak > 0 ? 0.89 / peak : 1; for (let i = 0; i < L.length; i++) { L[i] *= kk; R[i] *= kk; }
       return new File([CutAudio.wavHeader(L.length), CutAudio.wavBlock([L, R])], f.label + '.wav', { type: 'audio/wav' });
     }
-    async function addSfx(k) { const f = await makeSfx(k), [m] = await importFiles([f]); if (!m) return; o.commit(); const id = placeAsset(m.id, o.player.t, null); changed(); build(); if (id) select(id); }
+    async function addSfx(k, t, row) { const f = await makeSfx(k), [m] = await importFiles([f]); if (!m) return; o.commit(); const id = placeAsset(m.id, t == null ? o.player.t : t, row || null); changed(); build(); if (id) select(id); }
 
     /* ---------- Timeline ---------- */
     const bar = H('div', { className: 'ct-bar' }), scroll = H('div', { className: 'ct-scroll', tabIndex: -1 }), inner = H('div', { className: 'ct-inner' });
@@ -258,7 +265,7 @@ const CutUI = (() => {
     }
     function build() {
       if (!active) return; const c = cfg(), lk = look(); dur = Math.max(1, Layers.wrap(Video).duration(c, lk)); introSounds();
-      const avail = Math.max(200, scroll.clientWidth - HEAD - 30); if (!fitted) { pps = cl(avail / (dur + 1), 4, 800); zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); }
+      const avail = Math.max(200, scroll.clientWidth - HEAD - 30); if (!fitted && !drag) { pps = cl(avail / (dur + 1), 4, 800); if (dur > 0.5) fitted = true;   /* fit once, then the zoom stays put while he edits (re-fitting mid-drag changed what a mouse move meant); Fit does it again */ zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); }
       const Wd = Math.max(avail, (dur + 8) * pps); inner.style.width = (HEAD + Wd) + 'px';
       drawBar(); drawRuler(Wd);
       rows.innerHTML = ''; rowList = rowsOf(c);
@@ -341,15 +348,106 @@ const CutUI = (() => {
       const el = H('div', { className: 'ct-clip st k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 });
       const badges = []; if (it.speed && +it.speed !== 1) badges.push('⏩' + (+it.speed).toFixed(2).replace(/\.?0+$/, '') + 'x'); if (V().hasCurve(it)) badges.push('〰 curve'); if (it.rev) badges.push('⟲'); if (it.still != null) badges.push('❄'); if (it.col && (it.col.look || Object.keys(it.col).some(k => k !== 'look' && k !== 'lookAmt' && +it.col[k]))) badges.push('◐'); if (it.fx && it.fx.length) badges.push('✦' + it.fx.length); if (it.key && it.key.on) badges.push('⬚'); if (it.mask && it.mask.k && it.mask.k !== 'none') badges.push('◯'); if (it.kf && Object.values(it.kf).some(L => L && L.length)) badges.push('◆'); if (it.mute) badges.push('🔇'); if (it.enhance) badges.push('🎙');
       el.append(H('span', { className: 'lbl', textContent: V().NAME(it) + (badges.length ? '  ' + badges.join(' ') : '') }), H('b', { className: 'hl', title: 'Drag to trim' }), H('b', { className: 'hr', title: 'Drag to trim' }));
-      if (it.fadeIn) el.append(H('i', { className: 'fdi', style: `width:${Math.min(p.d, +it.fadeIn) * pps}px` })); if (it.fadeOut) el.append(H('i', { className: 'fdo', style: `width:${Math.min(p.d, +it.fadeOut) * pps}px` }));
-      if (it.kf) Object.entries(it.kf).forEach(([k, L]) => (L || []).forEach(q => el.append(H('i', { className: 'kf', style: `left:${q[0] * pps}px`, title: k + ' keyframe' }))));
+      const snd = hasSound(it, m), isAud = it.kind === 'audio';
+      if (!isAud) { if (+it.vfIn) el.append(H('i', { className: 'fdi' + (it.vfCol === 'white' ? ' wh' : ''), style: `width:${Math.min(p.d, +it.vfIn) * pps}px` })); if (+it.vfOut) el.append(H('i', { className: 'fdo' + (it.vfCol === 'white' ? ' wh' : ''), style: `width:${Math.min(p.d, +it.vfOut) * pps}px` })); }
+      if (!(r.T && r.T.lock) && !(r.kind === 'main' && cfg().mainLock)) fadeHandles(el, it, p, isAud);
+      if (snd) envelope(el, it, p);
+      keyDiamonds(el, it, p, snd);
       el._p = p; el._r = r; el.addEventListener('pointerdown', e => clipDown(e, { it, p, r }));
       el.addEventListener('contextmenu', e => { e.preventDefault(); select('C:' + it.id); menu(e, it, p, r); });
       el.addEventListener('dblclick', () => { if (it.kind === 'clip' && it.mod === 'intro') { select('C:' + it.id); } else if (it.kind === 'clip') o.openItem(it.id); });
-      el.addEventListener('dragover', e => { if (dragData && (dragData.type === 'fx' || dragData.type === 'look')) { e.preventDefault(); e.stopPropagation(); el.classList.add('drop'); } }); el.addEventListener('dragleave', () => el.classList.remove('drop'));
-      el.addEventListener('drop', e => { const dd = readDrop(e); el.classList.remove('drop'); if (!dd || (dd.type !== 'fx' && dd.type !== 'look')) return; e.preventDefault(); e.stopPropagation(); const f = V().findItem(cfg(), it.id); if (dd.type === 'fx') applyFx(dd.k, f); else applyLook(dd.k, f); });
+      el.addEventListener('dragover', e => { if (dragData && (dragData.type === 'fx' || dragData.type === 'look' || dragData.type === 'fade')) { e.preventDefault(); e.stopPropagation(); el.classList.add('drop'); } }); el.addEventListener('dragleave', () => el.classList.remove('drop'));
+      el.addEventListener('drop', e => { const dd = readDrop(e); el.classList.remove('drop'); if (!dd || (dd.type !== 'fx' && dd.type !== 'look' && dd.type !== 'fade')) return; e.preventDefault(); e.stopPropagation(); const f = V().findItem(cfg(), it.id); if (dd.type === 'fade') { const r = el.getBoundingClientRect(); applyFade(e.clientX - r.left < r.width / 2 ? 'in' : 'out', dd.col, f); return; } if (dd.type === 'fx') applyFx(dd.k, f); else applyLook(dd.k, f); });
       return el;
     }
+    /* ---------- Sound on the timeline: a volume line to drag, points on it (double click to add or remove), fades ---------- */
+    const hasSound = (it, m) => !it.mute && (it.kind === 'audio' || (it.kind === 'media' && m && m.kind === 'video' && m.hasAudio !== false) || (it.kind === 'clip' && (it.mod === 'intro' || it.mod === 'char')));
+    // dB to height on the clip (0 at the top, 1 at the bottom): 0 dB sits a third of the way down, +12 at the top, -60 at the bottom
+    const dbY = db => db >= 0 ? 0.32 * (1 - Math.min(12, db) / 12) : 0.32 + 0.68 * Math.pow(Math.min(60, -db) / 60, 0.55);
+    const yDb = y => y <= 0.32 ? 12 * (1 - Math.max(0, y) / 0.32) : -60 * Math.pow(Math.min(1, (y - 0.32) / 0.68), 1 / 0.55);
+    const fmtDb = v => v <= -59.5 ? 'off' : (v > 0 ? '+' : '') + v.toFixed(1) + ' dB';
+    function envelope(el, it, p) {
+      const w = Math.max(4, p.d * pps), NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'ct-env'); svg.setAttribute('viewBox', `0 0 ${w} 100`); svg.setAttribute('preserveAspectRatio', 'none');
+      const pts = []; const fi = it.kind === 'audio' ? +it.fadeIn || 0 : 0, fo = it.kind === 'audio' ? +it.fadeOut || 0 : 0;
+      for (let x = 0; x <= w + 0.1; x += Math.max(2, w / 300)) { const loc = x / pps; let y = dbY(V().kfAt(it, 'vol', loc, +it.vol || 0)); if (fi > 0 && loc < fi) y = y + (1 - y) * (1 - loc / fi); if (fo > 0 && loc > p.d - fo) y = y + (1 - y) * (1 - (p.d - loc) / fo); pts.push(x.toFixed(1) + ',' + (y * 100).toFixed(1)); }
+      const mk2 = (cls) => { const pl = document.createElementNS(NS, 'polyline'); pl.setAttribute('points', pts.join(' ')); pl.setAttribute('class', cls); pl.setAttribute('vector-effect', 'non-scaling-stroke'); svg.append(pl); return pl; };
+      mk2('fill'); mk2('ln'); const hit = mk2('hit'); el.append(svg);
+      hit.addEventListener('pointerdown', e => volLineDown(e, it, el)); hit.addEventListener('dblclick', e => { e.stopPropagation(); addVolKey(it, el, e); });
+      (it.kf && it.kf.vol || []).forEach((q, i) => { const d = H('i', { className: 'vk', style: `left:${q[0] * pps}px;top:${(Math.min(0.9, dbY(q[1])) * 100).toFixed(1)}%`, title: fmtDb(q[1]) + '. Drag to change, double click to remove.' });
+        d.addEventListener('pointerdown', e => volKeyDown(e, it, i, el)); d.addEventListener('dblclick', e => { e.stopPropagation(); o.commit(); it.kf.vol.splice(i, 1); if (!it.kf.vol.length) { delete it.kf.vol; } if (it.kf && !Object.keys(it.kf).length) delete it.kf; changed(); build(); o.say('Volume point removed.'); });
+        d.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); easeMenu(e, it, [['vol', i]]); }); el.append(d); });
+    }
+    const elH = el => Math.max(10, el.getBoundingClientRect().height);
+    function volLineDown(e, it, el) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); select('C:' + it.id); const y0 = e.clientY, h = elH(el), base = +it.vol || 0, keys = it.kf && it.kf.vol ? it.kf.vol.map(q => q[1]) : null; let moved = false, raf = 0;
+      const ref = keys ? V().kfAt(it, 'vol', 0, base) : base;
+      const mv = ev => { if (!moved && Math.abs(ev.clientY - y0) < 2) return; if (!moved) { moved = true; o.commit(); }
+        const y = dbY(ref) + (ev.clientY - y0) / h; let nd = Math.round(yDb(y) * 2) / 2; nd = cl(nd, -60, 12); const dd = nd - ref;
+        if (keys) it.kf.vol.forEach((q, i) => { q[1] = cl(Math.round((keys[i] + dd) * 2) / 2, -60, 12); }); else it.vol = nd;
+        o.changed(false); o.say('Volume ' + fmtDb(nd) + (keys ? ' (all its points moved together)' : '')); cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    }
+    function addVolKey(it, el, e) { const r = el.getBoundingClientRect(), loc = Math.max(0, (e.clientX - r.left) / pps); o.commit();
+      if (!(it.kf && it.kf.vol && it.kf.vol.length)) { V().setKey(it, 'vol', 0, +it.vol || 0); }
+      V().setKey(it, 'vol', loc, Math.round(V().kfAt(it, 'vol', loc, +it.vol || 0) * 2) / 2); changed(); build(); o.say('Volume point added. Drag it up or down; double click it to remove it.'); }
+    function volKeyDown(e, it, i, el) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); select('C:' + it.id); const L = it.kf.vol, q = L[i], x0 = e.clientX, y0 = e.clientY, t0 = q[0], v0 = q[1], h = elH(el); let moved = false, raf = 0;
+      const lo = i > 0 ? L[i - 1][0] + 0.02 : 0, hi = i < L.length - 1 ? L[i + 1][0] - 0.02 : 1e9;
+      const mv = ev => { if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return; if (!moved) { moved = true; o.commit(); }
+        q[0] = Math.round(cl(t0 + (ev.clientX - x0) / pps, lo, hi) * 1000) / 1000; q[1] = cl(Math.round(yDb(dbY(v0) + (ev.clientY - y0) / h) * 2) / 2, -60, 12);
+        o.changed(false); o.say(fmtDb(q[1]) + ' at ' + q[0].toFixed(2) + ' s into the clip'); cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    }
+    // Corner handles: drag in from the top corners. Sound clips fade their sound; picture clips fade from or to black
+    function fadeHandles(el, it, p, isAud) {
+      const kIn = isAud ? 'fadeIn' : 'vfIn', kOut = isAud ? 'fadeOut' : 'vfOut', what = isAud ? 'sound' : (it.vfCol === 'white' ? 'white' : 'black');
+      const mkH = (k, side) => { const v = +it[k] || 0, b = H('i', { className: 'fh ' + side + (v ? ' on' : ''), style: side === 'l' ? `left:${v * pps}px` : `right:${v * pps}px`, title: isAud ? (side === 'l' ? 'Drag to fade the sound in' : 'Drag to fade the sound out') : (side === 'l' ? 'Drag to fade in from ' + what : 'Drag to fade out to ' + what) });
+        b.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); select('C:' + it.id); const x0 = e.clientX, v0 = +it[k] || 0, other = +it[k === kIn ? kOut : kIn] || 0; let moved = false, raf = 0;
+          const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 2) return; if (!moved) { moved = true; o.commit(); } const dx = (ev.clientX - x0) / pps * (side === 'l' ? 1 : -1); const nv = Math.round(cl(v0 + dx, 0, Math.max(0, p.d - other)) * 20) / 20;
+            if (nv <= 0.001) delete it[k]; else it[k] = nv; o.changed(false); o.say((isAud ? (side === 'l' ? 'Sound fades in over ' : 'Sound fades out over ') : (side === 'l' ? 'Fades in from ' + what + ' over ' : 'Fades out to ' + what + ' over ')) + nv.toFixed(2) + ' s'); cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+          const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } };
+          window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); });
+        el.append(b); };
+      mkH(kIn, 'l'); mkH(kOut, 'r');
+    }
+    /* ---------- Keyframes on the clip: one diamond per moment (every setting keyed there), drag to move, click to go there,
+       Delete removes, right click for how it moves into the next one ---------- */
+    let kfSel = null;   // { id, t }
+    const KFN = { x: 'across', y: 'up and down', s: 'size', rot: 'turn', op: 'see through', vol: 'volume' };
+    function keyGroups(it, skipVol) { const G = []; Object.entries(it.kf || {}).forEach(([k, L]) => { if (skipVol && k === 'vol') return; (L || []).forEach((q, i) => { let g = G.find(x => Math.abs(x.t - q[0]) < 0.02); if (!g) G.push(g = { t: q[0], refs: [] }); g.refs.push([k, i]); }); }); return G.sort((a, b) => a.t - b.t); }
+    function keyDiamonds(el, it, p, skipVol) {
+      keyGroups(it, skipVol).forEach(G => { const on = kfSel && kfSel.id === it.id && Math.abs(kfSel.t - G.t) < 0.02;
+        const d = H('i', { className: 'kf live' + (on ? ' on' : ''), style: `left:${G.t * pps}px`, title: 'Keyframe: ' + G.refs.map(([k]) => KFN[k] || k).join(', ') + '. Click to go there, drag to move it, right click for how it moves, Delete to remove.' });
+        d.addEventListener('pointerdown', e => kfDown(e, it, p, G)); d.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); easeMenu(e, it, G.refs); }); el.append(d); });
+    }
+    function kfDown(e, it, p, G) {
+      if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); const x0 = e.clientX; let moved = false, raf = 0;
+      const others = keyGroups(it).filter(g => Math.abs(g.t - G.t) >= 0.02).map(g => g.t), gt0 = G.t;
+      const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 3) return; if (!moved) { moved = true; o.commit(); }
+        let nt = cl(gt0 + (ev.clientX - x0) / pps, 0, p.d); const ph = o.player.t - p.t0; if (Math.abs(nt - ph) * pps < 6) nt = ph;   // snaps to the playhead
+        if (others.some(t => Math.abs(t - nt) < 0.03)) return; nt = Math.round(nt * 1000) / 1000;
+        G.refs.forEach(([k, i]) => { it.kf[k][i][0] = nt; }); G.t = nt; kfSel = { id: it.id, t: nt }; o.changed(false); o.say('Keyframe at ' + nt.toFixed(2) + ' s into the clip'); cancelAnimationFrame(raf); raf = requestAnimationFrame(build); };
+      const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf);
+        if (moved) { Object.values(it.kf || {}).forEach(L => L.sort((a, b) => a[0] - b[0])); changed(); build(); return; }
+        kfSel = { id: it.id, t: G.t }; select('C:' + it.id); o.player.seek(p.t0 + G.t); build(); };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    }
+    function delKeyframe() { if (!kfSel) return false; const f = V().findItem(cfg(), kfSel.id), it = f && (f.it || f.item || f); if (!it || !it.kf) { kfSel = null; return false; } o.commit();
+      Object.keys(it.kf).forEach(k => { it.kf[k] = it.kf[k].filter(q => Math.abs(q[0] - kfSel.t) >= 0.02); if (!it.kf[k].length) delete it.kf[k]; }); if (!Object.keys(it.kf).length) delete it.kf; kfSel = null; changed(); build(); o.say('Keyframe removed.'); return true; }
+    const EASE_NAMES = [['io', 'Smooth (eases in and out)'], ['lin', 'Steady (linear)'], ['in', 'Speeds up'], ['out', 'Slows down'], ['hold', 'Hold, then jump']];
+    function easeMenu(e, it, refs) { const cur = refs.length ? (it.kf[refs[0][0]][refs[0][1]][2] || 'io') : 'io';
+      popMenu(e, [...EASE_NAMES.map(([k, l]) => [(k === cur ? '✓ ' : '') + l, () => { o.commit(); refs.forEach(([pk, i]) => { if (it.kf[pk] && it.kf[pk][i]) it.kf[pk][i][2] = k; }); changed(); build(); o.say('This keyframe now moves: ' + l.toLowerCase() + '.'); }]),
+        ['Remove this keyframe', () => { o.commit(); refs.slice().sort((a, b) => b[1] - a[1]).forEach(([pk, i]) => { it.kf[pk].splice(i, 1); if (!it.kf[pk].length) delete it.kf[pk]; }); if (it.kf && !Object.keys(it.kf).length) delete it.kf; kfSel = null; changed(); build(); }]]); }
+    function popMenu(e, items) { const pop = H('div', { className: 'ct-menu', role: 'menu' }); items.forEach(([l, fn]) => pop.append(H('button', { type: 'button', role: 'menuitem', textContent: l, on: { click: () => { pop.remove(); fn(); } } })));
+      document.body.append(pop); pop.style.left = Math.min(e.clientX, innerWidth - pop.offsetWidth - 8) + 'px'; pop.style.top = Math.min(e.clientY, innerHeight - pop.offsetHeight - 8) + 'px';
+      setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('pointerdown', off, true); } }, true), 0); }
+    function applyFade(w, col, f, t) { f = f || (sel() && String(sel()).startsWith('C:') ? V().findItem(cfg(), sel()) : null); if (!f || !f.it) { o.say('Select a clip first, or drag the fade onto one.'); return; }
+      const it = f.it, p = V().allPlaced(cfg(), look()).find(q => q.it === it); if (!p) return; o.commit();
+      if (w === 'auto') w = (t == null ? o.player.t : t) - p.t0 < p.d / 2 ? 'in' : 'out';
+      const d = Math.min(1, p.d / 2); if (w === 'in') it.vfIn = r2(d); else it.vfOut = r2(d); if (col === 'white') it.vfCol = 'white'; else delete it.vfCol;
+      changed(); build(); select('C:' + it.id); o.say((w === 'in' ? 'Fades in from ' : 'Fades out to ') + col + '. Drag the round handle on the clip to make it longer or shorter.'); }
     // Filmstrips and waveforms, painted for whatever part of each clip is on screen
     let paintTimer = 0; const paintSoon = () => { cancelAnimationFrame(paintTimer); paintTimer = requestAnimationFrame(paint); };
     // One canvas per track paints every clip's body, filmstrip and waveform for the part on screen (a canvas per clip made
@@ -386,19 +484,20 @@ const CutUI = (() => {
     function markSel() { const s = sel(); rows.querySelectorAll('.ct-clip').forEach(el => el.classList.toggle('on', el.dataset.id === s || multi.has(el.dataset.id))); rows.querySelectorAll('.ct-tr').forEach(el => el.classList.toggle('sel', 'T:' + el.dataset.tr === s)); drawBar(); }
     let multi = new Set();
     // Snapping: clip edges on every track, markers, the playhead and the start
-    function snapPoints(exceptIds) { const pts = [0, curT]; V().allPlaced(cfg(), look()).forEach(p => { if (exceptIds && exceptIds.has(p.it.id)) return; pts.push(p.t0, p.t0 + p.d); }); (cfg().markers || []).forEach(m => pts.push(m.t)); rowList.filter(r => r.kind === 'layer').forEach(r => r.tr.items.forEach(i => { if (!(exceptIds && exceptIds.has(i.id))) pts.push(i.start, i.end); })); return pts; }
+    function snapPoints(exceptIds) { const pts = [0, curT]; V().allPlaced(cfg(), look()).forEach(p => { if (exceptIds && exceptIds.has(p.it.id)) return; pts.push(p.t0, p.t0 + p.d); Object.values(p.it.kf || {}).forEach(L => (L || []).forEach(q => pts.push(p.t0 + q[0]))); }); /* keyframes too */ (cfg().markers || []).forEach(m => pts.push(m.t)); rowList.filter(r => r.kind === 'layer').forEach(r => r.tr.items.forEach(i => { if (!(exceptIds && exceptIds.has(i.id))) pts.push(i.start, i.end); })); return pts; }
     // Snap: on, the main track is magnetic and drags snap to edges (Alt held while dragging skips it); off, clips go anywhere
     const snapIsOn = () => !cfg().free;
     function toggleSnap() { o.commit(); const c = cfg(); if (c.free) { delete c.free; V().closeGaps(c); o.say('Snap on: the clips on the main track are back together.'); } else { c.free = true; o.say('Snap off: drag clips anywhere. The space between them is blank screen.'); } changed(); build(); }
     function snapT(v, pts, show) { if (!snapIsOn() || altKey) { snapLine.hidden = true; return v; } const tol = 9 / pps; let best = v, bd = tol, hit = null; pts.forEach(p => { const d = Math.abs(p - v); if (d < bd) { bd = d; best = p; hit = p; } }); if (show !== false) { if (hit != null) { snapLine.hidden = false; snapLine.style.left = (HEAD + hit * pps) + 'px'; snapLine.style.height = (ruler.offsetHeight + rows.offsetHeight) + 'px'; } else snapLine.hidden = true; } return best; }
-    function scrubStart(e) { if (e.button > 0) return; e.preventDefault(); o.player.pause(); o.player.scrub(true); const go = ev => { let t = laneT(ev.clientX); if (!ev.altKey) t = snapT(t, snapPoints(), false); t = Math.min(t, dur); o.player.seek(t); setTime(t, true); }; go(e);
-      const mv = ev => go(ev), up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); o.player.scrub(false); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
+    const nearPlayhead = x => Math.abs(x - play.getBoundingClientRect().left - 1) <= 5;   // the red line, a few pixels either side
+    function scrubStart(e) { if (e.button > 0) return; e.preventDefault(); e.stopPropagation(); o.player.pause(); o.player.scrub(true); const pts = snapPoints(); const go = ev => { let t = laneT(ev.clientX); if (!ev.altKey) t = snapT(t, pts, false); t = Math.min(t, dur); o.player.seek(t); setTime(t, true); }; go(e);
+      let pq = null, rq = 0; const mv = ev => { pq = ev; if (!rq) rq = requestAnimationFrame(() => { rq = 0; if (pq) go(pq); pq = null; }); }, up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(rq); go(pq || ev); pq = null; o.player.scrub(false); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
     play.addEventListener('pointerdown', scrubStart);
     function markerDrag(e, i) { if (e.button > 0) return; e.preventDefault(); e.stopPropagation(); const mk = cfg().markers[i], x0 = e.clientX, t0 = mk.t; let moved = false; o.commit();
       const mv = ev => { if (Math.abs(ev.clientX - x0) > 3) moved = true; if (!moved) return; mk.t = r3(Math.max(0, t0 + (ev.clientX - x0) / pps)); e.target.style.left = mk.t * pps + 'px'; }, up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); if (moved) changed(); else { o.player.seek(mk.t); setTime(mk.t, true); } };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
     // Empty lane: click to move the playhead (and clear the selection), drag to box select
-    function laneDown(e) { if (e.target.closest('.ct-clip') || e.target.closest('.ct-tr') || e.button > 0) return; e.preventDefault(); o.player.pause(); const r0 = inner.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY; let moved = false;
+    function laneDown(e) { if (e.target.closest('.ct-clip') || e.target.closest('.ct-tr') || e.button > 0) return; if (nearPlayhead(e.clientX)) { scrubStart(e); return; } e.preventDefault(); o.player.pause(); const r0 = inner.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY; let moved = false;
       const mv = ev => { if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return; moved = true; const bx = Math.min(ev.clientX, x0) - r0.left, by = Math.min(ev.clientY, y0) - r0.top, bw = Math.abs(ev.clientX - x0), bh = Math.abs(ev.clientY - y0); Object.assign(boxEl.style, { left: bx + 'px', top: by + 'px', width: bw + 'px', height: bh + 'px' }); boxEl.hidden = false;
         multi = new Set([...rows.querySelectorAll('.ct-clip')].filter(c => { const cr = c.getBoundingClientRect(); return cr.left < Math.max(ev.clientX, x0) && cr.right > Math.min(ev.clientX, x0) && cr.top < Math.max(ev.clientY, y0) && cr.bottom > Math.min(ev.clientY, y0); }).map(c => c.dataset.id)); markSel(); };
       const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); boxEl.hidden = true; if (!moved) { multi.clear(); select(null); const t = Math.min(dur, laneT(ev.clientX)); o.player.seek(t); setTime(t, true); } else { const first = [...multi][0] || null; o.ed.select(first); markSel(); } };
@@ -406,23 +505,35 @@ const CutUI = (() => {
 
     /* Dragging clips: move (in time, between tracks, in and out of the main track) and trim */
     function clipDown(e, ctx) {
-      if (e.button > 0) return; e.preventDefault(); e.stopPropagation(); o.player.pause();
+      if (e.button > 0) return;
+      // The playhead line over a clip's middle: dragging moves the playhead, a plain click still picks the clip
+      { const r0 = e.currentTarget.getBoundingClientRect(), z0 = Math.max(4, Math.min(10, r0.width / 5)), el0 = e.currentTarget;
+        if (e.clientX - r0.left >= z0 && r0.right - e.clientX >= z0 && nearPlayhead(e.clientX) && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); const x0 = e.clientX;
+          const mv0 = ev => { if (Math.abs(ev.clientX - x0) < 3) return; off0(); scrubStart(ev); }, up0 = () => { off0(); multi.clear(); select(ctx.layer ? ctx.it.id : 'C:' + ctx.it.id); }, off0 = () => { window.removeEventListener('pointermove', mv0); window.removeEventListener('pointerup', up0); };
+          window.addEventListener('pointermove', mv0); window.addEventListener('pointerup', up0); return; } } e.preventDefault(); e.stopPropagation(); o.player.pause();
       const id = ctx.layer ? ctx.it.id : 'C:' + ctx.it.id;
       if (e.shiftKey || e.ctrlKey || e.metaKey) { if (sel()) multi.add(sel()); if (multi.has(id)) multi.delete(id); else multi.add(id); o.ed.select(id); markSel(); return; }
       if (!multi.has(id)) { multi.clear(); select(id); } else o.ed.select(id);
       const locked = ctx.layer ? ctx.it.locked : (ctx.r.T && ctx.r.T.lock) || (ctx.r.kind === 'main' && cfg().mainLock);
-      const h = e.target.classList.contains('hl') ? 'l' : e.target.classList.contains('hr') ? 'r' : 'm'; if (locked) { const t = laneT(e.clientX); o.player.seek(t); setTime(t, true); return; }
+      // Which end: by where the pointer is (a generous zone, wider on longer clips), not only the thin handles
+      const er = e.currentTarget.getBoundingClientRect(), ez = Math.max(4, Math.min(10, er.width / 5));
+      const h = e.target.classList.contains('hl') || e.clientX - er.left < ez ? 'l' : e.target.classList.contains('hr') || er.right - e.clientX < ez ? 'r' : 'm';
+      if (locked) { const t = laneT(e.clientX); o.player.seek(t); setTime(t, true); return; }
       const el = e.currentTarget, x0 = e.clientX, y0 = e.clientY, c = cfg(), lk = look(), tAt = laneT(e.clientX);
-      const snap = JSON.stringify(ctx.layer ? null : ctx.it), others = new Set([ctx.it.id]), pts = snapPoints(others);
+      const snap = JSON.stringify(ctx.layer ? null : ctx.it), others = new Set([ctx.it.id]);
+      // trimming on the magnetic main track moves every clip after it, so their edges (one of them sits right on this end) are no snap points
+      if (h !== 'm' && !ctx.layer && ctx.r.kind === 'main') { const L = c.items || [], i0 = L.indexOf(ctx.it); if (i0 >= 0) L.slice(i0).forEach(x => others.add(x.id)); }
+      const pts = snapPoints(others);
       drag = { el, h, moved: false, committed: false };
       const begin = () => { if (!drag.committed) { o.commit(); drag.committed = true; } };
-      const mv = ev => {
+      let pend = null, raf2 = 0; const mv = ev => { pend = ev; if (!raf2) raf2 = requestAnimationFrame(() => { raf2 = 0; const q = pend; pend = null; if (q && drag) mv1(q); }); };
+      const mv1 = ev => {
         altKey = ev.altKey; const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
         if (ctx.layer) return layerDrag(ev, ctx, h, dx, pts);
         if (h === 'm') return moveDrag(ev, ctx, el, tAt, pts, c, lk);
         const r = trimDrag(ev, ctx, h, dx, pts, c, lk, JSON.parse(snap)); paintSoon(); return r;
       };
-      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging', 'moving');
+      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf2); if (pend && drag) mv1(pend); pend = null; snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging', 'moving');
         if (d && d.moved) { if (d.finish) d.finish(ev); changed(); build(); } else { const t = laneT(ev.clientX); o.player.seek(Math.min(t, dur)); setTime(t, true); } };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }
@@ -473,6 +584,7 @@ const CutUI = (() => {
       else { const d0 = +orig.dur || p.d; if (left) { const nd = cl(d0 - dt, 0.1, 3600); it.dur = r3(nd); if (free) it.start = r3(Math.max(0, (+orig.start || 0) + (d0 - nd))); } else it.dur = r3(cl(d0 + dt, 0.1, 3600)); }
       if (!free && cfg().free) { if (!drag.starts) drag.starts = V().mainStarts(Object.assign({}, cfg(), { items: cfg().items.map(x => x === it ? orig : x) }), lk).map(q => ({ it: q.it === orig ? it : q.it, start: q.start, k: q.k }));
         const me = drag.starts.find(q => q.it === it), origLen = V().lenOf(orig, lk), nl = V().lenOf(it, lk); V().setMainStarts(cfg(), lk, drag.starts.map(q => q.it === it ? { it, start: left ? Math.max(0, me.start + origLen - nl) : me.start, k: q.k } : q)); }
+      if (isFile && !it.rev && ((left && +it.src0 <= 0.001 && dt < -0.01) || (!left && m.dur && it.src1 != null && +it.src1 >= m.dur - 0.001 && dx > 0))) o.say(left ? 'That is the start of the file: it cannot go back any further.' : 'That is the end of the file: it cannot be made any longer. Freeze the last frame (right click) to hold it.');
       o.changed(false); const np = V().allPlaced(cfg(), lk).find(q => q.it === it); if (np) { drag.el.style.left = np.t0 * pps + 'px'; drag.el.style.width = Math.max(4, np.d * pps) + 'px'; drag.el._p = np; }
       const seekT = np ? (left ? np.t0 + 0.01 : np.t0 + np.d - 0.02) : curT; o.player.seek(seekT); setTime(seekT, true);
     }
@@ -486,12 +598,21 @@ const CutUI = (() => {
       if (dragData && (dragData.type === 'fx' || dragData.type === 'look' || dragData.type === 'trans')) return; const d = dragData && dragData.type === 'asset' ? (V().lenOf(itemFor(dragData.id) || {}, look()) || 3) : 3; dropMark(row && row.kind ? row : null, t, d, row && row.kind === 'main'); }
     function laneDrop(e) { e.preventDefault(); dropMark(null); const row = rowAt(e.clientY), t = laneT(e.clientX), dd = readDrop(e), files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
       if (files.length && !dd) { importFiles(files, { t, row }); return; } if (!dd) return; o.commit();
-      if (dd.type === 'asset') { const id = placeAsset(dd.id, t, row && row.kind === 'new' ? { kind: 'video', T: null } : row); changed(); build(); if (id) select(id); }
+      dropThing(dd, t, row); }
+    // Anything from the library, dropped at time t on a row (or at the playhead on the picture)
+    function dropThing(dd, t, row) {
+      if (dd.type === 'asset') { const c0 = cfg(); c0.bin = c0.bin || []; if (!c0.bin.includes(dd.id)) c0.bin.push(dd.id); const id = placeAsset(dd.id, t, row && row.kind === 'new' ? { kind: 'video', T: null } : row); changed(); build(); drawLib(); if (id) select(id); }
+      else if (dd.type === 'sfx') addSfx(dd.k, t, row && row.kind === 'audio' ? row : null);
+      else if (dd.type === 'layer') { const a = (Layers.wrap(Video).editor.adds || []).find(x => x.label === dd.a); if (a) { try { const ch = dd.ci >= 0 && a.choices ? a.choices()[dd.ci] : undefined; const id = a.fn(cfg(), t, sel(), ch); Promise.resolve(id).then(x => { changed(); if (x) select(x); }); } catch (e) { console.warn(e); } } }
       else if (dd.type === 'patter') addPatter(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
       else if (dd.type === 'block') addBlock(dd.k, row && row.kind === 'new' ? { kind: 'video' } : row, t);
       else if (dd.type === 'intro') addIntro(t);
       else if (dd.type === 'trans') applyTrans(dd.k);
+      else if (dd.type === 'fade') { const hit = V().allPlaced(cfg(), look()).find(q => q.track === 'main' && t >= q.t0 && t < q.t0 + q.d); if (hit) applyFade(dd.w, dd.col, V().findItem(cfg(), hit.it.id)); else applyFade(dd.w, dd.col); }
       else if (dd.type === 'fx' || dd.type === 'look') { o.player.seek(t); dd.type === 'fx' ? applyFx(dd.k) : applyLook(dd.k); } }
+    // Dropped on the picture: at the playhead
+    { const pw = document.getElementById('prevWrap'); if (pw) { pw.addEventListener('dragover', e => { if (!active || !dragData) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; pw.classList.add('dropping'); }); pw.addEventListener('dragleave', () => pw.classList.remove('dropping'));
+      pw.addEventListener('drop', e => { pw.classList.remove('dropping'); if (!active) return; const dd = readDrop(e); if (!dd) return; e.preventDefault(); e.stopPropagation(); o.commit(); dropThing(dd, o.player.t, null); }); } }
     // The whole window takes dropped files when the Video tab is open
     document.addEventListener('dragover', e => { if (!active || e.target.closest && e.target.closest('.ct-lane')) return; if ([...(e.dataTransfer.items || [])].some(i => i.kind === 'file')) { e.preventDefault(); lib.classList.add('dropping'); } });
     document.addEventListener('dragleave', e => { if (e.target === document.documentElement || !e.relatedTarget) lib.classList.remove('dropping'); });
@@ -562,6 +683,7 @@ const CutUI = (() => {
       if (k === 's') { splitNow(); return true; } if (k === 'm') { addMarker(); return true; } if (k === 'f') { freezeNow(); return true; }
       if (k === 'q') { trimTo('start'); return true; } if (k === 'w') { trimTo('end'); return true; }
       if (e.key === 'ArrowUp') { jump(-1); return true; } if (e.key === 'ArrowDown') { jump(1); return true; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && kfSel && !e.shiftKey && sel() === 'C:' + kfSel.id) { if (delKeyframe()) return true; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && sel()) { del(e.shiftKey); return true; }
       if (k === '=' || k === '+') { setZoom(pps * 1.3); return true; } if (k === '-' || k === '_') { setZoom(pps / 1.3); return true; }
       if (k === 'escape') { multi.clear(); return false; }
