@@ -451,7 +451,14 @@ minutes, before deletes and restores), a 30 day bin and backup files. Long and S
 and a structure and pacing checker (`check`) from YouTube retention research; it never comments on the jokes (he asked).
 Cues are `[TAG]` or `[TAG: detail]`: upper case shots and edits, lower case character moves using Patter Studio's
 Character words. **Send** shares "PatterScript - title.txt": the script as written plus a JSON copy; when he sends one,
-build it as a Video tab project as above. A classic APK could not be built here (Google's Android tools are blocked).
+build it as a Video tab project as above. **He installs it as an APK** (`docs/PatterScript.apk`): `python3 build.py --apk`
+wraps the same files in a small WebView app (`android/`: manifest, icons and hand written smali; the page is served from
+https://appassets.androidplatform.net/ by `Client`, Send and Back up go through `PatterAndroid.share` and the `Files`
+provider to the share menu, the file picker through `Chrome`). Tools: apktool 2.10.0 and uber-apk-signer 1.3.0 from their
+GitHub releases (he approved running them), in `$APK_TOOLS` (default /tmp/apktools). The signing key `key/patterscript.jks`
+is NOT in the repo (gitignored): he keeps the copy Claude sent him. Ask him to attach it before making an update, sign
+with it and bump `APK_VERSION`, or the update will not install over his copy (a reinstall would lose his scripts).
+Google's Android SDK downloads are blocked here, so there is no emulator: test in Chromium.
 
 ## Packs (data only, no code)
 

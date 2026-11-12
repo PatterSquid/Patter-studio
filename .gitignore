@@ -6,3 +6,6 @@ dev/src/studio_room.js
 dev/src/mug_logo.js
 dev/tmp_*
 dev/src/fonts.js
+patterscript/android/assets/
+patterscript/key/
+patterscript/android/build/

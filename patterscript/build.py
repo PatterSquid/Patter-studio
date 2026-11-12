@@ -24,3 +24,21 @@ def icon(size, maskable):
     return im
 icon(192, False).save(os.path.join(out, 'icon-192.png')); icon(512, False).save(os.path.join(out, 'icon-512.png')); icon(512, True).save(os.path.join(out, 'icon-maskable.png'))
 print('built', ver, len(html) // 1024, 'KB')
+
+# the Android app (APK): the same files inside a small WebView wrapper (android/: manifest, icons, smali), packed with
+# apktool and signed with key/patterscript.jks (his copy; password in PATTERSCRIPT_KEY_PASS). An update signed with another key will not install over it.
+import subprocess, sys
+if '--apk' in sys.argv:
+    tools = os.environ.get('APK_TOOLS', '/tmp/apktools'); a = os.path.join(here, 'android'); assets = os.path.join(a, 'assets')
+    shutil.rmtree(assets, ignore_errors=True); os.makedirs(assets)
+    for f in ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png']: shutil.copy(os.path.join(out, f), assets)
+    vc = int(open(os.path.join(here, 'APK_VERSION')).read().strip())
+    y = open(os.path.join(a, 'apktool.yml')).read(); import re
+    y = re.sub(r'versionCode: \d+', 'versionCode: %d' % vc, y); y = re.sub(r"versionName: '[^']*'", "versionName: '1.%d'" % vc, y); open(os.path.join(a, 'apktool.yml'), 'w').write(y)
+    raw = os.path.join(here, 'build-unsigned.apk')
+    subprocess.run(['java', '-jar', os.path.join(tools, 'apktool.jar'), 'b', a, '-o', raw, '-f'], check=True)
+    sd = os.path.join(here, 'signed'); shutil.rmtree(sd, ignore_errors=True)
+    subprocess.run(['java', '-jar', os.path.join(tools, 'uber.jar'), '-a', raw, '-o', sd, '--ks', os.path.join(here, 'key', 'patterscript.jks'), '--ksAlias', 'patterscript', '--ksPass', os.environ['PATTERSCRIPT_KEY_PASS'], '--ksKeyPass', os.environ['PATTERSCRIPT_KEY_PASS']], check=True)
+    apk = [f for f in os.listdir(sd) if f.endswith('.apk')][0]
+    shutil.copy(os.path.join(sd, apk), os.path.join(out, 'PatterScript.apk')); os.remove(raw); shutil.rmtree(sd)
+    print('apk', os.path.getsize(os.path.join(out, 'PatterScript.apk')) // 1024, 'KB, version', vc)

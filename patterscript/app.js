@@ -158,6 +158,7 @@ function exportText(sc) {
 }
 const safeName = s => (s || 'Untitled').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Untitled';
 async function shareFile(name, text, type, title) {
+  if (window.PatterAndroid) { try { return PatterAndroid.share(name, text, type) ? 'shared' : 'cancelled'; } catch (e) { } }
   const file = new File([text], name, { type });
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title }); return 'shared'; } } catch (e) { if (e.name === 'AbortError') return 'cancelled'; }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); return 'saved';
@@ -347,7 +348,7 @@ function showCheck() {
 async function sendToClaude() {
   await saveNow(); await snapshot('Sent to Claude');
   const r = await shareFile('PatterScript - ' + safeName(cur.title || cur.pack.title) + '.txt', exportText(cur), 'text/plain', cur.title || 'Script');
-  if (r === 'saved') toast('Saved to Downloads. Attach it in Claude.'); else if (r === 'shared') toast('Sent');
+  if (r === 'saved') toast('Saved to Downloads. Attach it in Claude.'); else if (r === 'shared' && !window.PatterAndroid) toast('Sent');
 }
 function homeMenu() {
   openSheet('PatterScript',
@@ -362,7 +363,7 @@ async function backup() {
   const vs = await DB.all('versions'); const data = JSON.stringify({ app: 'PatterScript', kind: 'backup', v: 1, at: Date.now(), settings: { wpm: settings.wpm }, scripts, versions: vs });
   const d = new Date(), name = `PatterScript backup ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
   const r = await shareFile(name, data, 'application/json', 'PatterScript backup');
-  if (r !== 'cancelled') { settings.lastBackup = Date.now(); await saveSettings(); toast(r === 'saved' ? 'Backup saved to Downloads' : 'Backup sent'); if (!cur) showHome(); }
+  if (r !== 'cancelled') { settings.lastBackup = Date.now(); await saveSettings(); if (!window.PatterAndroid) toast(r === 'saved' ? 'Backup saved to Downloads' : 'Backup sent'); if (!cur) showHome(); }
 }
 function restore() {
   const inp = h('input', { type: 'file', accept: '.json,application/json' }); inp.onchange = async () => {
@@ -388,7 +389,7 @@ async function start() {
   addEventListener('popstate', () => { if (sheet.classList.contains('on')) { closeSheet(); if (cur) history.pushState({ ps: 1 }, '', '#' + cur.id); return; } if (cur && !location.hash) showHome(); else if (!cur && location.hash.length > 1 && scripts.find(s => s.id === location.hash.slice(1) && !s.binned)) openScript(location.hash.slice(1)); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && cur) saveNow(); });
   addEventListener('pagehide', () => { if (cur) saveNow(); });
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.PatterAndroid) navigator.serviceWorker.register('sw.js').catch(() => { });
 }
 window.PS = { check, exportText, timeline, cueKind, get cur() { return cur; }, get scripts() { return scripts; }, settings, snapshot, saveNow };
 start();
