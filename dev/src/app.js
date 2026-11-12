@@ -429,15 +429,24 @@
       const t0 = performance.now(); for (let i = 0; i < 5; i++) JSON.stringify(light()); const ms = (performance.now() - t0) / 5; say('Saving cost', ms.toFixed(1) + ' ms each save', ms > 30 ? true : ms > 10 ? 'warn' : false); }
     try { const vs = await DB.versions(state.pid); say('Versions kept', String(vs.length)); } catch (e) { }
     say('Pictures on the page', document.querySelectorAll('canvas').length + ' canvases, ' + document.getElementsByTagName('*').length + ' page parts, ' + document.querySelectorAll('video,audio').length + ' players');
-    // Each tab: how long its current clip takes to draw at the preview's size and at full HD
+    // Each tab: how long its current clip takes to draw at the preview's size, split into working it out (script) and
+    // painting it, once through the graphics card (the normal way) and once on the processor (a canvas made for reading)
     const look = Object.assign({}, state.look, { transparent: false }), { W, H: Hh } = E.dims(look.format), pv = $('prev'), pw = pv && pv.width > 100 ? pv.width : 960;
+    say('Preview size', pw + ' x ' + Math.round(pw * Hh / W) + ' pixels');
     for (const id of ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll', 'studio', 'char', 'video']) {
       const M = MODULES[id]; if (!M || !state.cfg[id]) continue; await nap(20);
-      try { const c = state.cfg[id]; if (M.prepare) { try { await Promise.race([M.prepare(c, look), nap(4000)]); } catch (e) { } } const d = M.duration(c, look); const time = (w, lk) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = Math.round(w * Hh / W); const g = cv.getContext('2d'); const ms = [];
-          for (let i = -1; i < 4; i++) { const t0 = performance.now(); g.save(); g.scale(cv.width / W, cv.width / W); M.draw(g, d * (0.2 + Math.max(0, i) * 0.2), c, lk, W, Hh); g.restore(); g.getImageData(0, 0, 1, 1); if (i >= 0) ms.push(performance.now() - t0); } return med(ms); };   // the first draw warms up and is not counted
-        const a = time(pw, Object.assign({}, look, { preview: true, paused: false })), b = time(W, Object.assign({}, look, { preview: false }));
-        say('Draw: ' + (TAB_NAMES[id] || id), a.toFixed(0) + ' ms in the preview, ' + b.toFixed(0) + ' ms full size (under 16 plays smoothly)', a > 40 ? true : a > 16 ? 'warn' : false);
+      try { const c = state.cfg[id]; if (M.prepare) { try { await Promise.race([M.prepare(c, look), nap(4000)]); } catch (e) { } } const d = M.duration(c, look), lk = Object.assign({}, look, { preview: true, paused: false });
+        const time = (cpu, read) => { const cv = document.createElement('canvas'); cv.width = pw; cv.height = Math.round(pw * Hh / W); const g = cv.getContext('2d', cpu ? { willReadFrequently: true } : undefined); const ms = [];
+          for (let i = -1; i < 5; i++) { const t0 = performance.now(); g.save(); g.scale(cv.width / W, cv.width / W); M.draw(g, d * (0.15 + Math.max(0, i) * 0.15), c, lk, W, Hh); g.restore(); if (read) g.getImageData(0, 0, 1, 1); if (i >= 0) ms.push(performance.now() - t0); } return med(ms); };
+        const js = time(false, false), gpu = time(false, true), cpu = time(true, true);
+        say('Draw: ' + (TAB_NAMES[id] || id), 'script ' + js.toFixed(0) + ' ms, with graphics card ' + gpu.toFixed(0) + ' ms, on processor ' + cpu.toFixed(0) + ' ms', Math.min(gpu, cpu) > 40 ? true : Math.min(gpu, cpu) > 16 ? 'warn' : false);
       } catch (e) { say('Draw: ' + (TAB_NAMES[id] || id), 'failed: ' + e.message, true); }
+    }
+    // The real thing: play this tab's preview for three seconds and count the frames that actually reach the screen
+    if (state.module !== 'audio' && state.module !== 'thumb') {
+      const wasT = 0; player.seek(0); player.play(); await nap(300); const ts = []; await new Promise(r => { const f = t => { ts.push(t); if (t - ts[0] < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); player.pause(); player.seek(wasT);
+      const dd = ts.slice(1).map((t, i) => t - ts[i]), fps = (dd.length) / ((ts[ts.length - 1] - ts[0]) / 1000), slow = dd.filter(x => x > 40).length;
+      say('Playing ' + (TAB_NAMES[state.module] || state.module) + ' for real', fps.toFixed(0) + ' frames a second, ' + slow + ' stutters, smooth preview ' + (scrub.classList.contains('cached') ? 'ready' : 'not used'), fps < 24 ? true : fps < 45 ? 'warn' : false);
     }
     const text = 'Patter Studio speed check\n' + rows.map(([k, v, b]) => (b === true ? '!! ' : b === 'warn' ? '!  ' : '   ') + k + ': ' + v).join('\n');
     copyBtn.disabled = false; copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'Copied: paste it to Claude'; } catch (e) { const ta = H('textarea', { value: text, rows: 12, style: 'width:100%' }); copyBtn.after(ta); ta.select(); } };
