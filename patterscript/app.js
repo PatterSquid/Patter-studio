@@ -8,7 +8,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const ICON = {
   back: '<path d="M15 18l-6-6 6-6"/>', check: '<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
   more: '<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>', send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
-  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5v.01"/>', menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5v.01"/>', menu: '<path d="M4 7h16M4 12h16M4 17h16"/>', next: '<path d="M9 18l6-6-6-6"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24">${ICON[k]}</svg>`;
 
@@ -184,7 +184,7 @@ const hbtn = (icon, label, on, cls) => h('button', { class: 'hbtn ' + (cls || ''
 
 async function showHome() {
   if (cur) { await saveNow(); await snapshot('Auto'); }
-  cur = null; cueBar(false); if (location.hash) history.replaceState(null, '', location.pathname);
+  cur = null; mode('home'); if (location.hash) history.replaceState(null, '', location.pathname);
   header([h('img', { class: 'logo', src: 'icon-192.png', alt: '' })], '<b>PATTER</b>SCRIPT', [hbtn('menu', 'Menu', homeMenu)]);
   const list = live(), q = h('input', { class: 'search', placeholder: 'Search scripts', type: 'search' }), box = h('div');
   const draw = () => { const s = q.value.trim().toLowerCase(); box.replaceChildren(...list.filter(x => !s || (x.title + ' ' + x.pack.title + ' ' + x.sections.map(y => y.text).join(' ')).toLowerCase().includes(s)).map(card)); if (!box.children.length) box.append(h('div', { class: 'empty' }, s ? 'No scripts match.' : '')); };
@@ -200,57 +200,107 @@ function card(s) {
 }
 const ago = t => { const d = (Date.now() - t) / 1000; if (d < 60) return 'just now'; if (d < 3600) return Math.floor(d / 60) + ' min ago'; if (d < 86400) return Math.floor(d / 3600) + ' h ago'; return new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
 let lastCreate = 0;
-async function create(kind) { if (Date.now() - lastCreate < 1000) return; lastCreate = Date.now(); const s = blankScript(kind); scripts.push(s); await DB.put('scripts', s); openScript(s.id, true); }
+async function create(kind) { if (Date.now() - lastCreate < 1000) return; lastCreate = Date.now(); const s = blankScript(kind); scripts.push(s); await DB.put('scripts', s); history.pushState({ ps: 1, from: '' }, '', '#' + s.id); cur = s; dirtySinceVersion = false; lastVersionAt = Date.now(); showOverview(true); }
 
-async function openScript(id, fresh) {
-  cur = scripts.find(s => s.id === id); if (!cur) return showHome(); if (location.hash !== '#' + id) history.pushState({ ps: 1 }, '', '#' + id); dirtySinceVersion = false; lastVersionAt = Date.now();
-  if (!fresh) snapshot('Auto');
-  const badge = h('span', { class: 'badge' }), chk = h('button', { class: 'hbtn', 'aria-label': 'Check script', onclick: showCheck, html: svg('check') }); chk.append(badge);
-  header([hbtn('back', 'Back', () => { if (history.state && history.state.ps) history.back(); else showHome(); })], '', [chk, hbtn('more', 'More', scriptMenu), hbtn('send', 'Send', sendToClaude, 'send')]);
-  const ti = h('input', { class: 'titlein', placeholder: 'Script name', value: cur.title, enterkeyhint: 'done' }); ti.oninput = () => { cur.title = ti.value; touch(); };
-  ti.onkeydown = e => { if (e.key === 'Enter') ti.blur(); };
-  const stats = h('div', { class: 'stats', id: 'stats' });
-  view.replaceChildren(ti, stats, packCard(), h('div', { id: 'secs' }), h('button', { class: 'addsec', onclick: () => addSection(null) }, '+ Add a section'));
-  drawSections(); refreshStats(); scrollTo(0, 0);
-  if (fresh) setTimeout(() => ti.focus(), 60);
+/* ---------- navigation: #script, #script/section, #script/pack, #script/read; Back goes up one level ---------- */
+function go(hash, replace) { const url = hash ? '#' + hash : location.pathname, from = replace ? (history.state && history.state.from) : location.hash.slice(1); const st = { ps: 1, from }; if (replace) history.replaceState(st, '', url); else history.pushState(st, '', url); route(); }
+// the top Back button: always one level up (section to list, list to home)
+function up() { const p = location.hash.slice(1).split('/'), parent = p.length > 1 ? p[0] : ''; if (history.state && history.state.ps && history.state.from === parent) history.back(); else go(parent, true); }
+let lastUrl = location.href, lastFrom = '';
+async function route() {
+  lastUrl = location.href; lastFrom = history.state && history.state.from;
+  const [sid, part] = location.hash.slice(1).split('/');
+  const sc = sid && scripts.find(s => s.id === sid && !s.binned);
+  if (!sc) { if (cur || view.dataset.v !== 'home') { if (cur) { await saveNow(); await snapshot('Auto'); } } return showHome(); }
+  if (cur !== sc) { if (cur) await saveNow(); cur = sc; dirtySinceVersion = false; lastVersionAt = Date.now(); snapshot('Auto'); }
+  if (!part) return showOverview();
+  if (part === 'pack') return showPack();
+  if (part === 'read') return showRead();
+  const sec = cur.sections.find(x => x.id === part); if (!sec) return go(sid, true);
+  showSection(sec);
 }
-function packCard() {
-  const p = cur.pack, sub = h('span', { class: 'sub' });
-  const setSub = () => { sub.textContent = p.title || 'Title, thumbnail, promise'; };
-  const f = (key, label, ph, max, area) => { const cnt = h('i'); const inp = h(area ? 'textarea' : 'input', { placeholder: ph, rows: area ? 2 : null }); inp.value = p[key] || ''; const upd = () => { const n = inp.value.length; cnt.textContent = max ? n + ' / ' + max : ''; cnt.className = max && n > max ? 'over' : ''; if (area && inp.scrollHeight) { inp.style.height = 'auto'; inp.style.height = Math.max(64, inp.scrollHeight + 2) + 'px'; } }; inp.oninput = () => { p[key] = inp.value; upd(); setSub(); touch(); }; upd(); return h('label', { class: 'fld' }, h('span', null, label, cnt), inp); };
-  setSub();
-  const d = h('details', { class: 'pack' }, h('summary', null, 'Packaging', sub), h('div', { class: 'body' },
-    f('title', 'Video title', 'What goes on YouTube', 60), f('thumb', 'Thumbnail idea', 'Picture and 2 to 4 words', 0, true), f('promise', 'The promise', 'What do they get for watching?', 0, true),
-    h('div', { class: 'note' }, 'Keep the key words in the first 40 characters of the title. The checker makes sure your hook pays off this promise.')));
-  if (!p.title && !cur.sections.some(s => s.text)) d.open = false;
-  return d;
+const openScript = id => go(id);
+
+/* ---------- the script: a short list of its sections ---------- */
+function scriptHeader() {
+  const badge = h('span', { class: 'badge' }), chk = h('button', { class: 'hbtn', 'aria-label': 'Check script', onclick: showCheck, html: svg('check') }); chk.append(badge);
+  header([hbtn('back', 'Back', up)], '', [chk, hbtn('more', 'More', scriptMenu), hbtn('send', 'Send', sendToClaude, 'send')]);
+}
+function showOverview(fresh) {
+  mode('over'); scriptHeader();
+  const ti = h('input', { class: 'titlein', placeholder: 'Name this script', value: cur.title, enterkeyhint: 'done' }); ti.oninput = () => { cur.title = ti.value; touch(); };
+  ti.onkeydown = e => { if (e.key === 'Enter') ti.blur(); };
+  const p = cur.pack, packRow = h('button', { class: 'row pack-row', onclick: () => go(cur.id + '/pack') },
+    h('div', { class: 'rt' }, h('b', null, 'Title and thumbnail'), h('span', { class: 'rp' }, p.title || 'What it is called, the thumbnail, what they get for watching')), h('i', { class: 'chev', html: svg('next') }));
+  view.replaceChildren(ti, h('div', { class: 'stats', id: 'stats' }), h('div', { class: 'prog', id: 'prog' }), packRow, h('div', { id: 'secs' }),
+    h('div', { class: 'two' }, h('button', { class: 'ghost', onclick: () => addSection(null) }, '+ Add a section'), h('button', { class: 'ghost', onclick: () => go(cur.id + '/read') }, 'Read it all')));
+  drawSections(); scrollTo(0, 0);
+  if (fresh) setTimeout(() => ti.focus(), 80);
+}
+function drawSections() {
+  const box = $('#secs'); if (!box) return; const tl = timeline(cur);
+  box.replaceChildren(...cur.sections.map((s, i) => { const r = tl[i], def = SEC[s.type] || SEC.free, w = wordsIn(s.text);
+    const first = s.text.trim().split('\n').join(' ').slice(0, 140);
+    return h('div', { class: 'row sec-row', style: `--sc:${def.col}`, 'data-id': s.id },
+      h('button', { class: 'rmain', onclick: () => go(cur.id + '/' + s.id) },
+        h('div', { class: 'rt' }, h('b', null, s.name), h('span', { class: 'rtime' }, w ? fmt(r.a) + ' to ' + fmt(r.b) : '')),
+        h('div', { class: 'rp' + (w ? '' : ' unwritten'), html: w ? hl(first) + (s.text.trim().length > 140 ? '…' : '') : 'Not written yet' })),
+      h('button', { class: 'ibtn', 'aria-label': 'Section menu', onclick: () => sectionMenu(s), html: svg('more') }));
+  }));
+  refreshStats();
 }
 function refreshStats() {
-  const st = $('#stats'); if (!st || !cur) return; const tot = totalOf(cur);
-  st.innerHTML = `<span class="chip ${cur.kind}">${cur.kind === 'short' ? 'Short' : 'Long'}</span><span class="big">${fmt(tot)}</span><span class="sep">·</span><span>${wordsOf(cur)} words</span><span class="sep">·</span><span>${settings.wpm} wpm</span>`;
-  const tl = timeline(cur); tl.forEach(r => { const e = document.querySelector(`.sec[data-id="${r.id}"] .sec-time`); if (!e) return; const s = cur.sections.find(x => x.id === r.id); const lim = s.type === 'hook' ? (cur.kind === 'short' ? null : 30) : s.type === 'end' ? 20 : null; e.textContent = `${fmt(r.a)} to ${fmt(r.b)}`; e.className = 'sec-time' + (lim && r.d > lim ? ' over' : ''); });
+  if (!cur) return; const st = $('#stats');
+  if (st) st.innerHTML = `<span class="chip ${cur.kind}">${cur.kind === 'short' ? 'Short' : 'Long'}</span><span class="big">${fmt(totalOf(cur))}</span><span class="sep">·</span><span>${wordsOf(cur)} words</span>`;
+  const pg = $('#prog'); if (pg) { const n = cur.sections.length, d = cur.sections.filter(s => wordsIn(s.text)).length; pg.innerHTML = `<div class="bar"><i style="width:${n ? d / n * 100 : 0}%"></i></div><span>${d} of ${n} sections written</span>`; }
   const b = $('.hbtn .badge'); if (b) { const n = check(cur).filter(i => i.level === 'warn').length; b.textContent = n || '✓'; b.className = 'badge' + (n ? '' : ' ok'); }
+  const m = $('#secmeta'); if (m && m._sec) secMeta(m, m._sec);
 }
-function drawSections() { const box = $('#secs'); box.replaceChildren(...cur.sections.map(secEl)); refreshStats(); }
-function secEl(s) {
-  const def = SEC[s.type] || SEC.free, g = h('div', { class: 'sec-g' + (s.text.trim() ? ' hidden' : '') }, guideOf(s, cur.kind));
-  const el = h('div', { class: 'sec', 'data-id': s.id, style: `--sc:${def.col}` },
-    h('div', { class: 'sec-h' }, h('div', { class: 'sec-n', onclick: () => renameSection(s) }, s.name), h('span', { class: 'sec-time' }),
-      h('button', { class: 'ibtn', 'aria-label': 'What goes here', onclick: () => g.classList.toggle('hidden'), html: svg('help') }),
-      h('button', { class: 'ibtn', 'aria-label': 'Section menu', onclick: () => sectionMenu(s), html: svg('more') })),
-    g, editor(s));
-  return el;
+
+/* ---------- one section at a time: a plain text box, the cue buttons, previous and next ---------- */
+function secMeta(m, s) {
+  const tl = timeline(cur), i = cur.sections.indexOf(s), r = tl[i]; if (!r) return;
+  const lim = s.type === 'hook' ? (cur.kind === 'short' ? 3 : 30) : s.type === 'end' ? 20 : null;
+  m.innerHTML = `<span>${fmt(r.a)} to ${fmt(r.b)}</span><span class="sep">·</span><span>${wordsIn(s.text)} words</span>` + (lim ? `<span class="sep">·</span><span class="${r.d > lim ? 'over' : ''}">aim under ${lim} s</span>` : '');
 }
-function editor(s) {
-  const pre = h('pre', { 'aria-hidden': 'true' }), ta = h('textarea', { placeholder: 'Write here. Tap the buttons for shots, moves and timing, or type them like [point].', spellcheck: 'true', autocapitalize: 'sentences' });
+function showSection(s) {
+  mode('sec'); const i = cur.sections.indexOf(s), n = cur.sections.length, def = SEC[s.type] || SEC.free;
+  header([hbtn('back', 'Back', up)], `<span class="secname" style="color:${def.col === '#93a4c0' ? 'var(--paper)' : 'var(--paper)'}">${esc(s.name)}</span> <small>${i + 1} of ${n}</small>`, [hbtn('help', 'What goes here', () => openSheet(s.name, h('p', { class: 'note', style: 'font-size:15px;color:var(--fg)' }, guideOf(s, cur.kind)), h('p', { class: 'note' }, 'Tap the buttons above the keyboard to drop in shots, moves and timing, or type them in square brackets like [point].'))), hbtn('more', 'Section menu', () => sectionMenu(s))]);
+  const meta = h('div', { class: 'secmeta', id: 'secmeta' }); meta._sec = s; secMeta(meta, s);
+  const ta = h('textarea', { class: 'writer', placeholder: guideOf(s, cur.kind), spellcheck: 'true', autocapitalize: 'sentences', autocomplete: 'on' });
   ta.value = s.text; ta._sec = s;
-  const paint = () => { pre.innerHTML = hl(ta.value) + '\n'; ta.style.height = 'auto'; ta.style.height = Math.max(96, ta.scrollHeight) + 'px'; };
-  ta.oninput = () => { s.text = ta.value; paint(); touch(); };
-  ta.onfocus = () => { focused = ta; cueBar(true); };
-  ta.onblur = () => setTimeout(() => { if (document.activeElement !== ta && !(document.activeElement && document.activeElement.closest('#cuebar'))) { if (focused === ta) focused = null; if (!document.activeElement || document.activeElement.tagName !== 'TEXTAREA' || !document.activeElement._sec) cueBar(false); } }, 120);
-  requestAnimationFrame(paint); new ResizeObserver(() => paint()).observe(pre.parentNode || pre);
-  return h('div', { class: 'ed' }, pre, ta);
+  ta.oninput = () => { s.text = ta.value; touch(); };
+  ta.onfocus = () => { focused = ta; document.body.classList.add('typing'); cueBar(true); };
+  ta.onblur = () => setTimeout(() => { if (document.activeElement !== ta) { document.body.classList.remove('typing'); cueBar(false); } }, 150);
+  const prev = cur.sections[i - 1], next = cur.sections[i + 1];
+  const nav = h('div', { class: 'secnav' },
+    h('button', { class: 'bs', disabled: prev ? null : true, onclick: () => prev && go(cur.id + '/' + prev.id, true) }, prev ? '‹ ' + prev.name : ''),
+    h('button', { class: 'bp', onclick: () => next ? go(cur.id + '/' + next.id, true) : up() }, next ? next.name + ' ›' : 'Done ✓'));
+  view.replaceChildren(meta, h('div', { class: 'writewrap' }, ta), nav);
+  focused = ta; refreshStats();
+  if (!s.text) setTimeout(() => ta.focus(), 120);
 }
+
+/* ---------- title and thumbnail ---------- */
+function showPack() {
+  mode('pack'); header([hbtn('back', 'Back', up)], 'Title and thumbnail', []);
+  const p = cur.pack;
+  const f = (key, label, ph, max, rows) => { const cnt = h('i'); const inp = h('textarea', { placeholder: ph, rows, enterkeyhint: rows === 1 ? 'done' : null }); inp.value = p[key] || ''; const upd = () => { const n = inp.value.length; cnt.textContent = max ? n + ' / ' + max : ''; cnt.className = max && n > max ? 'over' : ''; }; inp.oninput = () => { p[key] = rows === 1 ? inp.value.replace(/\n/g, ' ') : inp.value; if (rows === 1 && inp.value.includes('\n')) inp.value = p[key]; upd(); touch(); }; upd(); return h('label', { class: 'fld' }, h('span', null, label, cnt), inp); };
+  view.replaceChildren(f('title', 'Video title', 'What goes on YouTube', 60, 2), h('p', { class: 'note', style: 'margin:-4px 0 14px' }, 'Put the words people would search for in the first 40 characters.'),
+    f('thumb', 'Thumbnail idea', 'The picture, and 2 to 4 words on it', 0, 3), f('promise', 'The promise', 'What do they get for watching? The hook should deliver this straight away.', 0, 3),
+    h('button', { class: 'bp wide', onclick: up }, 'Done'));
+}
+
+/* ---------- read the whole script through, cues coloured ---------- */
+function showRead() {
+  mode('read'); header([hbtn('back', 'Back', up)], 'Read it all', []);
+  const tl = timeline(cur);
+  view.replaceChildren(h('h2', { class: 'readt' }, cur.title || cur.pack.title || 'Untitled'), h('div', { class: 'stats' }, fmt(totalOf(cur)) + ' · ' + wordsOf(cur) + ' words'),
+    ...cur.sections.map((s, i) => h('button', { class: 'readsec', style: `--sc:${(SEC[s.type] || SEC.free).col}`, onclick: () => go(cur.id + '/' + s.id) },
+      h('div', { class: 'rt' }, h('b', null, s.name), h('span', { class: 'rtime' }, fmt(tl[i].a))), h('div', { class: 'rtext', html: s.text.trim() ? hl(s.text.trim()) : '<span class="unwritten">Not written yet</span>' }))));
+  scrollTo(0, 0);
+}
+function mode(m) { view.dataset.v = m; document.body.dataset.v = m; document.body.classList.remove('typing'); cueBar(false); if (m !== 'sec') focused = null; }
 const hl = t => { let out = '', last = 0; for (const m of t.matchAll(CUE_RE)) { out += esc(t.slice(last, m.index)); const k = cueKind(m[1]); out += `<span class="cue ${k === 'me' ? 'shot me' : k}">${esc(m[0])}</span>`; last = m.index + m[0].length; } return out + esc(t.slice(last)); };
 
 /* ---------- cue bar ---------- */
@@ -268,7 +318,7 @@ function insertCue(tag) {
   const open = tag.endsWith(': ');
   let txt = '[' + (open ? tag + sel : tag) + ']';
   const pad = before && !/\s$/.test(before) ? ' ' : '', after = v.slice(b), padA = after && !/^[\s.,!?;:]/.test(after) ? ' ' : (after ? '' : ' ');
-  txt = pad + txt + (open && !sel ? '' : padA);
+  txt = pad + txt + padA;
   ta.setSelectionRange(a, b);
   if (!document.execCommand || !document.execCommand('insertText', false, txt)) { ta.setRangeText(txt, a, b, 'end'); ta.dispatchEvent(new Event('input')); }
   if (open && !sel) { const p = a + pad.length + tag.length + 1; ta.setSelectionRange(p, p); }
@@ -285,20 +335,20 @@ function confirmSheet(title, text, yes, label = 'Yes', cls = 'br') { openSheet(t
 function promptSheet(title, value, done, ph) { const i = h('input', { value: value || '', placeholder: ph || '', enterkeyhint: 'done' }); const go = () => { closeSheet(); done(i.value.trim()); }; i.onkeydown = e => { if (e.key === 'Enter') go(); }; openSheet(title, h('label', { class: 'fld' }, i), h('div', { class: 'row2' }, h('button', { class: 'bs', onclick: () => closeSheet() }, 'Cancel'), h('button', { class: 'bp', onclick: go }, 'Done'))); setTimeout(() => i.focus(), 200); }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), 2200); }
 
-function renameSection(s) { promptSheet('Rename section', s.name, v => { if (v) { s.name = v; touch(); drawSections(); } }); }
+const rerender = () => route();
+function renameSection(s) { promptSheet('Rename section', s.name, v => { if (v) { s.name = v; touch(); rerender(); } }); }
 function sectionMenu(s) {
   const i = cur.sections.indexOf(s);
   openSheet(s.name,
     opt('Rename', null, () => renameSection(s)),
-    i > 0 ? opt('Move up', null, () => { cur.sections.splice(i, 1); cur.sections.splice(i - 1, 0, s); touch(); drawSections(); }) : null,
-    i < cur.sections.length - 1 ? opt('Move down', null, () => { cur.sections.splice(i, 1); cur.sections.splice(i + 1, 0, s); touch(); drawSections(); }) : null,
+    i > 0 ? opt('Move up', null, () => { cur.sections.splice(i, 1); cur.sections.splice(i - 1, 0, s); touch(); rerender(); }) : null,
+    i < cur.sections.length - 1 ? opt('Move down', null, () => { cur.sections.splice(i, 1); cur.sections.splice(i + 1, 0, s); touch(); rerender(); }) : null,
     opt('Add a section after this', null, () => addSection(s)),
-    opt('Delete section', s.text.trim() ? 'Its words go too (a version is saved first, so you can get them back)' : null, () => confirmSheet('Delete ' + s.name + '?', s.text.trim() ? 'A version of the script is saved first, so you can restore it from Versions.' : 'It is empty.', async () => { await snapshot('Before deleting ' + s.name); cur.sections.splice(cur.sections.indexOf(s), 1); touch(); drawSections(); }, 'Delete'), 'danger'));
+    opt('Delete section', s.text.trim() ? 'Its words go too (a version is saved first, so you can get them back)' : null, () => confirmSheet('Delete ' + s.name + '?', s.text.trim() ? 'A version of the script is saved first, so you can restore it from Versions.' : 'It is empty.', async () => { await snapshot('Before deleting ' + s.name); cur.sections.splice(cur.sections.indexOf(s), 1); touch(); rerender(); }, 'Delete'), 'danger'));
 }
 function addSection(after) {
   openSheet('Add a section', ...ADDABLE[cur.kind].map(t => opt(SEC[t].name, guideOf({ type: t }, cur.kind), () => {
-    const nm = t === 'point' ? 'Point ' + (cur.sections.filter(x => x.type === 'point').length + 1) : null; const ns = newSection(t, nm); const at = after ? cur.sections.indexOf(after) + 1 : cur.sections.length; cur.sections.splice(at, 0, ns); touch(); drawSections();
-    setTimeout(() => { const ta = $(`.sec[data-id="${ns.id}"] textarea`); if (ta) { ta.scrollIntoView({ block: 'center' }); ta.focus(); } }, 50);
+    const nm = t === 'point' ? 'Point ' + (cur.sections.filter(x => x.type === 'point').length + 1) : null; const ns = newSection(t, nm); const at = after ? cur.sections.indexOf(after) + 1 : cur.sections.length; cur.sections.splice(at, 0, ns); touch(); go(cur.id + '/' + ns.id, view.dataset.v === 'sec');
   }, null, SEC[t].col)));
 }
 function scriptMenu() {
@@ -306,8 +356,8 @@ function scriptMenu() {
     opt('Versions', 'Every version saved as you write. Restore any of them.', showVersions),
     opt('Save a version now', 'With a name, e.g. "before rewrite"', () => promptSheet('Name this version', '', async v => { await saveNow(); await snapshot(v || 'Saved by hand'); toast('Version saved'); }, 'e.g. first draft')),
     opt('Copy the script text', 'Plain text with the cues, for anywhere', async () => { try { await navigator.clipboard.writeText(exportText(cur).split('\nExact copy for building:')[0]); toast('Copied'); } catch (e) { toast('Could not copy'); } }),
-    opt('Duplicate', 'A copy to try something different', async () => { await saveNow(); const c = JSON.parse(JSON.stringify(cur)); c.id = uid(); c.title = (cur.title || 'Untitled') + ' (copy)'; c.created = c.updated = Date.now(); scripts.push(c); await DB.put('scripts', c); openScript(c.id); toast('Copy made'); }),
-    opt(cur.kind === 'long' ? 'Change to Short' : 'Change to long video', 'Keeps your sections; the checker and targets change', () => { cur.kind = cur.kind === 'long' ? 'short' : 'long'; touch(); openScript(cur.id); }),
+    opt('Duplicate', 'A copy to try something different', async () => { await saveNow(); const c = JSON.parse(JSON.stringify(cur)); c.id = uid(); c.title = (cur.title || 'Untitled') + ' (copy)'; c.created = c.updated = Date.now(); scripts.push(c); await DB.put('scripts', c); go(c.id, true); toast('Copy made'); }),
+    opt(cur.kind === 'long' ? 'Change to Short' : 'Change to long video', 'Keeps your sections; the checker and targets change', () => { cur.kind = cur.kind === 'long' ? 'short' : 'long'; touch(); rerender(); }),
     opt('Talking speed', settings.wpm + ' words a minute: sets all the timings', speedSheet),
     opt('Cue key', 'What each button means', keySheet),
     opt('Move to bin', 'Kept for 30 days in the bin', () => confirmSheet('Move to bin?', 'You can get it back from the bin for 30 days.', async () => { cur.binned = Date.now(); await DB.put('scripts', cur); await snapshot('Before binning'); cur = null; showHome(); toast('Moved to bin'); }, 'Move to bin'), 'danger'));
@@ -321,7 +371,7 @@ async function showVersions() {
 function previewVersion(v) {
   const b = JSON.parse(v.body);
   openSheet(v.label === 'Auto' ? 'Saved ' + ago(v.at) : v.label, h('div', { class: 'prev' }, (b.title ? b.title + '\n\n' : '') + b.sections.map(s => s.name.toUpperCase() + '\n' + (s.text || '(empty)')).join('\n\n')),
-    h('div', { class: 'row2' }, h('button', { class: 'bs', onclick: showVersions }, 'Back'), h('button', { class: 'bp', onclick: async () => { await snapshot('Before restoring'); Object.assign(cur, { title: b.title, pack: b.pack, sections: b.sections, kind: b.kind || cur.kind }); touch(); await saveNow(); closeSheet(); openScript(cur.id); toast('Restored. The version before is saved too.'); } }, 'Restore this')));
+    h('div', { class: 'row2' }, h('button', { class: 'bs', onclick: showVersions }, 'Back'), h('button', { class: 'bp', onclick: async () => { await snapshot('Before restoring'); Object.assign(cur, { title: b.title, pack: b.pack, sections: b.sections, kind: b.kind || cur.kind }); touch(); await saveNow(); closeSheet(); rerender(); toast('Restored. The version before is saved too.'); } }, 'Restore this')));
 }
 function speedSheet() {
   const big = h('div', { class: 'speed' }, settings.wpm), sl = h('input', { type: 'range', min: 110, max: 220, step: 5, value: settings.wpm });
@@ -385,8 +435,8 @@ async function start() {
   await loadSettings(); scripts = await DB.all('scripts');
   const old = scripts.filter(s => s.binned && Date.now() - s.binned > 30 * 86400e3); for (const s of old) { await DB.del('scripts', s.id); for (const v of await DB.versionsOf(s.id)) await DB.del('versions', v.vid); } scripts = scripts.filter(s => !old.includes(s));
   drawBar();
-  const id = location.hash.slice(1); if (id && scripts.find(s => s.id === id && !s.binned)) openScript(id); else showHome();
-  addEventListener('popstate', () => { if (sheet.classList.contains('on')) { closeSheet(); if (cur) history.pushState({ ps: 1 }, '', '#' + cur.id); return; } if (cur && !location.hash) showHome(); else if (!cur && location.hash.length > 1 && scripts.find(s => s.id === location.hash.slice(1) && !s.binned)) openScript(location.hash.slice(1)); });
+  if (location.hash.length > 1) history.replaceState({ ps: 0 }, '', location.hash); route();
+  addEventListener('popstate', () => { if (sheet.classList.contains('on')) { closeSheet(); history.pushState({ ps: 1, from: lastFrom }, '', lastUrl); return; } route(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && cur) saveNow(); });
   addEventListener('pagehide', () => { if (cur) saveNow(); });
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.PatterAndroid) navigator.serviceWorker.register('sw.js').catch(() => { });
