@@ -129,7 +129,7 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   Paste (`edits` kind `ins`: a stretch of the recording put in again at a point, in `segmentsOf`), Amplify by dB and
   Normalise (peak to -1 dB), with Ctrl+C, X, V (routed to `AudioTab.key` by app.js).
 * **No "Clean my voice" button.** He had it taken out (November 2026): even kept simple it sounded "a bit weird". He uses
-  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks. "Send it on" renders a WAV into
+  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks. He also tried a "Grit" voice changer (PSOLA pitch and formant lowering with rasp, November 2026): subtle settings were inaudible and stronger ones risked sounding edited, so he chose his natural voice. Do not offer voice changing again unless he asks. "Send it on" renders a WAV into
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 
