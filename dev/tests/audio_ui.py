@@ -11,6 +11,7 @@ async def main():
     b = await p.chromium.launch(args=['--no-proxy-server', '--autoplay-policy=no-user-gesture-required']); pg = await b.new_page(viewport={'width': 1600, 'height': 960}); errs = []
     pg.on('pageerror', lambda e: errs.append(str(e)))
     await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort()); await pg.route('**/fonts.googleapis.com/**', lambda r: r.abort())
+    await pg.add_init_script("window.PATTER_DENOISE='http://127.0.0.1:8765/tmp_dnhome/denoise/'")
     await pg.goto('http://127.0.0.1:8765/dist/test.html'); await pg.wait_for_timeout(1500)
     await pg.click('#tabs button[data-mod=audio]'); await pg.wait_for_timeout(600)
     await pg.screenshot(path=OUT + '/0_empty.png')
@@ -48,7 +49,11 @@ async def main():
     await pg.mouse.move(X(0.2), y); await pg.mouse.down(); await pg.mouse.move(X(1.2), y, steps=6); await pg.mouse.up()
     await pg.locator('#audioWs button', has_text='Learn noise').click(); await settle(500); print('learn:', await pg.locator('#audioWs .au-say').inner_text())
     # AI noise removal on
-    await pg.locator('#audioWs .au-side .field', has_text='AI noise removal').locator('button', has_text='On').click(); await settle(500)
+    await pg.locator('#audioWs button', has_text='Get the AI voice cleaner').click()
+    for i in range(60):
+      await pg.wait_for_timeout(500)
+      if await pg.locator('#audioWs .au-side .field', has_text='AI voice cleaner').count(): break
+    await pg.locator('#audioWs .au-side .field', has_text='AI voice cleaner').locator('button', has_text='On').click(); await settle(500)
     print('ai on:', await pg.evaluate(f"()=>({ST}).audio.clean.ai"), await pg.evaluate("()=>{ const W=AudioTab._W; let s=0; for(let i=0.2*48000;i<1.3*48000;i++) s+=W.out.y[i]*W.out.y[i]; return (10*Math.log10(s/(1.1*48000)+1e-20)).toFixed(1); }"))
     # play a moment (Space), then send it on
     await pg.keyboard.press('Space'); await pg.wait_for_timeout(700); pl = await pg.evaluate("()=>AudioTab._W.playing"); await pg.keyboard.press('Space'); print('played:', pl)

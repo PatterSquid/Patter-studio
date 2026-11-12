@@ -6,7 +6,7 @@
 const AudioTab = (() => {
   const SR = 48000, MAXS = 30 * 60;
   const cl = (v, a, b) => v < a ? a : v > b ? b : v, r3 = v => Math.round(v * 1000) / 1000;
-  const CLEAN0 = () => ({ rumble: true, hum: false, humHz: 50, declick: false, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, ai: { on: false, amount: 1 }, deess: 0, level: 0, loud: null });
+  const CLEAN0 = () => ({ rumble: true, hum: false, humHz: 50, declick: false, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, ai: { on: false, atten: 20 }, eq: { on: false, low: 0, mud: -2, pres: 2, air: 1.5 }, deess: 0, comp: 0, level: 0, loud: null });
   const defaults = () => ({ v: 1, src: '', name: '', clean: CLEAN0(), edits: [] });
   const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), x = s - m * 60; return m + ':' + (x < 10 ? '0' : '') + x.toFixed(2); };
 
@@ -19,17 +19,25 @@ const AudioTab = (() => {
       const n = Math.min(ab.length, MAXS * SR), x = new Float32Array(n); for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < n; i++) x[i] += d[i] / ab.numberOfChannels; } if (raw.id === id) raw.x = x; return x; })().finally(() => { raw.busy = null; }));
   }
   const cleanKey = c => JSON.stringify([c.src, c.clean]);
-  const proc = { key: '', y: null, job: 0 };
+  const proc = { key: '', y: null, res: null, job: 0 };
   // what goes into the noise reduction (so the noise is learned from the same sound it will be taken out of)
   function preNR(x, c) { let y = x; if (c.rumble !== false) y = AudioFX.rumble(y, SR, +c.rumbleHz || 80); if (c.hum) y = AudioFX.hum(y, SR, +c.humHz || 50); return y; }
   async function processed(cfg, onProgress) {
     const k = cleanKey(cfg); if (proc.key === k && proc.y) return proc.y; const job = ++proc.job, x = await loadRaw(cfg.src);
-    const y = await AudioFX.chain(x, SR, cfg.clean || {}, onProgress); if (job === proc.job) { proc.key = k; proc.y = y; } return y;
+    const r = await AudioFX.chain(x, SR, cfg.clean || {}, onProgress, true), y = r.y;
+    // what the noise removal took away, to listen to on its own ("Removed")
+    let res = null; if (r.nrIn && r.nrOut) { res = new Float32Array(r.nrIn.length); for (let i = 0; i < res.length; i++) res[i] = r.nrIn[i] - (r.nrOut[i] || 0); }
+    if (job === proc.job) { proc.key = k; proc.y = y; proc.res = res; } return y;
   }
   // the edits: the kept stretches of the recording (in its own seconds), then quieted, faded or louder parts
   function segmentsOf(edits, dur) {
     const dels = (edits || []).filter(e => e.k === 'del').map(e => [cl(+e.a, 0, dur), cl(+e.b, 0, dur)]).filter(d => d[1] > d[0]).sort((a, b) => a[0] - b[0]), keep = []; let t = 0;
-    dels.forEach(([a, b]) => { if (a > t) keep.push([t, a]); t = Math.max(t, b); }); if (t < dur) keep.push([t, dur]); return keep;
+    dels.forEach(([a, b]) => { if (a > t) keep.push([t, a]); t = Math.max(t, b); }); if (t < dur) keep.push([t, dur]);
+    // pasted parts: a stretch of the recording put in again at a point (in the recording's own seconds)
+    (edits || []).filter(e => e.k === 'ins').forEach(e => { const a = cl(+e.a, 0, dur), b = cl(+e.b, 0, dur), at = cl(+e.at, 0, dur); if (!(b > a)) return;
+      let i = keep.findIndex(([s0, s1]) => at >= s0 && at <= s1 && !(s0 === a && s1 === b)); if (i < 0) { keep.push([a, b]); return; }
+      const [s0, s1] = keep[i], parts = []; if (at > s0) parts.push([s0, at]); parts.push([a, b]); if (s1 > at) parts.push([at, s1]); keep.splice(i, 1, ...parts); });
+    return keep;
   }
   function render(x, cfg) {
     const dur = x.length / SR, segs = segmentsOf(cfg.edits, dur), y0 = Float32Array.from(x);
@@ -47,16 +55,17 @@ const AudioTab = (() => {
   function srcRanges(segs, t0, t1) { const out = []; let acc = 0; for (const [a, b] of segs) { const d = b - a, s0 = Math.max(t0, acc), s1 = Math.min(t1, acc + d); if (s1 > s0) out.push([a + s0 - acc, a + s1 - acc]); acc += d; } return out; }
 
   /* ---------- the workspace state that is not part of the clip ---------- */
-  const W = { cfg: null, changed: null, root: null, before: false, view: 'wave', sel: null, head: 0, t0: 0, t1: 0, out: null, outBefore: null, status: '', progress: 0, rec: null, ac: null, srcNode: null, playAt: 0, playFrom: 0, playing: false, raf: 0 };
+  const W = { cfg: null, changed: null, root: null, before: false, removed: false, clip: null, outRes: null, view: 'wave', sel: null, head: 0, t0: 0, t1: 0, out: null, outBefore: null, status: '', progress: 0, rec: null, ac: null, srcNode: null, playAt: 0, playFrom: 0, playing: false, raf: 0 };
   let renderJob = 0, renderTimer = null;
-  function outDur() { const o = W.before ? W.outBefore : W.out; return o ? o.y.length / SR : 0; }
+  const cur = () => W.before ? W.outBefore : W.removed && W.outRes ? W.outRes : W.out;
+  function outDur() { const o = cur(); return o ? o.y.length / SR : 0; }
   async function rebuild() {
     const cfg = W.cfg; if (!cfg || !cfg.src) { W.out = W.outBefore = null; draw(); return; } const job = ++renderJob;
     try {
       const x = await loadRaw(cfg.src); if (job !== renderJob) return; W.outBefore = render(x, cfg);
       if (!W.out || W.out.key !== cleanKey(cfg) + JSON.stringify(cfg.edits)) {
         setStatus('Working…', 0); const y = await processed(cfg, (q, s) => { if (job === renderJob) setStatus(s || 'Working…', q); }); if (job !== renderJob) return;
-        W.out = Object.assign(render(y, cfg), { key: cleanKey(cfg) + JSON.stringify(cfg.edits) }); setStatus('', 1);
+        W.out = Object.assign(render(y, cfg), { key: cleanKey(cfg) + JSON.stringify(cfg.edits) }); W.outRes = proc.res && proc.key === cleanKey(cfg) ? render(proc.res, cfg) : null; setStatus('', 1);
       }
       const d = outDur(); if (!(W.t1 > W.t0) || W.t1 > d + 0.01 || W.t0 >= d) { W.t0 = 0; W.t1 = d; } W.head = Math.min(W.head, d); specCache.key = ''; draw(); panelInfo();
     } catch (e) { setStatus(e.message || String(e), 0); }
@@ -69,7 +78,7 @@ const AudioTab = (() => {
   function stop() { if (W.srcNode) { try { W.srcNode.onended = null; W.srcNode.stop(); } catch (e) { } W.srcNode = null; } if (W.playing) W.head = nowT(); W.playing = false; cancelAnimationFrame(W.raf); drawHead(); syncPlayBtn(); }
   const nowT = () => W.playing && W.ac ? Math.min(outDur(), W.playFrom + (W.ac.currentTime - W.playAt)) : W.head;
   function play(from) {
-    const o = W.before ? W.outBefore : W.out; if (!o) return; stop(); const ac = ctx(); if (ac.state === 'suspended') ac.resume();
+    const o = cur(); if (!o) return; stop(); const ac = ctx(); if (ac.state === 'suspended') ac.resume();
     const end = W.sel ? W.sel[1] : outDur(); let t = from != null ? from : (W.sel && (W.head < W.sel[0] || W.head >= W.sel[1]) ? W.sel[0] : W.head); if (t >= end - 0.01) t = W.sel ? W.sel[0] : 0;
     const b = ac.createBuffer(1, o.y.length, SR); b.copyToChannel(o.y, 0); const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination);
     s.start(0, t, Math.max(0.01, end - t)); W.srcNode = s; W.playAt = ac.currentTime; W.playFrom = t; W.playing = true; s.onended = () => { if (W.srcNode === s) { W.playing = false; W.head = W.sel ? W.sel[0] : Math.min(outDur(), end); W.srcNode = null; drawHead(); syncPlayBtn(); } };
@@ -84,7 +93,7 @@ const AudioTab = (() => {
     const cv = W.root && W.root.querySelector('.au-wave'); if (!cv) return; const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(10, cv.clientWidth), h = Math.max(10, cv.clientHeight);
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = '#0a1120'; g.fillRect(0, 0, w, h);
-    const o = W.before ? W.outBefore : W.out, rul = 22; if (!o) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '16px Archivo, sans-serif'; g.textAlign = 'center'; g.fillText(W.cfg && W.cfg.src ? (W.status || 'Reading the recording…') : 'Open a recording, or record one, to start', w / 2, h / 2); return; }
+    const o = cur(), rul = 22; if (!o) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '16px Archivo, sans-serif'; g.textAlign = 'center'; g.fillText(W.cfg && W.cfg.src ? (W.status || 'Reading the recording…') : 'Open a recording, or record one, to start', w / 2, h / 2); return; }
     const d = o.y.length / SR, t0 = W.t0, t1 = Math.max(W.t0 + 0.01, W.t1), X = t => (t - t0) / (t1 - t0) * w, mid = rul + (h - rul) / 2, amp = (h - rul) / 2 - 6;
     // the ruler
     g.fillStyle = '#0d1628'; g.fillRect(0, 0, w, rul); g.fillStyle = 'rgba(255,255,255,0.55)'; g.font = '11px Archivo, sans-serif'; g.textAlign = 'left';
@@ -101,7 +110,7 @@ const AudioTab = (() => {
       g.fillStyle = 'rgba(255,255,255,0.5)'; [[100, '100 Hz'], [1000, '1 kHz'], [5000, '5 kHz']].forEach(([f, l]) => { const y = rul + (h - rul) * (1 - Math.log(f / 40) / Math.log(16000 / 40)); g.fillRect(0, y, 6, 1); g.fillText(l, 8, y + 4); });
     } else {
       const cols = Math.round(w), i0 = Math.floor(t0 * SR), i1 = Math.min(o.y.length, Math.ceil(t1 * SR)), pk = AudioFX.peaks(o.y.subarray(i0, Math.max(i0 + 1, i1)), cols);
-      g.fillStyle = W.before ? '#8a93a8' : '#4fd1a5'; for (let c = 0; c < cols; c++) { const lo = pk[c * 2], hi = pk[c * 2 + 1]; g.fillRect(c, mid - hi * amp, 1, Math.max(1, (hi - lo) * amp)); }
+      g.fillStyle = W.before ? '#8a93a8' : W.removed ? '#e0805a' : '#4fd1a5'; for (let c = 0; c < cols; c++) { const lo = pk[c * 2], hi = pk[c * 2 + 1]; g.fillRect(c, mid - hi * amp, 1, Math.max(1, (hi - lo) * amp)); }
       g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, mid, w, 1);
     }
     // where the cuts are (joins in the edited sound)
@@ -116,7 +125,7 @@ const AudioTab = (() => {
     const info = W.root.querySelector('.au-time'); if (info && W.playing) info.textContent = fmt(t) + ' / ' + fmt(outDur());
   }
   function overview() {
-    const cv = W.root && W.root.querySelector('.au-over'); if (!cv) return; const o = W.before ? W.outBefore : W.out; if (!o) return; const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const cv = W.root && W.root.querySelector('.au-over'); if (!cv) return; const o = cur(); if (!o) return; const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = '#0d1628'; g.fillRect(0, 0, w, h); const pk = AudioFX.peaks(o.y, Math.round(w)), d = o.y.length / SR; g.fillStyle = '#3a6a8a';
     for (let c = 0; c < w; c++) { const lo = pk[c * 2], hi = pk[c * 2 + 1]; g.fillRect(c, h / 2 - hi * h / 2, 1, Math.max(1, (hi - lo) * h / 2)); }
     g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(W.t0 / d * w + 0.5, 1, Math.max(3, (W.t1 - W.t0) / d * w), h - 2);
@@ -138,16 +147,27 @@ const AudioTab = (() => {
       edit(c => { ps.forEach(([a, b]) => { if (a < 0.05 || b > dur - 0.05) return; const keep = 0.35, m0 = a + keep / 2, m1 = b - keep / 2; if (m1 - m0 < 0.1) return; if (!segs.some(([s0, s1]) => m0 >= s0 && m1 <= s1)) return; c.edits.push({ k: 'del', a: r3(m0), b: r3(m1) }); n++; saved += m1 - m0; }); });
       say(n ? 'Tightened ' + n + ' long pause' + (n > 1 ? 's' : '') + ', ' + saved.toFixed(1) + ' s shorter.' : 'No long pauses to tighten.'); },
     reset() { edit(c => { c.edits = []; }, 'All the cuts and edits taken off (the clean up stays).'); W.sel = null; },
+    copy() { if (!needSel()) return; const o = W.out || W.outBefore; W.clip = srcRanges(o.segs, W.sel[0], W.sel[1]).map(([x, y]) => [r3(x), r3(y)]); say('Copied ' + (W.sel[1] - W.sel[0]).toFixed(2) + ' s. Put the playhead where it goes and press Paste (Ctrl+V).'); },
+    cut() { if (!needSel()) return; ACT.copy(); ACT.del(); say('Cut ' + W.clip.reduce((s, [a, b]) => s + b - a, 0).toFixed(2) + ' s. Put the playhead where it goes and press Paste (Ctrl+V).'); },
+    paste() { if (!W.clip || !W.clip.length) { say('Copy or cut a part first.'); return; } const t = W.head; edit((c, segs) => { const at = r3(toSrc(segs, t)); W.clip.slice().reverse().forEach(([a, b]) => c.edits.push({ k: 'ins', a, b, at })); }, 'Pasted at ' + fmt(t) + '.'); },
+    amplify() { if (!needSel()) return; const v = prompt('Amplify by how many dB? (minus to make it quieter)', '3'); if (v == null) return; const db = cl(parseFloat(v) || 0, -40, 24); if (!db) return; const [a, b] = W.sel; edit((c, segs) => { srcRanges(segs, a, b).forEach(([x, y]) => c.edits.push({ k: 'gain', a: r3(x), b: r3(y), db })); }, (db > 0 ? 'Louder by ' : 'Quieter by ') + Math.abs(db) + ' dB.'); },
+    normalise() { const o = W.out; if (!o) return; const [a, b] = W.sel && W.sel[1] - W.sel[0] > 0.005 ? W.sel : [0, outDur()]; let pk = 0; for (let i = Math.floor(a * SR); i < Math.min(o.y.length, Math.ceil(b * SR)); i++) pk = Math.max(pk, Math.abs(o.y[i]));
+      if (pk < 1e-5) { say('That part is silent.'); return; } const db = Math.round((20 * Math.log10(0.891 / pk)) * 10) / 10; if (Math.abs(db) < 0.1) { say('Already as loud as it can go without clipping.'); return; }
+      edit((c, segs) => { srcRanges(segs, a, b).forEach(([x, y]) => c.edits.push({ k: 'gain', a: r3(x), b: r3(y), db })); }, 'Normalised: loudest peak now at -1 dB (' + (db > 0 ? '+' : '') + db + ' dB).'); },
   };
   async function learnNoise() {
     if (!needSel()) return; const cfg = W.cfg, x = await loadRaw(cfg.src), segs = segmentsOf(cfg.edits, x.length / SR), r = srcRanges(segs, W.sel[0], W.sel[1]); if (!r.length) return;
     const long = r.reduce((m, q) => q[1] - q[0] > m[1] - m[0] ? q : m, r[0]), pre = preNR(x, cfg.clean), prof = AudioFX.profile(pre, SR, long[0], long[1]); if (!prof) return;
-    cfg.clean.nr = Object.assign({ reduce: 12, sens: 6, smooth: 3 }, cfg.clean.nr || {}, { on: true, profile: prof }); W.changed(true); say('Noise learned from ' + (long[1] - long[0]).toFixed(2) + ' s. It is now taken out of the whole recording.' + (long[1] - long[0] < 0.25 ? ' A longer quiet bit (half a second or more) learns it better.' : ''));
+    cfg.clean.nr = Object.assign({ reduce: 12, sens: 6, smooth: 3 }, cfg.clean.nr || {}, { on: true, profile: prof }); if (cfg.clean.ai) cfg.clean.ai.on = false; W.changed(true); say('Noise learned from ' + (long[1] - long[0]).toFixed(2) + ' s. It is now taken out of the whole recording.' + (long[1] - long[0] < 0.25 ? ' A longer quiet bit (half a second or more) learns it better.' : ''));
   }
+  /* One press: rumble cut, hum only if there is some, ONE noise remover (the AI when it is downloaded, else the Audacity
+     style one at Audacity's gentle 12 dB), a light voice EQ, light de-essing, gentle compression and loudness for video.
+     He found the old version (two removers at full strength) horrendous: this keeps the voice natural and a little room. */
   async function cleanMyVoice() {
-    const cfg = W.cfg; if (!cfg || !cfg.src) return; const x = await loadRaw(cfg.src), pre = preNR(x, Object.assign({}, cfg.clean, { rumble: true, hum: true })), q = AudioFX.quietest(pre, SR, 0.5), prof = AudioFX.profile(pre, SR, q[0], q[1]);
-    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: true, declick: true, nr: { on: true, reduce: 15, sens: 6, smooth: 3, profile: prof }, deess: 0.4, level: 0.4, loud: -16 }); W.changed(true);
-    say('Cleaned: rumble and mains hum cut, the noise learned from the quietest half second (' + fmt(q[0]) + ') and taken out, clicks fixed, S sounds softened, evened out, and set to a good loudness. Press Before to hear the difference.');
+    const cfg = W.cfg; if (!cfg || !cfg.src) return; const x = await loadRaw(cfg.src), pre = preNR(x, Object.assign({}, cfg.clean, { rumble: true, hum: false })), q = AudioFX.quietest(pre, SR, 0.5), prof = AudioFX.profile(pre, SR, q[0], q[1]), humOn = AudioFX.hasHum(prof);
+    const ai = typeof DeepFilter !== 'undefined' && (await DeepFilter.check()) === 'ready';
+    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: humOn, declick: false, ai: { on: ai, atten: 20 }, nr: { on: !ai, reduce: 12, sens: 6, smooth: 3, profile: prof }, eq: Object.assign(CLEAN0().eq, { on: true }), deess: 0.3, comp: 0.4, level: 0, loud: -16 }); W.changed(true);
+    say('Cleaned: rumble cut' + (humOn ? ', mains hum taken out' : '') + ', ' + (ai ? 'background noise taken down with the AI voice cleaner (natural)' : 'background noise turned down 12 dB (learned from the quietest half second at ' + fmt(q[0]) + '; get the AI voice cleaner for better results)') + ', a light voice EQ, S sounds softened, gently compressed and set to a good loudness. Press Before to hear the difference, or Removed to hear only what was taken out.');
   }
 
   /* ---------- the mouse on the waveform: drag to choose, click to place the playhead, wheel to zoom ---------- */
@@ -188,20 +208,25 @@ const AudioTab = (() => {
   /* ---------- the panels ---------- */
   function form(root0, cfg, changed) {
     const { H, card, field, btn, sel } = UI;
-    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.ai = Object.assign(CLEAN0().ai, cfg.clean.ai || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
+    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.ai = Object.assign(CLEAN0().ai, cfg.clean.ai || {}); cfg.clean.eq = Object.assign(CLEAN0().eq, cfg.clean.eq || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
     let ws = document.getElementById('audioWs'); if (!ws) { ws = H('div', { id: 'audioWs' }); document.querySelector('main').append(ws); }
     W.root = ws; ws.innerHTML = ''; const C = cfg.clean;
     const fileIn = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm,.mp4,.mov' }); fileIn.style.display = 'none'; fileIn.addEventListener('change', () => { const f = fileIn.files && fileIn.files[0]; if (f) useFile(f); fileIn.value = ''; });
     const seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
     const slider = (label, val, min, max, step, fn, show) => { const out = H('span', { className: 'au-val', textContent: show(val) }); return H('label', { className: 'field au-sl' }, H('span', { className: 'lab' }, label, out), H('input', { type: 'range', min, max, step, value: val, on: { input: e => { out.textContent = show(+e.target.value); }, change: e => { fn(+e.target.value); W.changed(true); } } })); };
-    const ab = (on) => H('button', { type: 'button', className: 'au-ab' + (W.before === on ? ' on' : ''), textContent: on ? 'Before' : 'After', title: on ? 'Hear it as recorded (with your cuts)' : 'Hear it cleaned up', on: { click: () => { const t = nowT(), was = W.playing; W.before = on; specCache.key = ''; ws.querySelectorAll('.au-ab').forEach((b, i) => b.classList.toggle('on', (i === 0) === on)); draw(); if (was) play(t); } } });
+    // Before, After, and Removed (only what the noise removal took away: there should be no words in it)
+    const mode = () => W.before ? 'b' : W.removed ? 'r' : 'a';
+    const ab = m => H('button', { type: 'button', className: 'au-ab' + (mode() === m ? ' on' : ''), 'data-m': m, textContent: { b: 'Before', a: 'After', r: 'Removed' }[m], title: { b: 'Hear it as recorded, with your cuts (B swaps)', a: 'Hear it cleaned up (B swaps)', r: 'Hear only what the noise removal takes out. If you can hear words in it, turn the noise removal down.' }[m],
+      on: { click: () => setMode(m) } });
+    W.setMode = m => { if (m === 'r' && !W.outRes) { say('Turn on noise removal first; then Removed lets you hear what it takes out.'); return; } const t = nowT(), was = W.playing; W.before = m === 'b'; W.removed = m === 'r'; specCache.key = ''; ws.querySelectorAll('.au-ab').forEach(b => b.classList.toggle('on', b.dataset.m === m)); draw(); if (was) play(Math.min(t, outDur())); };
+    const setMode = m => W.setMode(m);
     // the top bar
     ws.append(H('div', { className: 'au-bar' },
       H('div', { className: 'au-name', textContent: cfg.src ? (cfg.name || 'Recording') : 'No recording yet' }),
       btn('Open a recording', () => fileIn.click()), H('button', { type: 'button', className: 'au-rec', textContent: '● Record', on: { click: record } }), fileIn,
       H('span', { className: 'au-sp' }),
       H('button', { type: 'button', className: 'au-play primary', textContent: '▶ Play', title: 'Play or pause (Space)', on: { click: toggle } }),
-      H('div', { className: 'au-abw' }, ab(true), ab(false)),
+      H('div', { className: 'au-abw' }, ab('b'), ab('a'), ab('r')),
       H('span', { className: 'au-time' }),
       H('span', { className: 'au-sp' }),
       seg(W.view, [['wave', 'Waveform'], ['spec', 'Frequencies']], v => { W.view = v; ws.querySelectorAll('.au-bar .st-seg button').forEach(b => b.classList.toggle('on', b.textContent === (v === 'wave' ? 'Waveform' : 'Frequencies'))); draw(); }),
@@ -209,25 +234,30 @@ const AudioTab = (() => {
     const waveBox = H('div', { className: 'au-wbox' }, H('canvas', { className: 'au-wave', 'aria-label': 'The recording: drag to choose a part, click to place the playhead' }), H('canvas', { className: 'au-head' }));
     const overCv = H('canvas', { className: 'au-over', title: 'The whole recording: click to jump there' });
     overCv.addEventListener('pointerdown', ev => { const r = overCv.getBoundingClientRect(), d = outDur(), span = W.t1 - W.t0, c = (ev.clientX - r.left) / r.width * d; W.t0 = cl(c - span / 2, 0, Math.max(0, d - span)); W.t1 = W.t0 + span; draw(); });
-    const edits = H('div', { className: 'au-edits' }, H('span', { className: 'lab' }, 'Selection'), btn('Cut out', ACT.del), btn('Make quiet', ACT.sil), btn('Keep only this', ACT.keep), btn('Fade in', ACT.fin), btn('Fade out', ACT.fout), btn('Louder', ACT.louder), btn('Quieter', ACT.quieter),
-      H('span', { className: 'au-sp' }), btn('Tighten long pauses', ACT.tighten), cfg.edits.length ? btn('Undo all cuts', ACT.reset) : '');
+    const tb = (l, f, tip) => { const b = btn(l, f); b.title = tip; return b; };
+    const edits = H('div', { className: 'au-edits' }, H('span', { className: 'lab' }, 'Selection'), tb('Cut out', ACT.del, 'Delete: take it out and close the gap'), tb('Cut', ACT.cut, 'Ctrl+X: take it out, ready to paste somewhere else'), tb('Copy', ACT.copy, 'Ctrl+C'), tb('Paste', ACT.paste, 'Ctrl+V: put what you copied at the playhead'),
+      tb('Make quiet', ACT.sil, 'Silence it, keeping the length'), tb('Keep only this', ACT.keep, 'Cut out everything else'), tb('Fade in', ACT.fin, ''), tb('Fade out', ACT.fout, ''), tb('Amplify…', ACT.amplify, 'Louder or quieter by an exact number of dB'), tb('Normalise', ACT.normalise, 'Make the loudest peak -1 dB (the selection, or everything when nothing is selected)'),
+      H('span', { className: 'au-sp' }), tb('Tighten long pauses', ACT.tighten, 'Shortens pauses longer than 0.7 s'), cfg.edits.length ? tb('Undo all cuts', ACT.reset, 'Takes every cut and edit off (the clean up stays). Ctrl+Z undoes one at a time.') : '');
     const left = H('div', { className: 'au-main' }, waveBox, overCv, edits, H('div', { className: 'au-foot' }, H('span', { className: 'au-status' }), H('span', { className: 'au-say', 'aria-live': 'polite' })));
     // the clean up panel
     const nr = C.nr, prof = nr.profile;
     const side = H('div', { className: 'au-side' },
       card('Clean up', H('button', { type: 'button', className: 'primary au-big', textContent: '✨ Clean my voice', title: 'Cuts rumble and hum, learns the noise from the quietest bit and takes it out, fixes clicks, softens S sounds, evens it out and sets the loudness', on: { click: cleanMyVoice } }),
         H('p', { className: 'hint', textContent: 'One press does the lot. Then fine tune below, and use Before and After to hear the difference.' })),
-      card('Background noise', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
+      card('AI voice cleaner', aiBox(C)),
+      card('Background noise, Audacity style', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
         H('div', { className: 'btnrow' }, btn('Learn noise from the selection', learnNoise, prof ? '' : 'primary'), prof ? btn(nr.on ? 'Turn off' : 'Turn on', () => { nr.on = !nr.on; W.changed(true); }) : ''),
         ...(prof ? [slider('Turn the noise down by', nr.reduce, 3, 36, 1, v => { nr.reduce = v; }, v => v + ' dB'), slider('Sensitivity', nr.sens, 0, 18, 0.5, v => { nr.sens = v; }, v => v + ' dB'), slider('Smoothing', nr.smooth, 0, 8, 1, v => { nr.smooth = v; }, v => v + ' bands')] : []),
-        field('AI noise removal (RNNoise)', seg(C.ai.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.ai.on = v === '1'; W.changed(true); }), 'Trained on real voices and noise, the kind video calls use. Stronger on hiss, fans and traffic; can dull the voice a touch. Works with or without the learned noise.'),
-        ...(C.ai.on ? [slider('AI strength', C.ai.amount == null ? 1 : C.ai.amount, 0.2, 1, 0.05, v => { C.ai.amount = v; }, v => Math.round(v * 100) + '%')] : [])),
+        H('p', { className: 'hint', textContent: 'Used when the AI voice cleaner is off. Press Removed at the top to hear exactly what it takes out.' })),
+      card('Voice', field('Voice EQ', seg(C.eq.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.eq.on = v === '1'; W.changed(true); }), 'A little less boxiness, a little more presence and air.'),
+        ...(C.eq.on ? [slider('Boom (120 Hz)', C.eq.low, -6, 6, 0.5, v => { C.eq.low = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Boxiness (320 Hz)', C.eq.mud, -8, 4, 0.5, v => { C.eq.mud = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Presence (3.5 kHz)', C.eq.pres, -4, 8, 0.5, v => { C.eq.pres = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Air (10 kHz and up)', C.eq.air, -4, 8, 0.5, v => { C.eq.air = v; }, v => (v > 0 ? '+' : '') + v + ' dB')] : []),
+        slider('Compressor (punch, even level)', C.comp || 0, 0, 1, 0.05, v => { C.comp = v; }, v => v ? Math.round(v * 100) + '%' : 'Off')),
       card('Tidy up',
         field('Rumble (traffic, desk knocks)', seg(C.rumble !== false ? '1' : '0', [['1', 'Cut'], ['0', 'Keep']], v => { C.rumble = v === '1'; W.changed(true); })),
         field('Mains hum', seg(C.hum ? '1' : '0', [['1', 'Take out (50 Hz)'], ['0', 'Leave']], v => { C.hum = v === '1'; W.changed(true); })),
         field('Clicks and pops', seg(C.declick ? '1' : '0', [['1', 'Fix'], ['0', 'Leave']], v => { C.declick = v === '1'; W.changed(true); })),
         slider('Soften harsh S sounds', C.deess || 0, 0, 1, 0.05, v => { C.deess = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
-        slider('Even out loud and quiet bits', C.level || 0, 0, 1, 0.05, v => { C.level = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
+        slider('Slow leveller (long changes in level)', C.level || 0, 0, 1, 0.05, v => { C.level = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
         field('Loudness', sel(C.loud == null ? '' : String(C.loud), [['', 'As recorded'], ['-16', 'Voice for video (-16 LUFS)'], ['-14', 'YouTube loud (-14 LUFS)'], ['-19', 'Quieter (-19 LUFS)']], v => { C.loud = v === '' ? null : +v; W.changed(true); }, 'Loudness'))),
       card('Send it on', H('div', { className: 'btnrow' }, btn('Use as my character’s voice', () => send('char'), 'primary'), btn('Add to the video', () => send('video')), btn('Save as WAV', () => send('wav'))),
         H('p', { className: 'hint', textContent: 'Sends the cleaned, edited sound. The recording itself is never changed.' })));
@@ -235,11 +265,28 @@ const AudioTab = (() => {
     wire(waveBox.querySelector('.au-wave')); paintRecBtn(); syncPlayBtn(); requestAnimationFrame(() => { draw(); panelInfo(); }); later();
     if (!W._ro) { W._ro = new ResizeObserver(() => { if (document.body.classList.contains('aud')) draw(); }); } W._ro.disconnect(); W._ro.observe(waveBox);
   }
+  /* The AI voice cleaner (DeepFilterNet 3): download once, then on or off and how much it may take away */
+  function aiBox(C) {
+    const { H, btn, field } = UI, box = H('div', {}), seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
+    const draw2 = st => { box.innerHTML = '';
+      box.append(H('p', { className: 'hint', textContent: 'DeepFilterNet 3, the best free voice cleaner there is: far more natural than the old one. It takes out fans, traffic, hiss and room noise and leaves your voice alone. Runs on this computer.' }));
+      if (st !== 'ready') { const b = btn('Get the AI voice cleaner (about 30 MB, once)', async () => { b.disabled = true; try { await DeepFilter.download(q => { b.textContent = 'Downloading ' + Math.round(q * 100) + '%'; }); draw2('ready'); say('The AI voice cleaner is ready. Turn it on, or press Clean my voice.'); } catch (e) { b.disabled = false; b.textContent = 'Try the download again'; say(e.message || String(e)); } }, 'primary'); box.append(H('div', { className: 'btnrow' }, b)); return; }
+      box.append(field('AI voice cleaner', seg(C.ai.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.ai.on = v === '1'; if (C.ai.on && C.nr) C.nr.on = false; W.changed(true); }), 'When it is on, the Audacity style remover above is not used: one remover at a time sounds best.'));
+      if (C.ai.on) box.append(field('How much it takes away', seg(String(C.ai.atten == null ? 20 : C.ai.atten), [['12', 'Gentle'], ['20', 'Natural'], ['30', 'Strong'], ['100', 'Everything']], v => { C.ai.atten = +v; W.changed(true); }), 'Natural keeps a touch of the room so it does not sound vacuum sealed. Everything is for very noisy recordings.'));
+    };
+    draw2(typeof DeepFilter !== 'undefined' ? DeepFilter.state : 'none'); if (typeof DeepFilter !== 'undefined' && DeepFilter.state === 'unknown') DeepFilter.check().then(draw2);
+    return box;
+  }
   function panelInfo() { const o = W.out; if (!o || !W.root) return; const n = W.root.querySelector('.au-name'); if (n) n.title = 'Loudness now about ' + AudioFX.lufs(o.y.length > SR * 120 ? o.y.subarray(0, SR * 120) : o.y, SR).toFixed(1) + ' LUFS'; }
   // keys while the tab is open: Space plays, Delete cuts out the selection, arrows nudge the playhead
   function key(e) {
     if (e.code === 'Space') { e.preventDefault(); toggle(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && W.sel) { e.preventDefault(); ACT.del(); return true; }
+    const ctl = e.ctrlKey || e.metaKey, k = (e.key || '').toLowerCase();
+    if (ctl && k === 'c' && W.sel) { e.preventDefault(); ACT.copy(); return true; }
+    if (ctl && k === 'x' && W.sel) { e.preventDefault(); ACT.cut(); return true; }
+    if (ctl && k === 'v' && W.clip) { e.preventDefault(); ACT.paste(); return true; }
+    if (!ctl && k === 'b' && W.setMode) { e.preventDefault(); W.setMode(W.before ? 'a' : 'b'); return true; }
     if (e.key === 'Escape' && W.sel) { W.sel = null; draw(); return true; }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); W.head = cl(nowT() + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 0.5), 0, outDur()); if (W.playing) play(W.head); else draw(); return true; }
     return false;

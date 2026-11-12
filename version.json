@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.12.12",
+  "version": "2026.11.12.13",
   "file": "app/patter-studio.html",
-  "notes": "Professional transitions: whoosh, whip pan, zoom punch, spin blur, smash cut, glitch, stretch swipe, slide over, light leak, film burn, ink splat"
+  "notes": "Audio tab: DeepFilterNet 3 AI voice cleaner, one remover at a time, voice EQ, compressor, hear what is removed, cut copy paste, amplify, normalise"
 }

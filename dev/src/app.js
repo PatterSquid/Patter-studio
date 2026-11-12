@@ -294,7 +294,7 @@
     if (ctrl && k === 's') { e.preventDefault(); autosave('version').then(() => say('Saved, with a version kept in History.')); return; }
     if (ctrl && k === 'e') { e.preventDefault(); exportNow(true); return; }
     if (typing) return;
-    if (state.module === 'audio' && typeof AudioTab !== 'undefined' && !ctrl && AudioTab.key(e)) return;
+    if (state.module === 'audio' && typeof AudioTab !== 'undefined' && (!ctrl || /^[cxv]$/i.test(e.key)) && AudioTab.key(e)) return;   // its own copy, cut and paste too
     if (state.module === 'thumb' && typeof Thumb !== 'undefined') { if (Thumb.key(e)) { e.preventDefault(); return; } if (e.code === 'Space') return; }
     if (e.code === 'Space') { e.preventDefault(); player.toggle(); return; }
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
