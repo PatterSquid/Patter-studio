@@ -6,7 +6,7 @@
 const AudioTab = (() => {
   const SR = 48000, MAXS = 30 * 60;
   const cl = (v, a, b) => v < a ? a : v > b ? b : v, r3 = v => Math.round(v * 1000) / 1000;
-  const CLEAN0 = () => ({ rumble: true, hum: false, humHz: 50, declick: false, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, ai: { on: false, atten: 20 }, eq: { on: false, low: 0, mud: -2, pres: 2, air: 1.5 }, deess: 0, comp: 0, level: 0, loud: null });
+  const CLEAN0 = () => ({ rumble: true, hum: false, humHz: 50, declick: false, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, eq: { on: false, low: 0, mud: -2, pres: 2, air: 1.5 }, deess: 0, comp: 0, level: 0, loud: null });
   const defaults = () => ({ v: 1, src: '', name: '', clean: CLEAN0(), edits: [] });
   const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), x = s - m * 60; return m + ':' + (x < 10 ? '0' : '') + x.toFixed(2); };
 
@@ -158,16 +158,14 @@ const AudioTab = (() => {
   async function learnNoise() {
     if (!needSel()) return; const cfg = W.cfg, x = await loadRaw(cfg.src), segs = segmentsOf(cfg.edits, x.length / SR), r = srcRanges(segs, W.sel[0], W.sel[1]); if (!r.length) return;
     const long = r.reduce((m, q) => q[1] - q[0] > m[1] - m[0] ? q : m, r[0]), pre = preNR(x, cfg.clean), prof = AudioFX.profile(pre, SR, long[0], long[1]); if (!prof) return;
-    cfg.clean.nr = Object.assign({ reduce: 12, sens: 6, smooth: 3 }, cfg.clean.nr || {}, { on: true, profile: prof }); if (cfg.clean.ai) cfg.clean.ai.on = false; W.changed(true); say('Noise learned from ' + (long[1] - long[0]).toFixed(2) + ' s. It is now taken out of the whole recording.' + (long[1] - long[0] < 0.25 ? ' A longer quiet bit (half a second or more) learns it better.' : ''));
+    cfg.clean.nr = Object.assign({ reduce: 12, sens: 6, smooth: 3 }, cfg.clean.nr || {}, { on: true, profile: prof }); W.changed(true); say('Noise learned from ' + (long[1] - long[0]).toFixed(2) + ' s. It is now taken out of the whole recording.' + (long[1] - long[0] < 0.25 ? ' A longer quiet bit (half a second or more) learns it better.' : ''));
   }
-  /* One press: rumble cut, hum only if there is some, ONE noise remover (the AI when it is downloaded, else the Audacity
-     style one at Audacity's gentle 12 dB), a light voice EQ, light de-essing, gentle compression and loudness for video.
-     He found the old version (two removers at full strength) horrendous: this keeps the voice natural and a little room. */
+  /* One press: rumble cut, hum only if there is some, the noise learned from the quietest half second and turned down by
+     Audacity's gentle 12 dB, a light voice EQ, light de-essing, gentle compression and loudness for video. */
   async function cleanMyVoice() {
     const cfg = W.cfg; if (!cfg || !cfg.src) return; const x = await loadRaw(cfg.src), pre = preNR(x, Object.assign({}, cfg.clean, { rumble: true, hum: false })), q = AudioFX.quietest(pre, SR, 0.5), prof = AudioFX.profile(pre, SR, q[0], q[1]), humOn = AudioFX.hasHum(prof);
-    const ai = typeof DeepFilter !== 'undefined' && (await DeepFilter.check()) === 'ready';
-    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: humOn, declick: false, ai: { on: ai, atten: 20 }, nr: { on: !ai, reduce: 12, sens: 6, smooth: 3, profile: prof }, eq: Object.assign(CLEAN0().eq, { on: true }), deess: 0.3, comp: 0.4, level: 0, loud: -16 }); W.changed(true);
-    say('Cleaned: rumble cut' + (humOn ? ', mains hum taken out' : '') + ', ' + (ai ? 'background noise taken down with the AI voice cleaner (natural)' : 'background noise turned down 12 dB (learned from the quietest half second at ' + fmt(q[0]) + '; get the AI voice cleaner for better results)') + ', a light voice EQ, S sounds softened, gently compressed and set to a good loudness. Press Before to hear the difference, or Removed to hear only what was taken out.');
+    cfg.clean = Object.assign(CLEAN0(), { rumble: true, hum: humOn, declick: false, nr: { on: true, reduce: 12, sens: 6, smooth: 3, profile: prof }, eq: Object.assign(CLEAN0().eq, { on: true }), deess: 0.3, comp: 0.4, level: 0, loud: -16 }); W.changed(true);
+    say('Cleaned: rumble cut' + (humOn ? ', mains hum taken out' : '') + ', background noise turned down 12 dB (learned from the quietest half second, at ' + fmt(q[0]) + '), a light voice EQ, S sounds softened, gently compressed and set to a good loudness. Press Before to hear the difference, or Removed to hear only what was taken out.');
   }
 
   /* ---------- the mouse on the waveform: drag to choose, click to place the playhead, wheel to zoom ---------- */
@@ -208,7 +206,7 @@ const AudioTab = (() => {
   /* ---------- the panels ---------- */
   function form(root0, cfg, changed) {
     const { H, card, field, btn, sel } = UI;
-    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.ai = Object.assign(CLEAN0().ai, cfg.clean.ai || {}); cfg.clean.eq = Object.assign(CLEAN0().eq, cfg.clean.eq || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
+    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.eq = Object.assign(CLEAN0().eq, cfg.clean.eq || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
     let ws = document.getElementById('audioWs'); if (!ws) { ws = H('div', { id: 'audioWs' }); document.querySelector('main').append(ws); }
     W.root = ws; ws.innerHTML = ''; const C = cfg.clean;
     const fileIn = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm,.mp4,.mov' }); fileIn.style.display = 'none'; fileIn.addEventListener('change', () => { const f = fileIn.files && fileIn.files[0]; if (f) useFile(f); fileIn.value = ''; });
@@ -244,11 +242,10 @@ const AudioTab = (() => {
     const side = H('div', { className: 'au-side' },
       card('Clean up', H('button', { type: 'button', className: 'primary au-big', textContent: '✨ Clean my voice', title: 'Cuts rumble and hum, learns the noise from the quietest bit and takes it out, fixes clicks, softens S sounds, evens it out and sets the loudness', on: { click: cleanMyVoice } }),
         H('p', { className: 'hint', textContent: 'One press does the lot. Then fine tune below, and use Before and After to hear the difference.' })),
-      card('AI voice cleaner', aiBox(C)),
-      card('Background noise, Audacity style', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
+      card('Background noise', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
         H('div', { className: 'btnrow' }, btn('Learn noise from the selection', learnNoise, prof ? '' : 'primary'), prof ? btn(nr.on ? 'Turn off' : 'Turn on', () => { nr.on = !nr.on; W.changed(true); }) : ''),
         ...(prof ? [slider('Turn the noise down by', nr.reduce, 3, 36, 1, v => { nr.reduce = v; }, v => v + ' dB'), slider('Sensitivity', nr.sens, 0, 18, 0.5, v => { nr.sens = v; }, v => v + ' dB'), slider('Smoothing', nr.smooth, 0, 8, 1, v => { nr.smooth = v; }, v => v + ' bands')] : []),
-        H('p', { className: 'hint', textContent: 'Used when the AI voice cleaner is off. Press Removed at the top to hear exactly what it takes out.' })),
+        H('p', { className: 'hint', textContent: 'Press Removed at the top to hear exactly what it takes out. If you can hear words in it, turn it down.' })),
       card('Voice', field('Voice EQ', seg(C.eq.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.eq.on = v === '1'; W.changed(true); }), 'A little less boxiness, a little more presence and air.'),
         ...(C.eq.on ? [slider('Boom (120 Hz)', C.eq.low, -6, 6, 0.5, v => { C.eq.low = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Boxiness (320 Hz)', C.eq.mud, -8, 4, 0.5, v => { C.eq.mud = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Presence (3.5 kHz)', C.eq.pres, -4, 8, 0.5, v => { C.eq.pres = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Air (10 kHz and up)', C.eq.air, -4, 8, 0.5, v => { C.eq.air = v; }, v => (v > 0 ? '+' : '') + v + ' dB')] : []),
         slider('Compressor (punch, even level)', C.comp || 0, 0, 1, 0.05, v => { C.comp = v; }, v => v ? Math.round(v * 100) + '%' : 'Off')),
@@ -264,18 +261,6 @@ const AudioTab = (() => {
     ws.append(H('div', { className: 'au-body' }, left, side));
     wire(waveBox.querySelector('.au-wave')); paintRecBtn(); syncPlayBtn(); requestAnimationFrame(() => { draw(); panelInfo(); }); later();
     if (!W._ro) { W._ro = new ResizeObserver(() => { if (document.body.classList.contains('aud')) draw(); }); } W._ro.disconnect(); W._ro.observe(waveBox);
-  }
-  /* The AI voice cleaner (DeepFilterNet 3): download once, then on or off and how much it may take away */
-  function aiBox(C) {
-    const { H, btn, field } = UI, box = H('div', {}), seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
-    const draw2 = st => { box.innerHTML = '';
-      box.append(H('p', { className: 'hint', textContent: 'DeepFilterNet 3, the best free voice cleaner there is: far more natural than the old one. It takes out fans, traffic, hiss and room noise and leaves your voice alone. Runs on this computer.' }));
-      if (st !== 'ready') { const b = btn('Get the AI voice cleaner (about 30 MB, once)', async () => { b.disabled = true; try { await DeepFilter.download(q => { b.textContent = 'Downloading ' + Math.round(q * 100) + '%'; }); draw2('ready'); say('The AI voice cleaner is ready. Turn it on, or press Clean my voice.'); } catch (e) { b.disabled = false; b.textContent = 'Try the download again'; say(e.message || String(e)); } }, 'primary'); box.append(H('div', { className: 'btnrow' }, b)); return; }
-      box.append(field('AI voice cleaner', seg(C.ai.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.ai.on = v === '1'; if (C.ai.on && C.nr) C.nr.on = false; W.changed(true); }), 'When it is on, the Audacity style remover above is not used: one remover at a time sounds best.'));
-      if (C.ai.on) box.append(field('How much it takes away', seg(String(C.ai.atten == null ? 20 : C.ai.atten), [['12', 'Gentle'], ['20', 'Natural'], ['30', 'Strong'], ['100', 'Everything']], v => { C.ai.atten = +v; W.changed(true); }), 'Natural keeps a touch of the room so it does not sound vacuum sealed. Everything is for very noisy recordings.'));
-    };
-    draw2(typeof DeepFilter !== 'undefined' ? DeepFilter.state : 'none'); if (typeof DeepFilter !== 'undefined' && DeepFilter.state === 'unknown') DeepFilter.check().then(draw2);
-    return box;
   }
   function panelInfo() { const o = W.out; if (!o || !W.root) return; const n = W.root.querySelector('.au-name'); if (n) n.title = 'Loudness now about ' + AudioFX.lufs(o.y.length > SR * 120 ? o.y.subarray(0, SR * 120) : o.y, SR).toFixed(1) + ' LUFS'; }
   // keys while the tab is open: Space plays, Delete cuts out the selection, arrows nudge the playhead
