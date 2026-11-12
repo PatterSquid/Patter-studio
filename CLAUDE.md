@@ -441,6 +441,18 @@ moment later (`Intro.ensureSound`, keyed on the settings).
 * Tests: `tests/intro_video.py` (no Intro tab, Add intro, the panel edits pub and episode, sound remade, undo, double
   click, export with picture and sound).
 
+## PatterScript (his phone script writer: patterscript/, built into docs/)
+
+An installable offline web app (PWA) for writing scripts on his Android phone, separate from Patter Studio (November 2026).
+Source `patterscript/` (index.html, style.css, app.js, sw.js, manifest), `python3 patterscript/build.py` writes `docs/`
+(fonts embedded, icons from his squid logo), served by GitHub Pages from main /docs at https://pattersquid.github.io/Patter-studio/.
+Scripts live only on his phone (IndexedDB `patterscript`: scripts, versions, meta), with versions (auto on open, every 5
+minutes, before deletes and restores), a 30 day bin and backup files. Long and Short section templates (`SEC`, `TEMPLATE`)
+and a structure and pacing checker (`check`) from YouTube retention research; it never comments on the jokes (he asked).
+Cues are `[TAG]` or `[TAG: detail]`: upper case shots and edits, lower case character moves using Patter Studio's
+Character words. **Send** shares "PatterScript - title.txt": the script as written plus a JSON copy; when he sends one,
+build it as a Video tab project as above. A classic APK could not be built here (Google's Android tools are blocked).
+
 ## Packs (data only, no code)
 
 A pack is a JSON file in `packs/`: `{ format: 1, id, name, version, description, places, props, hats, actions, setpieces }`.
