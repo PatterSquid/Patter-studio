@@ -4,6 +4,8 @@
 const CutExport = (() => {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // Wait until the encoder takes a frame off its queue (its own signal: Windows timers fire late, which starved the encoder)
+  const qWait = enc => new Promise(r => { let done = false; const f = () => { if (done) return; done = true; try { enc.removeEventListener('dequeue', f); } catch (e) { } r(); }; try { enc.addEventListener('dequeue', f); } catch (e) { } setTimeout(f, 50); });
   const RES = { '720': 720, '1080': 1080, '1440': 1440, '2160': 2160 };
   const QUAL = { low: 0.07, normal: 0.12, high: 0.2, master: 0.32 };
   async function pickVideo(W, H, fps, quality) {
@@ -127,7 +129,7 @@ const CutExport = (() => {
         if (signal.aborted) throw new Error('Export cancelled.'); if (err) throw err; if (audioErr) throw audioErr;
         const src = await frameAt(i); videoT = i / fps;
         const fm = performance.now(), vf = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); release(src); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close(); R.frameMake += performance.now() - fm;
-        const ew = performance.now(); while (venc.encodeQueueSize > 6) await sleep(2); R.encodeWait += performance.now() - ew;
+        const ew = performance.now(); while (venc.encodeQueueSize > 16) await qWait(venc); R.encodeWait += performance.now() - ew;
         if (i % 3 === 0) prog(i);
       }
       R.loopEnd = performance.now(); videoT = 1e9; await venc.flush(); try { venc.close(); } catch (e) { }

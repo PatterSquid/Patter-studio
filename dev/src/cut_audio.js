@@ -161,7 +161,9 @@ const CutAudio = (() => {
   /* ---------- Encoding ---------- */
   async function pickEncoder(prefer) {
     if (typeof AudioEncoder === 'undefined') return null;
-    for (const codec of prefer === 'opus' ? ['opus', 'mp4a.40.2'] : ['mp4a.40.2', 'opus']) { const c = { codec, sampleRate: SR, numberOfChannels: 2, bitrate: codec === 'opus' ? 160000 : 256000 }; try { const r = await AudioEncoder.isConfigSupported(c); if (r.supported) return r.config; } catch (e) { } }
+    // Windows' AAC encoder only offers 96 to 192 kbps (asking for 256 made it say no and the sound fell back to Opus)
+    const tries = []; for (const codec of prefer === 'opus' ? ['opus', 'mp4a.40.2'] : ['mp4a.40.2', 'opus']) for (const bitrate of codec === 'opus' ? [160000] : [256000, 192000, 160000, 128000]) tries.push({ codec, bitrate });
+    for (const { codec, bitrate } of tries) { const c = { codec, sampleRate: SR, numberOfChannels: 2, bitrate }; try { const r = await AudioEncoder.isConfigSupported(c); if (r.supported) return r.config; } catch (e) { } }
     return null;
   }
   // Streams planar blocks in, encoded packets out (to onPacket(data, durSamples, desc))
