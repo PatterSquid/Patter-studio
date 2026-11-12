@@ -19,12 +19,19 @@ const CutExport = (() => {
   const blurN = (fps, W, H) => (Mo, cfg, L, tt) => { try { const h = Mo.blurHint ? Mo.blurHint(cfg, L, tt, fps, W, H) : null; return h ? h : 1; } catch (e) { return 1; } };
 
   /* run(cfg, look, opts): opts { fps, res, quality, range, audio (true/false), wav (true/false), png (true/false), sink, wavSink, dir, onProgress(p, info), signal, blur } */
+  /* A report of where an export's time went, for him to paste to Claude (the export window's "Copy the report") */
+  let lastReport = null;
+  const label = (cfg, look, t) => { try { const P = Video.allPlaced(cfg, look).filter(p => t >= p.t0 - 1e-9 && t < p.t0 + p.d && p.it && p.it.kind !== 'audio' && p.it.kind !== 'adjust');
+      const nm = it => it.kind === 'clip' ? (it.mod === 'intro' ? 'intro' : it.mod === 'studio' ? 'studio' : it.mod) : it.kind === 'avatar' ? 'you in the studio' : it.kind === 'media' ? ((CutMedia.info(it.asset) || {}).kind === 'image' ? 'picture' : 'footage') : it.kind; return [...new Set(P.map(p => nm(p.it)))].join(' + ') || 'blank'; } catch (e) { return '?'; } };
   async function run(cfg, look, o = {}) {
+    const R = { t: performance.now(), steps: [], parts: new Map(), helperWait: 0, pageDraw: 0, footage: 0, encodeWait: 0, frameMake: 0, audioMs: 0, finish: 0 }; lastReport = null;
+    const step = (k) => { const now = performance.now(); R.steps.push([k, now - (R.last || R.t)]); R.last = now; };
     if (document.fonts) await document.fonts.ready;
     if (typeof PatterIntro !== 'undefined' && (cfg.items || []).some(it => it && it.kind === 'intro')) { await PatterIntro.ready(); await PatterIntro.ensureSound().catch(() => null); }
     if (typeof Intro !== 'undefined') { const tabIntros = [...(cfg.items || []), ...(cfg.tracks || []).flatMap(T => (T && T.items) || [])].filter(it => it && it.kind === 'clip' && it.mod === 'intro' && it.cfg); if (tabIntros.length) { await Intro.ready(); for (const it of tabIntros) await Intro.ensureSound(it.cfg).catch(() => null); } }
     if (typeof Character !== 'undefined') for (const it of [...(cfg.items || []), ...(cfg.tracks || []).flatMap(T => (T && T.items) || [])]) if (it && it.kind === 'clip' && it.mod === 'char' && it.cfg) await Character.prepare(it.cfg).catch(() => null);
     if (typeof Studio !== 'undefined' && Studio.prepare) await Studio.prepare(cfg.studio || (Studio.hooks.cfg && Studio.hooks.cfg())).catch(() => null);
+    step('getting the intro sound, your character and the studio ready');
     const Vw = Layers.wrap(Video), base = E.dims(look.format), fps = o.fps || 30, scale = (RES[o.res] || base.H) / (look.format === '9:16' ? base.W : base.H);
     const W = Math.round(base.W * scale / 2) * 2, H = Math.round(base.H * scale / 2) * 2, dur = Vw.duration(cfg, look);
     const t0 = o.range ? cl(o.range[0], 0, dur) : 0, t1 = o.range ? cl(o.range[1], t0 + 1 / fps, dur) : dur, n = Math.max(1, Math.round((t1 - t0) * fps));
@@ -39,13 +46,14 @@ const CutExport = (() => {
     const images = new Map(); for (const id of Video.imagesUsed(cfg)) images.set(id, await CutMedia.bitmap(id));
     if (typeof Media !== 'undefined' && Video.mediaFor) await Media.ensure(Video.mediaFor(cfg));
     if (Video.needsMap(cfg) && typeof GeoData !== 'undefined') { GeoData.load(); if (GeoData.full) { say(0, 'Loading the full detail map…'); try { await GeoData.full; } catch (e) { } } }
+    step('loading your files and pictures');
     const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H }), ctx = canvas.getContext('2d', { alpha: !!lookX.transparent });
     const readers = new Map(), lastUse = new Map();
     const getFrame = async f => { let R = readers.get(f.id); if (!R) { R = await CutMedia.videoReader(f.asset); readers.set(f.id, R); } lastUse.set(f.id, performance.now()); return { img: await R.frame(f.src), rot: R.rot || 0 }; };
     const closeIdle = live => { readers.forEach((R, id) => { if (!live.has(id)) { try { R.close(); } catch (e) { } readers.delete(id); } }); };
     const drawFrame = async (i) => {
       const t = t0 + i / fps, fr = new Map(), live = new Set();
-      for (const f of Video.framesAt(cfg, lookX, t)) { live.add(f.id); fr.set(f.id, await getFrame(f)); }
+      const fa = performance.now(); for (const f of Video.framesAt(cfg, lookX, t)) { live.add(f.id); fr.set(f.id, await getFrame(f)); } R.footage += performance.now() - fa;
       if (i % 30 === 0) closeIdle(live);
       if (typeof Media !== 'undefined' && Video.mediaAt) await Media.prepare(Video.mediaAt(cfg, t, lookX));
       ctx.setTransform(1, 0, 0, 1, 0, 0); if (lookX.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
@@ -60,15 +68,17 @@ const CutExport = (() => {
       const want = o.workers > 0 ? o.workers : Render.cores();
       try { pool = await Render.cutPool(cfg, { look: lookX, W, H, bW: base.W, bH: base.H, scale, fps, blur: o.blur !== 'off', images }, want); } catch (e) { pool = null; }
       if (pool) ahead = Math.max(2, Math.min(pool.size * 3, Math.floor(240e6 / (W * H * 4))));
+      step('starting ' + (pool ? pool.size : 0) + ' helpers');
     }
     const topUp = i => { if (!pool) return; if (scan < i) scan = i;
       while (scan < n && pending.size < ahead && scan - i < fps * 20) { const k = scan++; if (!Video.pageOnlyAt(cfg, lookX, t0 + k / fps)) pending.set(k, pool.frame(t0 + k / fps).catch(() => null)); } };
     // Frame i as something to encode: a helper's ImageBitmap, or the page's own canvas
+    const part = (i, k, ms) => { const nm = label(cfg, lookX, t0 + i / fps); let e = R.parts.get(nm); if (!e) R.parts.set(nm, e = { n: 0, helper: 0, page: 0, ms: 0 }); e.n++; e[k]++; e.ms += ms; };
     const frameAt = async i => { topUp(i); const p = pending.get(i);
-      if (p) { pending.delete(i); const a = performance.now(), bmp = await p; poolMs += performance.now() - a; topUp(i + 1); if (bmp) return bmp; }
-      await drawFrame(i); return canvas; };
+      if (p) { pending.delete(i); const a = performance.now(), bmp = await p, w = performance.now() - a; poolMs += w; R.helperWait += w; topUp(i + 1); if (bmp) { part(i, 'helper', w); return bmp; } }
+      const a = performance.now(); await drawFrame(i); const d = performance.now() - a; R.pageDraw += d; part(i, 'page', d); return canvas; };
     const release = src => { if (src !== canvas && src && src.close) src.close(); };
-    const tStart = performance.now(), prog = (i, extra) => { const p = i / n, el = (performance.now() - tStart) / 1000, left = p > 0.02 ? el / p - el : 0; say(p, `Rendering ${Math.round(p * 100)}%` + (left ? `, about ${left > 90 ? Math.ceil(left / 60) + ' min' : Math.ceil(left) + ' s'} left` : '') + (extra || '')); };
+    R.loopStart = performance.now(); const tStart = R.t, prog = (i, extra) => { const p = i / n, el = (performance.now() - tStart) / 1000, left = p > 0.02 ? el / p - el : 0; say(p, `Rendering ${Math.round(p * 100)}%` + (left ? `, about ${left > 90 ? Math.ceil(left / 60) + ' min' : Math.ceil(left) + ' s'} left` : '') + (extra || '')); };
     try {
       /* PNG sequence (see through), for After Effects */
       if (o.png) {
@@ -84,6 +94,7 @@ const CutExport = (() => {
           if (i % 3 === 0) prog(i); }
         await chain;
         let wav = null; if (o.wav && CutAudio.hasSound(cfg, lookX)) wav = await wavOnly(cfg, lookX, t0, t1, Object.assign({}, o, { signal })); ok = true;
+        R.loopEnd = R.loopEnd || performance.now(); lastReport = report(R, { kind: 'PNG sequence', W, H, fps, n, dur: t1 - t0, codec: 'png', audio: wav ? 'WAV' : 'none', helpers: pool ? pool.size : 0, cores: typeof Render !== 'undefined' && Render.cores ? Render.cores() : '?', bytes: 0, quality: '', toDisk: !!o.dir });
         return { zip: zip ? zip.blob() : null, wav, frames: n, W, H, helpers: pool ? pool.size : 0, secs: (performance.now() - tStart) / 1000 };
       }
       /* MP4 */
@@ -115,11 +126,11 @@ const CutExport = (() => {
       for (let i = 0; i < n; i++) {
         if (signal.aborted) throw new Error('Export cancelled.'); if (err) throw err; if (audioErr) throw audioErr;
         const src = await frameAt(i); videoT = i / fps;
-        const vf = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); release(src); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
-        while (venc.encodeQueueSize > 6) await sleep(2);
+        const fm = performance.now(), vf = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) }); release(src); venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close(); R.frameMake += performance.now() - fm;
+        const ew = performance.now(); while (venc.encodeQueueSize > 6) await sleep(2); R.encodeWait += performance.now() - ew;
         if (i % 3 === 0) prog(i);
       }
-      videoT = 1e9; await venc.flush(); try { venc.close(); } catch (e) { }
+      R.loopEnd = performance.now(); videoT = 1e9; await venc.flush(); try { venc.close(); } catch (e) { }
       if (reorder === null) { reorder = Math.max(0, ...early.map(e => e[2] - e[1]), 0); early.splice(0).forEach(([dd, p2, d2, k2]) => vq.push([dd, 1000, p2 - d2 + reorder, k2])); vReady = true; }
       say(0.99, 'Finishing the sound…');
       if (audioTask) await audioTask; if (audioErr) throw audioErr; if (aenc) { await aenc.finish(); }
@@ -128,6 +139,7 @@ const CutExport = (() => {
       await mux.finish(); await sink.close();
       if (wavSink) { if (wavSink.patch) await wavSink.patch(0, CutAudio.wavHeader(wavFrames)); await wavSink.close(); }
       ok = true; const blob = sink.blob ? await sink.blob('video/mp4') : null;
+      lastReport = report(R, { kind: 'MP4', W, H, fps, n, dur: t1 - t0, codec: vcfg.codec + (vcfg.hardwareAcceleration ? ' (' + vcfg.hardwareAcceleration + ')' : ''), audio: acfg ? acfg.codec : 'none', helpers: pool ? pool.size : 0, cores: typeof Render !== 'undefined' && Render.cores ? Render.cores() : '?', bytes: mux.bytes, quality: o.quality || 'high', toDisk: !sink.blob });
       return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, helpers: pool ? pool.size : 0, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
     } finally {
       if (pool) { pool.close(); pending.forEach(p => p.then(b => b && b.close && b.close())); pending.clear(); }
@@ -157,5 +169,16 @@ const CutExport = (() => {
       return c.convertToBlob ? await c.convertToBlob({ type: 'image/png' }) : await new Promise(r => c.toBlob(r, 'image/png')); }
     finally { readers.forEach(R => { try { R.close(); } catch (e) { } }); }
   }
-  return { run, wavOnly, still, pickVideo, blurN, RES, QUAL };
+  function report(R, x) {
+    const end = performance.now(), tot = (end - R.t) / 1000, loop = ((R.loopEnd || end) - (R.loopStart || R.t)) / 1000, s1 = v => (v / 1000).toFixed(1) + ' s', pc = v => Math.round(v / 1000 / Math.max(0.01, loop) * 100) + '%';
+    const L = ['Patter Studio export report', 'App ' + (window.PATTER_APP_VERSION || '?') + ', ' + new Date().toLocaleString('en-GB'),
+      x.kind + ' ' + x.W + ' x ' + x.H + ' at ' + x.fps + ' fps, ' + x.dur.toFixed(1) + ' s of video, ' + x.n + ' frames' + (x.quality ? ', quality ' + x.quality : '') + (x.toDisk ? ', straight to disk' : ''),
+      'Video ' + x.codec + ', sound ' + x.audio + (x.bytes ? ', ' + (x.bytes / 1e6).toFixed(1) + ' MB' : ''), 'Helpers ' + x.helpers + ' of ' + x.cores + ' cores',
+      'Total ' + tot.toFixed(1) + ' s (' + (x.dur / tot).toFixed(2) + 'x real time, ' + (x.n / Math.max(0.01, loop)).toFixed(1) + ' frames a second while rendering)', '', 'Before rendering:'];
+    R.steps.forEach(([k, ms]) => L.push('  ' + k + ': ' + s1(ms)));
+    L.push('', 'Rendering ' + loop.toFixed(1) + ' s:', '  waiting for helpers: ' + s1(R.helperWait) + ' (' + pc(R.helperWait) + ')', '  drawn on the page (footage, intro): ' + s1(R.pageDraw) + ' (' + pc(R.pageDraw) + '), of which reading footage ' + s1(R.footage),
+      '  handing frames to the encoder: ' + s1(R.frameMake) + ', waiting for the encoder: ' + s1(R.encodeWait) + ' (' + pc(R.encodeWait) + ')', '  finishing (sound, writing the file): ' + s1(end - (R.loopEnd || end)), '', 'By part of the video (frames, where drawn, time each: drawing for page frames, waiting for helper frames):');
+    [...R.parts.entries()].sort((a, b) => b[1].ms - a[1].ms).forEach(([k, e]) => L.push('  ' + k + ': ' + e.n + ' frames (' + (e.helper ? e.helper + ' helpers' : '') + (e.helper && e.page ? ', ' : '') + (e.page ? e.page + ' page' : '') + '), ' + (e.ms / e.n).toFixed(0) + ' ms each, ' + s1(e.ms) + ' in all'));
+    return L.join('\n'); }
+  return { report: () => lastReport, run, wavOnly, still, pickVideo, blurN, RES, QUAL };
 })();

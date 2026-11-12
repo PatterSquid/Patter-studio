@@ -310,6 +310,9 @@ const CutInspect = (() => {
               const secs = Math.round((performance.now() - t0) / 1000), fam = { avc: 'H.264', hevc: 'HEVC', vp9: 'VP9', av1: 'AV1' }[res.fam] || res.codec, aud = res.audio ? (res.audio === 'opus' ? ' with Opus sound' : ' with AAC sound') : ' (no sound)';
               status.textContent = `Done in ${secs < 90 ? secs + ' s' : Math.round(secs / 6) / 10 + ' min'}: ${res.W} x ${res.H}, ${fam}${aud}, ${(res.bytes / 1e6).toFixed(1)} MB.` + (res.fam !== 'avc' ? ' (H.264 wasn\'t available, so ' + fam + ' was used.)' : '') + (res.audio === 'opus' ? ' AAC sound wasn\'t available on this computer, so the sound is Opus; tick the WAV option for After Effects.' : ''); }
             barI.style.width = '100%';
+            // Where the time went, for Claude to see what could be faster
+            const rpt = CutExport.report && CutExport.report(); if (rpt) { const old = status.parentNode && status.parentNode.querySelector('.exp-report'); if (old) old.remove();
+              const rb = H('button', { type: 'button', className: 'exp-report', textContent: 'Copy the export report', title: 'Where the time went, to paste to Claude', on: { click: async () => { try { await navigator.clipboard.writeText(rpt); rb.textContent = 'Copied: paste it to Claude'; } catch (e) { const ta = H('textarea', { value: rpt, rows: 10, style: 'width:100%' }); rb.after(ta); ta.select(); } } } }); status.after(rb); }
           }
         } catch (e) { status.textContent = e.message || String(e); status.classList.add('err'); try { sink && sink.close && await sink.close(); } catch (e2) { } }
         go.disabled = false; cancel.textContent = 'Close'; exporting = null; abort = null; o.onExport && o.onExport(false);

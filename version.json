@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.12.6",
+  "version": "2026.11.12.7",
   "file": "app/patter-studio.html",
-  "notes": "Intro plays much faster in the Video tab: the squid and the ink are drawn at the preview's size"
+  "notes": "Export report: after a Video export, Copy the export report shows where the time went"
 }
