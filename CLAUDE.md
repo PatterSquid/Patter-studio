@@ -113,17 +113,24 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   per bin gate with time and frequency smoothing), RNNoise (built in: `assets/rnnoise`, @jitsi/rnnoise-wasm, embedded by
   build.py as `src/rnnoise_lib.js`; warmed on the first two seconds), rumble high pass, 50 Hz hum notches, de-esser,
   click repair, leveller, LUFS loudness and a peak limiter, spectrogram and peaks. 48 kHz mono throughout.
-* **No AI noise removal.** He tried RNNoise ("horrendous") and then DeepFilterNet 3 ("just does not work at all") and had it
-  taken out; he likes the Audacity style one and the rest of the chain. Do not bring an AI remover back unless he asks.
-  The RNNoise code is still in AudioFX (unused); old projects' `clean.ai` is simply ignored.
-* The chain: rumble, hum, the Audacity style noise removal, then voice EQ (`clean.eq`: boom, boxiness,
+* **AI voice cleaner** (November 2026: he found RNNoise horrendous): DeepFilterNet 3 (`dev/src/deepfilter.js` `DeepFilter`, MIT or
+  Apache), the three official ONNX models in `denoise/` (8.6 MB, NOTICE.md) run with the ONNX Runtime from `cutout/` in a
+  helper; the STFT, ERB and complex features, look ahead, deep filter and overlap add are our own port of libDF and
+  df/enhance.py, checked against a Python port with onnxruntime to 1e-5 (scratch work, not kept). Downloaded once into
+  IndexedDB `patter-denoise` ("Get the AI voice cleaner"). `clean.ai` is `{ on, atten }` (dB it may take away: 12 gentle,
+  20 natural (default), 30 strong, 100 everything). On a test (flite speech plus pink noise and hum, SI-SDR against the
+  clean voice): noisy 9.0, old Clean my voice 10.1, Audacity style 12 dB 12.3, RNNoise 12.7, DeepFilterNet natural 14.3.
+  RNNoise code stays in AudioFX but is no longer offered. Tests serve `dev/tmp_dnhome/{denoise,cutout}` (symlinks to the repo
+  folders) through `window.PATTER_DENOISE`: `tests/audio_ui.py`, `tests/audio_edit2.py`.
+* The chain uses ONE noise remover (the AI when on, else the Audacity style one), then voice EQ (`clean.eq`: boom, boxiness,
   presence, air), de-esser, a real compressor (`clean.comp`, threshold under the voice's loudness, make up gain), the slow
   leveller, loudness and limiter. Listening: Before, After, and Removed (only what the noise removal took away, the
   difference of its input and output; words in it mean it is too strong); B swaps before and after. Editing adds Cut, Copy,
   Paste (`edits` kind `ins`: a stretch of the recording put in again at a point, in `segmentsOf`), Amplify by dB and
   Normalise (peak to -1 dB), with Ctrl+C, X, V (routed to `AudioTab.key` by app.js).
-* "Clean my voice" turns on: rumble cut, hum only if the noise shows it (`AudioFX.hasHum`), the Audacity style remover at
-  12 dB learned from the quietest half second, voice EQ, de-ess 0.3, compressor 0.4, loudness -16 LUFS. "Send it on" renders a WAV into
+* "Clean my voice" turns on: rumble cut, hum only if the noise shows it (`AudioFX.hasHum`), the AI cleaner at natural (or,
+  if it is not downloaded, the Audacity style remover at 12 dB from the quietest half second), voice EQ, de-ess 0.3,
+  compressor 0.4, loudness -16 LUFS. "Send it on" renders a WAV into
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 

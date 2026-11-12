@@ -1,6 +1,6 @@
 """Audio tab editing tools added in November 2026: copy and paste (Ctrl+C, Ctrl+V), cut and paste, amplify by an exact
 amount, normalise, the Removed listening mode, B to swap before and after, and the voice EQ and compressor. Uses
-dev/tmp_noisy.wav."""
+dev/tmp_noisy.wav and the AI cleaner from dev/tmp_dnhome (symlinks to ../denoise and ../cutout)."""
 import asyncio, os
 from playwright.async_api import async_playwright
 res=[]
@@ -9,6 +9,7 @@ async def main():
   async with async_playwright() as p:
     b=await p.chromium.launch(args=['--no-proxy-server']); pg=await b.new_page(viewport={'width':1600,'height':960}); errs=[]
     pg.on('pageerror',lambda e: errs.append(str(e))); pg.on('dialog', lambda d: asyncio.ensure_future(d.accept('6')))
+    await pg.add_init_script("window.PATTER_DENOISE='http://127.0.0.1:8765/tmp_dnhome/denoise/'")
     await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
     await pg.goto('http://127.0.0.1:8765/dist/test.html'); await pg.wait_for_timeout(1500)
     await pg.click('#tabs button[data-mod=audio]'); await pg.wait_for_timeout(500)
@@ -31,15 +32,20 @@ async def main():
     ok('amplify by 6 dB doubles the level', abs(p1/p0-2)<0.15, [p0,p1])
     await pg.evaluate("()=>{AudioTab._W.sel=null;}"); await pg.locator('#audioWs button', has_text='Normalise').click(); await settle(); p2=await pk(0, await D())
     ok('normalise puts the loudest peak at -1 dB', abs(p2-0.891)<0.02, p2)
-    await pg.locator('#audioWs button', has_text='Clean my voice').click(); await settle()
+    await pg.locator('#audioWs button', has_text='Get the AI voice cleaner').click()
+    for i in range(60):
+      await pg.wait_for_timeout(500)
+      if await pg.locator('#audioWs .au-side .field', has_text='AI voice cleaner').count(): break
+    await pg.locator('#audioWs .au-side .field', has_text='AI voice cleaner').locator('button', has_text='On').click(); await settle()
     await pg.locator('#audioWs .au-ab', has_text='Removed').click(); await pg.wait_for_timeout(300)
-    ok('Removed plays what the noise removal took out', await pg.evaluate("()=>AudioTab._W.removed && !!AudioTab._W.outRes && AudioTab._W.outRes.y.length===AudioTab._W.out.y.length"))
+    ok('Removed plays what the AI took out', await pg.evaluate("()=>AudioTab._W.removed && !!AudioTab._W.outRes && AudioTab._W.outRes.y.length===AudioTab._W.out.y.length"))
     await pg.locator('#audioWs .au-ab', has_text='After').click(); await pg.keyboard.press('b'); await pg.wait_for_timeout(200)
     ok('B swaps to Before', await pg.evaluate("()=>AudioTab._W.before"))
     await pg.keyboard.press('b'); await pg.locator('#audioWs .au-side .field', has_text='Voice EQ').locator('button', has_text='On').click(); await settle()
     ok('voice EQ on', await pg.evaluate("()=>JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.audio.clean.eq.on"))
+    await pg.locator('#audioWs button', has_text='Clean my voice').click(); await settle()
     c=await pg.evaluate("()=>JSON.parse(localStorage.getItem('patter-studio-v1')).cfg.audio.clean")
-    ok('Clean my voice: Audacity style noise removal at 12 dB, no AI', c['nr']['on'] and c['nr']['reduce']==12 and 'ai' not in c, c)
+    ok('Clean my voice uses one remover: the AI (natural), not both', c['ai']['on'] and c['ai']['atten']==20 and not c['nr']['on'], c)
     await pg.screenshot(path=os.environ.get('SHOT','/tmp/audio2.png'))
     ok('no page errors', not errs, errs[:3]); print('SUMMARY', sum(res), '/', len(res)); await b.close()
 asyncio.run(main())

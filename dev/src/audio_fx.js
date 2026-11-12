@@ -151,15 +151,18 @@ const AudioFX = (() => {
   function hasHum(prof, base = 50) { if (!prof || !prof.db) return false; const bin = f => Math.round(f / prof.sr * N); let s = 0, n = 0;
     for (let h = 1; h <= 3; h++) { const k = bin(base * h); if (k + 4 >= prof.db.length) continue; const pk = Math.max(prof.db[k - 1], prof.db[k], prof.db[k + 1]), side = (prof.db[k - 4] + prof.db[k + 4]) / 2; s += pk - side; n++; } return n > 0 && s / n > 8; }
 
-  /* ---------- the whole chain, in a sensible order ----------
-     c.nr is the Audacity style noise removal. keep: also hand back the sound just before and after the noise removal, so he
-     can hear exactly what is being taken out. (He tried two AI removers, RNNoise and DeepFilterNet 3, and rejected both.) */
+  /* ---------- the whole chain, in a sensible order: one noise remover, never two ----------
+     c.ai { on, atten (dB it may take away: 12 gentle, 20 natural, 30 strong, 100 all) } is DeepFilterNet 3; c.nr is the
+     Audacity style one (used when the AI is off). keep: also hand back the sound just before and after the noise removal,
+     so he can hear exactly what is being taken out. */
   async function chain(x, sr, c = {}, onProgress, keep) {
     let y = x; const step = (p, s) => onProgress && onProgress(p, s); let nrIn = null, nrOut = null;
     if (c.declick) { step(0.02, 'Fixing clicks'); y = declick(y, sr); await yieldNow(); }
     if (c.rumble !== false) { y = rumble(y, sr, +c.rumbleHz || 80); }
     if (c.hum) { y = hum(y, sr, +c.humHz || 50); }
-    if (c.nr && c.nr.on && c.nr.profile) { step(0.05, 'Taking out the noise'); nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.05 + 0.7 * q, 'Taking out the noise')); nrOut = y; }
+    if (c.ai && c.ai.on) { if (typeof DeepFilter === 'undefined' || (await DeepFilter.check()) !== 'ready') throw new Error('The AI voice cleaner is not downloaded yet: press Get the AI voice cleaner in Background noise.');
+      step(0.05, 'AI voice cleaning'); nrIn = y; y = await DeepFilter.process(y, { atten: c.ai.atten == null ? 20 : +c.ai.atten, onProgress: q => step(0.05 + 0.7 * q, 'AI voice cleaning') }); nrOut = y; }
+    else if (c.nr && c.nr.on && c.nr.profile) { step(0.05, 'Taking out the noise'); nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.05 + 0.7 * q, 'Taking out the noise')); nrOut = y; }
     if (c.eq && c.eq.on) { step(0.8, 'Voice EQ'); y = eq(y, sr, c.eq); await yieldNow(); }
     if (c.deess > 0) { step(0.84, 'Softening S sounds'); y = deess(y, sr, +c.deess); await yieldNow(); }
     if (c.comp > 0) { step(0.88, 'Compressing'); y = compress(y, sr, +c.comp); await yieldNow(); }
