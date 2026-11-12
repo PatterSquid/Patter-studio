@@ -627,3 +627,5 @@ body:not(.thb) #thumbWs{display:none!important}
 .fp-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}.fp-s{font-size:26px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--paper)}.fp-n{font-size:11.5px;color:var(--muted)}
 .fp-star{background:none;border:0;font-size:20px;color:var(--muted);padding:4px 8px}.fp-star.on{color:#ffd21f}
 .fp-more{height:2px}.fp-foot{padding:6px 16px 10px;margin:0}
+
+.speed-t tr.bad td{color:#ff8a80}.speed-t tr.warn td{color:#ffd180}.speed-t td:first-child{white-space:nowrap;color:var(--muted)}.speed-t tr.bad td:first-child,.speed-t tr.warn td:first-child{color:inherit}

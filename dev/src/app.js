@@ -396,7 +396,58 @@
       vs.length ? H('div', { className: 'ver-list' }, ...vs.map((v, i) => H('div', { className: 'ver' }, thumbEl(v.thumb), H('div', { className: 'lib-meta' }, H('b', { textContent: ago(v.time) + (i === 0 ? ' (latest)' : '') }), H('span', { textContent: (TAB_NAMES[v.module] || '') + (v.note ? ', ' + v.note : '') })),
         UI.btn('Roll back to this', async () => { await addVersion(JSON.parse(JSON.stringify(state)), await makeThumb(), 'before a roll back'); const s = JSON.parse(JSON.stringify(v.state)); s.assets = await assetsFor(v); s.pid = state.pid; s.name = state.name; applyState(s, 'Rolled back to the version from ' + ago(v.time) + '.'); lastVersion = Date.now(); dlg.close(); })))) : H('p', { className: 'hint', textContent: 'No versions yet. Keep working and they will appear here.' }));
   }
-  function openShortcuts() { openDlg('Keyboard shortcuts', ...SHORTCUTS.map(([g, rows]) => H('section', { className: 'dlg-sec' }, H('h3', { textContent: g }), H('table', { className: 'keys-t' }, ...rows.map(([k, d]) => H('tr', {}, H('td', {}, H('kbd', { textContent: k })), H('td', { textContent: d }))))))); }
+  function openShortcuts() { openDlg('Keyboard shortcuts', H('div', { className: 'row' }, UI.btn('Speed check: is my computer slowing it down?', () => openSpeedCheck())), ...SHORTCUTS.map(([g, rows]) => H('section', { className: 'dlg-sec' }, H('h3', { textContent: g }), H('table', { className: 'keys-t' }, ...rows.map(([k, d]) => H('tr', {}, H('td', {}, H('kbd', { textContent: k })), H('td', { textContent: d }))))))); }
+  /* ---------- Speed check: measures his computer from inside the app and gives a report he can paste to Claude ---------- */
+  async function speedCheck(out, copyBtn) {
+    const rows = [], say = (k, v, bad) => { rows.push([k, v, bad]); out.append(H('tr', { className: bad === true ? 'bad' : bad === 'warn' ? 'warn' : '' }, H('td', { textContent: k }), H('td', { textContent: v }))); };
+    const kb = n => n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.round(n / 1e3) + ' KB', nap = ms => new Promise(r => setTimeout(r, ms)), med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    say('App version', String(window.PATTER_APP_VERSION || '?')); say('Browser', (navigator.userAgent.match(/Edg\/[\d.]+|Chrome\/[\d.]+/g) || []).join(' '));
+    say('Processor cores', String(navigator.hardwareConcurrency || '?'), (navigator.hardwareConcurrency || 8) < 4 ? 'warn' : false);
+    say('Memory (as Edge reports it)', navigator.deviceMemory ? navigator.deviceMemory + ' GB or more' : '?', navigator.deviceMemory && navigator.deviceMemory < 8 ? 'warn' : false);
+    say('Screen', screen.width + ' x ' + screen.height + ', scale ' + (window.devicePixelRatio || 1) + ', window ' + innerWidth + ' x ' + innerHeight);
+    // Graphics card: a software name here means Edge is drawing everything on the processor
+    let gpu = '?'; try { const g = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl'); const x = g && g.getExtension('WEBGL_debug_renderer_info'); gpu = g ? (x ? g.getParameter(x.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'none'; } catch (e) { }
+    const soft = /swiftshader|basic render|llvmpipe|software|microsoft basic/i.test(gpu);
+    say('Graphics card in use', gpu + (soft ? '  (SOFTWARE: graphics acceleration is off in Edge)' : ''), soft);
+    try { if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); say('WebGPU', a ? ((a.info && (a.info.vendor + ' ' + (a.info.architecture || a.info.description || ''))) || 'yes') + (a.isFallbackAdapter ? ' (fallback)' : '') : 'not available', !a ? 'warn' : false); } } catch (e) { }
+    await nap(30);
+    // Picture drawing speed: one full HD canvas copied and shrunk 60 times (a graphics card does this in a few ms)
+    { const a = document.createElement('canvas'); a.width = 1920; a.height = 1080; const ga = a.getContext('2d'); ga.fillStyle = '#c33'; ga.fillRect(0, 0, 1920, 1080); const b = document.createElement('canvas'); b.width = 1280; b.height = 720; const gb = b.getContext('2d');
+      const t0 = performance.now(); for (let i = 0; i < 60; i++) { gb.globalAlpha = 0.5; gb.drawImage(a, i, 0, 1280, 720); } gb.getImageData(0, 0, 1, 1); const ms = performance.now() - t0;
+      say('Picture drawing test', ms.toFixed(0) + ' ms (under 40 is good)', ms > 120 ? true : ms > 40 ? 'warn' : false); }
+    // How steady the screen updates are while nothing is happening
+    { const ts = []; await new Promise(r => { const f = t => { ts.push(t); if (ts.length < 90) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); const d = ts.slice(1).map((t, i) => t - ts[i]); const m = med(d), worst = Math.max(...d);
+      say('Screen refresh', (1000 / m).toFixed(0) + ' per second, longest gap ' + worst.toFixed(0) + ' ms', worst > 100 ? true : worst > 40 ? 'warn' : false); }
+    // How busy the page is while he does nothing: timers that should fire every 10 ms, and how late they are
+    { let late = 0, n = 0, last = performance.now(); await new Promise(r => { const tick = () => { const now = performance.now(); late += Math.max(0, now - last - 10); last = now; if (++n < 150) setTimeout(tick, 10); else r(); }; setTimeout(tick, 10); }); const avgLate = late / n;
+      say('Page busy while idle', avgLate.toFixed(1) + ' ms late on average (under 3 is good)', avgLate > 15 ? true : avgLate > 4 ? 'warn' : false); }
+    // Memory and what is saved
+    if (performance.memory) say('Memory the app uses', kb(performance.memory.usedJSHeapSize) + ' of ' + kb(performance.memory.jsHeapSizeLimit), performance.memory.usedJSHeapSize > 1.5e9 ? true : performance.memory.usedJSHeapSize > 7e8 ? 'warn' : false);
+    try { const e = await navigator.storage.estimate(); say('Stored on this computer', kb(e.usage || 0)); } catch (e) { }
+    { const sz = JSON.stringify(light()).length, a = Object.values(state.assets || {}).reduce((n, u) => n + (u ? u.length : 0), 0); say('Project settings', kb(sz) + ', pictures ' + kb(a) + ' (' + Object.keys(state.assets || {}).length + ')', sz > 3e6 ? true : sz > 8e5 ? 'warn' : false);
+      const big = Object.entries(state.cfg || {}).map(([k, c]) => [k, JSON.stringify(c).length]).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, n]) => (TAB_NAMES[k] || k) + ' ' + kb(n)).join(', '); say('Biggest tabs', big);
+      const t0 = performance.now(); for (let i = 0; i < 5; i++) JSON.stringify(light()); const ms = (performance.now() - t0) / 5; say('Saving cost', ms.toFixed(1) + ' ms each save', ms > 30 ? true : ms > 10 ? 'warn' : false); }
+    try { const vs = await DB.versions(state.pid); say('Versions kept', String(vs.length)); } catch (e) { }
+    say('Pictures on the page', document.querySelectorAll('canvas').length + ' canvases, ' + document.getElementsByTagName('*').length + ' page parts, ' + document.querySelectorAll('video,audio').length + ' players');
+    // Each tab: how long its current clip takes to draw at the preview's size and at full HD
+    const look = Object.assign({}, state.look, { transparent: false }), { W, H: Hh } = E.dims(look.format), pv = $('prev'), pw = pv && pv.width > 100 ? pv.width : 960;
+    for (const id of ['charts', 'timeline', 'map', 'flights', 'flyover', 'picto', 'news', 'story', 'broll', 'studio', 'char', 'video']) {
+      const M = MODULES[id]; if (!M || !state.cfg[id]) continue; await nap(20);
+      try { const c = state.cfg[id]; if (M.prepare) { try { await Promise.race([M.prepare(c, look), nap(4000)]); } catch (e) { } } const d = M.duration(c, look); const time = (w, lk) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = Math.round(w * Hh / W); const g = cv.getContext('2d'); const ms = [];
+          for (let i = -1; i < 4; i++) { const t0 = performance.now(); g.save(); g.scale(cv.width / W, cv.width / W); M.draw(g, d * (0.2 + Math.max(0, i) * 0.2), c, lk, W, Hh); g.restore(); g.getImageData(0, 0, 1, 1); if (i >= 0) ms.push(performance.now() - t0); } return med(ms); };   // the first draw warms up and is not counted
+        const a = time(pw, Object.assign({}, look, { preview: true, paused: false })), b = time(W, Object.assign({}, look, { preview: false }));
+        say('Draw: ' + (TAB_NAMES[id] || id), a.toFixed(0) + ' ms in the preview, ' + b.toFixed(0) + ' ms full size (under 16 plays smoothly)', a > 40 ? true : a > 16 ? 'warn' : false);
+      } catch (e) { say('Draw: ' + (TAB_NAMES[id] || id), 'failed: ' + e.message, true); }
+    }
+    const text = 'Patter Studio speed check\n' + rows.map(([k, v, b]) => (b === true ? '!! ' : b === 'warn' ? '!  ' : '   ') + k + ': ' + v).join('\n');
+    copyBtn.disabled = false; copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'Copied: paste it to Claude'; } catch (e) { const ta = H('textarea', { value: text, rows: 12, style: 'width:100%' }); copyBtn.after(ta); ta.select(); } };
+    return text;
+  }
+  function openSpeedCheck() {
+    const out = H('table', { className: 'keys-t speed-t' }), copy = H('button', { type: 'button', className: 'primary', textContent: 'Copy the report', disabled: true }), note = H('p', { className: 'hint', textContent: 'Measuring, about 10 to 20 seconds. Leave the mouse alone while it runs.' });
+    openDlg('Speed check', note, out, H('div', { className: 'row' }, copy));
+    setTimeout(async () => { try { await speedCheck(out, copy); note.textContent = 'Done. Red lines are the likely cause of slowness, amber ones are worth a look. Press Copy the report and paste it to Claude.'; } catch (e) { note.textContent = 'The check stopped: ' + e.message; } }, 300);
+  }
   $('libBtn').addEventListener('click', openLibrary); $('histBtn').addEventListener('click', openHistory); $('keysBtn').addEventListener('click', openShortcuts);
   /* ---------- Packs and app updates ---------- */
   const L = () => window.PatterLauncher || null;
