@@ -27,7 +27,7 @@ const AudioFX = (() => {
     for (let o = i0; o + N <= i1 || (n === 0 && o < i1); o += HOP) { for (let i = 0; i < N; i++) { re[i] = (x[o + i] || 0) * win[i]; im[i] = 0; } fft(re, im); for (let k = 0; k < BINS; k++) P[k] += re[k] * re[k] + im[k] * im[k]; n++; }
     if (!n) return null; const out = new Array(BINS); for (let k = 0; k < BINS; k++) out[k] = +(10 * Math.log10(P[k] / n + 1e-20)).toFixed(2); return { db: out, sr, len: +((i1 - i0) / sr).toFixed(2) };
   }
-  // A quiet bit found automatically: the quietest half second (for Clean my voice, when no noise was picked)
+  // A quiet bit found automatically: the quietest half second
   function quietest(x, sr, len = 0.5) {
     const w = Math.floor(sr * 0.05), n = Math.floor(x.length / w), e = new Float64Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < w; j++) { const v = x[i * w + j]; s += v * v; } e[i] = s; }
     const k = Math.max(1, Math.round(len / 0.05)); let best = -1, bv = Infinity, run = 0; for (let i = 0; i < n; i++) { run += e[i]; if (i >= k) run -= e[i - k]; if (i >= k - 1 && run < bv) { bv = run; best = i - k + 1; } }

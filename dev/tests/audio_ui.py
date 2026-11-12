@@ -1,5 +1,5 @@
 """The Audio tab, used like he would: open a noisy recording (dev/tmp_noisy.wav: robot speech plus hiss, hum and rumble),
-see it, press Clean my voice, switch to the frequencies, cut a part out with the mouse and Delete, undo it, tighten the
+see it, learn the noise from a quiet bit, switch to the frequencies, cut a part out with the mouse and Delete, undo it, tighten the
 pauses, learn the noise from a chosen quiet bit, and send it to the Character tab and the video. Writes screenshots and
 the cleaned WAV to OUT."""
 import asyncio, base64, sys, os, json
@@ -23,7 +23,7 @@ async def main():
       return False
     print('loaded:', await settle(), await pg.evaluate(f"()=>[({ST}).audio.name, AudioTab._W.out && +(AudioTab._W.out.y.length/48000).toFixed(2)]"))
     await pg.screenshot(path=OUT + '/1_loaded.png')
-    await pg.locator('#audioWs button', has_text='Clean my voice').click(); await pg.wait_for_timeout(800); print('cleaned:', await settle())
+    await pg.evaluate("()=>{AudioTab._W.sel=[0.2,1.2];}"); await pg.locator('#audioWs button', has_text='Learn noise').click(); await pg.wait_for_timeout(800); print('cleaned:', await settle())
     c = await pg.evaluate(f"()=>{{ const c=({ST}).audio.clean; return [c.rumble,c.hum,c.declick,c.nr.on,!!c.nr.profile,c.deess,c.level,c.loud]; }}"); print('clean settings:', c)
     lv = await pg.evaluate("()=>{ const W=AudioTab._W; const f=(y,a,b)=>{let s=0;for(let i=a*48000;i<b*48000;i++)s+=y[i]*y[i];return (10*Math.log10(s/((b-a)*48000)+1e-20)).toFixed(1);}; return {before:f(W.outBefore.y,0.2,1.3), after:f(W.out.y,0.2,1.3), lufs:AudioFX.lufs(W.out.y,48000).toFixed(1)}; }")
     print('noise floor in the first quiet second (dB):', lv)

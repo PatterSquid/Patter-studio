@@ -128,10 +128,8 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   difference of its input and output; words in it mean it is too strong); B swaps before and after. Editing adds Cut, Copy,
   Paste (`edits` kind `ins`: a stretch of the recording put in again at a point, in `segmentsOf`), Amplify by dB and
   Normalise (peak to -1 dB), with Ctrl+C, X, V (routed to `AudioTab.key` by app.js).
-* He likes the AI voice cleaner on its own. "Clean my voice" with EQ, de-essing and compression on top "scrambled" his
-  voice, so it now only does: rumble cut, hum if the noise shows it (`AudioFX.hasHum`), the AI cleaner (his last strength,
-  natural at first; the Audacity style remover at 12 dB when the AI is not downloaded) and loudness -16 LUFS. It leaves his
-  EQ, de-ess and compressor settings as they were (off unless he turned them on). Keep it that simple. "Send it on" renders a WAV into
+* **No "Clean my voice" button.** He had it taken out (November 2026): even kept simple it sounded "a bit weird". He uses
+  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks. "Send it on" renders a WAV into
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 
