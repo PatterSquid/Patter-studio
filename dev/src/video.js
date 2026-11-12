@@ -360,7 +360,9 @@ const Video = (() => {
   function drawMain(g, o, t, cfg, look, W, H, env, slot) { drawMain0(g, o, t, cfg, look, W, H, env, slot); const a = picFade(o.it, t - o.t0, o.d); if (a > 0.001) { g.save(); g.globalAlpha = a; g.globalCompositeOperation = 'source-over'; g.fillStyle = fadeCol(o.it); g.fillRect(0, 0, W, H); g.restore(); } }
   function drawMain0(g, o, t, cfg, look, W, H, env, slot) {
     const it = o.it, local = t - o.t0;
-    if (it.kind === 'avatar') return drawGap(g, o, t, cfg, look, W, H);
+    if (it.kind === 'avatar') { // a punch zoom on a [ME] part: scale (keyframes too) around his face
+      const zs = kfAt(it, 's', local, it.s == null ? 1 : +it.s); if (Math.abs(zs - 1) < 1e-3) return drawGap(g, o, t, cfg, look, W, H);
+      g.save(); try { g.translate(W * 0.5, H * 0.4); g.scale(zs, zs); g.translate(-W * 0.5, -H * 0.4); drawGap(g, o, t, cfg, look, W, H); } finally { g.restore(); } return; }
     if (cfg.mainHide) { if (!look.transparent) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); } return; }
     const full = it.kind === 'clip' && !it.fit && (it.s == null || +it.s === 1) && !it.x && !it.y && !it.rot && !it.anIn && !it.anOut && !it.anLoop && !it.kf && !it.mask && !(it.crop && it.crop.some(Boolean));
     if (full && !it.col && !(it.fx && it.fx.length) && !it.key && (it.op == null || +it.op >= 1) && (!it.blend || it.blend === 'normal')) {

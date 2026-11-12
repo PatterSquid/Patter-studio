@@ -7,6 +7,12 @@
       "file": "bank_robbery.json"
     },
     {
+      "id": "extras",
+      "name": "Extra props",
+      "version": 1,
+      "file": "extras.json"
+    },
+    {
       "id": "neds",
       "name": "Neds and a goth",
       "version": 3,
