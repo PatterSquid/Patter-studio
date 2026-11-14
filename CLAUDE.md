@@ -401,6 +401,25 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   reading pixels (`willReadFrequently`) are CPU canvases: never draw one every frame, copy it to a plain canvas first.
   PNG sequence exports pack frames in the background (createImageBitmap then convertToBlob, up to 3 at once, in order).
   `tests/studio_prev_prof.py` (MODE=export for full size) and `tests/png_pipe.js` measure them.
+* **Voice driven performance** (November 2026, Phase 1 of his review: "the most important thing"): `dev/src/prosody.js`
+  (`Prosody`: pitch track, autocorrelation plus Viterbi, his median about 97 Hz; word prominence from pitch, loudness and
+  length; accents; intonation phrases and arousal), `dev/src/semantics.js` (`Semantics.read`: word classes, Glasgow forms
+  too, per sentence question, negation, valence, swearing). `LipSync.analyse` annotates `A.pros`. `perfOf` in character.js
+  plans hands, nods (on pitch accents), head shakes (negation), brows, gaze, blinks, posture shifts (`pose.sit`, painted in
+  puppet.js) and mood per sentence when there are no mood tags (`cfg.autoEmo`), then `bake` springs every channel at 60 fps
+  (`SPR`). Science is cited in the code comments.
+* **Hands** (he judged three versions): raised all the time with the open hand and made up gestures was "so unnatural";
+  only desk beats was "barely moves". What he approved: a thought (phrase unit) brings the left hand up loosely curled
+  (`talk`, his relaxed drawing, the 'collection' rest) beating on the stresses, a palm up (`offer`) on laying a point out,
+  shrug, point on a stressed you, counting, desk bang when raging, at least `BIG_GAP` seconds apart; down on the desk at the
+  end of the thought; leftover phrases get small desk beats (`desk`). One talking hand per unit (`unit.art`), a hand's turn
+  follows its drawing and drawings shorter than 0.2 s are skipped (`p.bk.art`): his relaxed and open hands swapping in
+  mid air read as a glitch. The open (back of hand) drawing is not used automatically. Thumbs down was dropped (a mirrored
+  hand). Missing shapes he could draw: side on (chop) and pinch.
+* **Listen** (`dev/src/listen.js`, `listen/`, about 180 MB, IndexedDB `patter-listen`): Whisper base English int8 ONNX in a
+  helper writes the words from his recording, so a voiceover alone drives the character ("Write the words from the
+  recording"). Tests serve `dev/tmp_lshome/{listen,cutout}` through `window.PATTER_LISTEN`. A PatterScript file can be
+  loaded as the script (`fromPatterScript`).
 * Its voice is `soundId` (a CutMedia id), so the clip plays and exports with sound in the Video tab (`cut_audio.js`
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
