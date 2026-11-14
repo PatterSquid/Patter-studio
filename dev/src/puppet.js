@@ -339,10 +339,12 @@ const Puppet = (() => {
       if (nd.role === 'lid' && (P.blink || 0) >= 0.5 && par && par.kids.some(k => k.role === 'blink')) return false;   // the blink covers the eye; only the lid line goes
       return nd.vis;
     };
+    if (rig._sit === undefined) { const hn = N.find(n => n.role === 'head'); rig._sit = hn ? hn.parent : -9; } const sitId = rig._sit;
     let g = g0, plainK = 0; const flush = +P.flush || 0;
     const paint = nd => {
       if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return;
       g.save(); if (op < 1) g.globalAlpha *= op;
+      if (P.sit && nd.id === sitId) { const [px, py] = rig.pivot.body; g.translate(P.sit[0] || 0, 0); g.translate(px, py); g.rotate(P.sit[1] || 0); g.translate(-px, -py); }   // a shift of weight: all of him, about the seat
       if (nd.role === 'head' && P.head) { const [px, py] = rig.pivot.head, [dx, dy, r] = P.head; g.translate(px + dx, py + dy); g.rotate(r || 0); if (P.head[3]) g.scale(1 + P.head[3], 1 + P.head[3]); g.translate(-px, -py); }
       if (nd.role === 'body' && P.body) { const [px, py] = rig.pivot.body, k = P.body[0] || 0; g.translate(px, py); g.scale(1 + k * 0.4, 1 + k); g.translate(-px, -py); }
       if (nd.role === 'sleeve') plainK = P.arms && P.arms[nd.side] ? +P.arms[nd.side].plain || 0 : 0;

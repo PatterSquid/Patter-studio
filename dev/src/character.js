@@ -50,8 +50,14 @@ const Character = (() => {
     slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
     beat: { art: 'relaxed', at: [-0.03, -0.07, 0], side: 'L', len: 0.7, plain: 1, label: 'Wee hand beat', old: { art: null, at: [0, -0.07, 0.12], plain: 0 } },
+    // gestures by meaning, all made from his own drawings (turned, moved or flipped, never redrawn)
+    no: { art: null, at: [0.0, -0.2, 0], side: 'L', len: 1.3, sweep: 0.22, hold: 1, label: 'No (flat hand across)' },
+    all: { art: 'open', at: [0.02, -0.22, 0], side: 'both', len: 1.6, sweep: 0.16, plain: 1, label: 'All of it (hands apart)', old: { art: null, at: [0.04, -0.14, 0], plain: 0 } },
+    here: { art: 'point', at: [-0.02, -0.3, 0.1], side: 'L', len: 1.2, prep: 0.6, late: 0.8, tap: 0.15, label: 'Right here (finger down on the desk)' },   // his pointing hand as he drew it, held up so the fingertip lands on the desk
+    self: { art: null, at: [-0.13, -0.36, 0.48], side: 'L', len: 1.3, hold: 1, label: 'Me (hand to chest)' },
+    other: { art: 'palm up', at: [0.1, -0.2, 0], side: 'L', len: 1.5, sweep: 0.14, plain: 1, hold: 1, label: 'On the other hand', old: { art: 'wave', at: [0.16, -0.12, 2.35] } },
   };
-  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', talking: 'talk', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
+  Object.assign(ALIAS, { listen: 'finger up', one: 'finger up', 'hold on': 'finger up', there: 'point aside', 'over there': 'point aside', palm: 'offer', 'palm up': 'offer', me: 'self', chest: 'self', everything: 'all', 'all of it': 'all', 'right here': 'here', tap: 'here', nope: 'no', 'other hand': 'other', talking: 'talk', explaining: 'explain', 'hands up': 'stop', hello: 'wave', hiya: 'wave', dunno: 'shrug' });
   // words that bring a gesture with them; the common ones only when he leans on them
   const LEX = {}; const lex = (k, words, strong) => words.split(' ').forEach(w => { LEX[w] = { k, strong }; });
   // weak: everyday words, a gesture only when he leans on them; the rest always
@@ -78,6 +84,7 @@ const Character = (() => {
   // a swap set's side (his right or left hand) and what sort of thing a trigger is
   const sideOf = (rig, id) => { let n = rig.nodes[id]; while (n) { const nm = String(n.name).replace(/^\+/, '').toLowerCase(); if (n.role === 'arm' && n.side) return n.side; if (/^(r|right)\s?(hand|arm)/.test(nm)) return 'R'; if (/^(l|left)\s?(hand|arm)/.test(nm)) return 'L'; n = rig.nodes[n.parent]; } return null; };
   const isHand = (rig, id) => /hand/i.test(rig.nodes[id].name);
+  const handArt = (rig, sw, k, side) => (rig.triggers[k] || []).forEach(([id, i]) => { if (side && side !== 'both' && isHand(rig, id)) { const sd = sideOf(rig, id); if (sd && sd !== side) return; } sw[id] = i; });
   const isCostume = (rig, k) => { const tr = rig.triggers[k] || []; return tr.length > 0 && !tr.every(([id]) => isHand(rig, id)) && !isPose(rig, k); };
   const isPose = (rig, k) => (rig.triggers[k] || []).length === 1 && !isHand(rig, rig.triggers[k][0][0]) && rig.nodes[rig.triggers[k][0][0]].kids.length >= 2 && rig.nodes[rig.triggers[k][0][0]].kids.some(kd => kd.role === 'head' || (kd.kids || []).some(q => q.role === 'head' || q.role === 'body'));
   // every move he can make with this puppet, for the menus
@@ -90,7 +97,16 @@ const Character = (() => {
   }
 
   /* ---------- the voice and the timing ---------- */
-  const last = {}, textMemo = new Map(), waiting = {};
+  const last = {}, textMemo = new Map(), waiting = {}, hearing = {}; let heardNote = '';
+  if (typeof Listen !== 'undefined' && typeof indexedDB !== 'undefined') Listen.check().then(() => { tick++; }, () => { });
+  /* A PatterScript file (the phone app's Send file) to what he says: the sections' words in order, the shot and edit
+     cues (upper case tags, [beat], [pause]) taken out, his own lower case tags kept. */
+  function fromPatterScript(text) {
+    const t = String(text || ''); if (!/^# PatterScript:/m.test(t) && !/^## /m.test(t)) return t.trim().length < 20000 && !/^\s*[{<]/.test(t) ? t.trim() : '';
+    const body = t.split(/^---\s*$/m)[0], out = []; let on = false;
+    body.split('\n').forEach(line => { if (/^## /.test(line)) { on = true; return; } if (!on || /^\(empty\)\s*$/.test(line.trim())) return; out.push(line); });
+    return out.join('\n').replace(/\[([^\[\]\n]{1,80})\]/g, (m, k) => { const h = k.split(':')[0].trim(); return h !== h.toLowerCase() || /^(beat|pause)(\s+[\d.]+s?)?$/.test(h) ? ' ' : m; }).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  }
   if (typeof Rhubarb !== 'undefined' && typeof indexedDB !== 'undefined') Rhubarb.ready().then(() => { tick++; });
   const engineOf = cfg => cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state === 'ready' ? 'rhubarb' : 'patter';
   const durHint = {};
@@ -114,46 +130,66 @@ const Character = (() => {
     if (cfg.voice && typeof CutMedia !== 'undefined') await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id), engineOf(cfg)).catch(() => null);
   }
 
-  /* ---------- the performance: everything decided once per voice, script and moves ---------- */
+  /* ---------- the performance: everything decided once per voice, script and moves ----------
+     From the voice (LipSync: words and loudness; Prosody: pitch, how prominent each word is, phrases, arousal) and the
+     words (Semantics) it plans what a person talking to camera does, each part from the research on it:
+     * hands (McNeill 1992, Kendon 2004): a gesture per thought, chosen by what is being said, its stroke on the
+       stressed syllable of the word it goes with (Loehr 2012), bigger when he leans on the word, held, then back down
+     * head (Hadar 1983, McClave 2000, Munhall 2004): nods on accents, shakes on no, never, all and every, tilts on
+       questions and doubt, riding up and down a little with the pitch of his voice
+     * eyebrows (Ekman 1979, Krahmer and Swerts 2007): quick raises on the strongest accents, held up through a yes or
+       no question, drawn down on a why or what
+     * eyes (Kendon 1967, Lee and others 2002): on the camera, away for a moment while he finds the start of a thought,
+       back by its first stress, small darts in between; blinks at the ends of phrases and with every look away
+       (Homke and others 2017), about seventeen to twenty two a minute while talking
+     * body (Cassell and others 2001): a shift of weight at a new thought after a pause; a breath in before each phrase
+     * mood: from how worked up the voice is and what the words are, when the script has no mood tags
+     The plan is then played through springs (bake): a move overshoots a touch and settles, the hand trails the arm. */
   const hash = s => { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const rng = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const perfMemo = new Map();
+  // things by the second they are in play, so a frame only looks at what is near it
+  const mkIdx = (list, a, b, dur) => { const n = Math.ceil(dur) + 4, B = Array.from({ length: n }, () => []); list.forEach(m => { for (let s = Math.max(0, Math.floor(a(m))); s <= Math.min(n - 1, Math.floor(b(m))); s++) B[s].push(m); }); return t => B[t < 0 ? 0 : t >= n ? n - 1 : Math.floor(t)]; };
   function perfOf(cfg, A, rig, dur) {
-    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, rig ? rig.id : 0, dur.toFixed(2)]);
+    const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, cfg.autoEmo, rig ? rig.id : 0, rig && rig.triggers ? Object.keys(rig.triggers).length : 0, dur.toFixed(2)]);
     let box = perfMemo.get(A || 'none'); if (box && box.key === key) return box.p;
-    const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E };
+    const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E, dur };
     const env = A ? A.env : new Float32Array(0), fps = A ? A.fps : 100, envAt = t => { const f = t * fps, i = Math.floor(f); if (i < 0 || i >= env.length - 1) return 0; return env[i] + (env[i + 1] - env[i]) * (f - i); };
+    const pros = (A && A.pros) || null, sem = A && A.words && A.words.length && typeof Semantics !== 'undefined' ? Semantics.read(A.words) : null; p.pros = pros; p.sem = sem;
     // smoothed loudness and phrases (speech between pauses of more than a third of a second)
     const N = Math.ceil(dur * 50) + 2, loud = new Float32Array(N); for (let i = 0; i < N; i++) { let s = 0, c = 0; for (let k = -6; k <= 6; k++) { s += envAt((i + k) / 50); c++; } loud[i] = s / c; }
     const slow = new Float32Array(N); for (let i = 0; i < N; i++) { let a = 0, c = 0; for (let k = -14; k <= 14; k++) { const j = i + k; if (j >= 0 && j < N) { const w = 15 - Math.abs(k); a += loud[j] * w; c += w; } } slow[i] = a / c; }
     p.slow = t => { const f = t * 50, i = Math.floor(f); return i < 0 || i >= N - 1 ? 0 : slow[i] + (slow[i + 1] - slow[i]) * (f - i); };
     p.loud = t => { const f = t * 50, i = Math.floor(f); return i < 0 || i >= N - 1 ? 0 : loud[i] + (loud[i + 1] - loud[i]) * (f - i); };
+    // his pitch as -1 to 1 across his own range, for the head to ride on
+    { const st = pros && pros.heard ? pros.st : null, mid = pros ? (pros.lo + pros.hi) / 2 : 0, half = pros ? Math.max(1.5, (pros.hi - pros.lo) / 2) : 1; p.f0n = t => { if (!st) return 0; const i = Math.round(t * pros.fps); return i < 0 || i >= st.length ? 0 : cl((st[i] - mid) / half, -1, 1); }; }
     const phrases = []; { const n2 = Math.ceil(dur * fps); let on = null, quiet = 0; for (let i = 0; i < n2; i++) { const t = i / fps, sp = (env[i] || 0) > 0.12; if (sp) { if (!on) on = [t, t]; on[1] = t; quiet = 0; } else if (on) { quiet += 1 / fps; if (quiet > 0.2) { phrases.push(on); on = null; } } } if (on) phrases.push(on); }
     p.phrases = phrases.map(([a, b]) => ({ a, b, tilt: (R() - 0.5) * 0.05, x: (R() - 0.5) * 0.05, y: (R() - 0.3) * 0.02 }));
-    // nods on the stressed syllables: peaks of the level that stand above the dip before them, the bigger half of them in each phrase
-    const lev = A && A.lev ? A.lev : env, peaks = [];
-    for (let i = 4; i < lev.length - 4; i++) { const v = lev[i]; if (v < 0.35 || v < lev[i - 1] || v < lev[i + 1] || v < lev[i - 3] || v < lev[i + 3]) continue; let lo2 = v; for (let k = 1; k <= 14 && i - k >= 0; k++) lo2 = Math.min(lo2, lev[i - k]); if (v - lo2 < 0.06) continue; peaks.push({ t: i / fps, v, pr: v - lo2 }); }
-    const nods = []; p.phrases.forEach(ph => { const inP = peaks.filter(q => q.t >= ph.a - 0.05 && q.t <= ph.b + 0.05).sort((x, y) => (y.v + y.pr) - (x.v + x.pr)); const keep = inP.slice(0, Math.max(1, Math.ceil(inP.length * 0.5))).sort((x, y) => x.t - y.t);
-      keep.forEach(q => { if (nods.length && q.t - nods[nods.length - 1].t < 0.32) return; nods.push({ t: q.t, a: cl(0.35 + (q.v - 0.5) * 1.3 + q.pr * 2, 0.3, 1), s: R() < 0.5 ? -1 : 1 }); }); });
+    // nods on the accents: the words that stand out (pitch, loudness and length together); the stronger the bigger
+    const nods = [];
+    if (pros && pros.accents.length) pros.accents.forEach(ac => { if (ac.s < 0.5 || (nods.length && ac.t - nods[nods.length - 1].t < 0.4)) return; nods.push({ t: ac.t, a: cl(0.14 + Math.pow((ac.s - 0.5) / 0.5, 1.4) * 0.95, 0.14, 1), s: R() < 0.5 ? -1 : 1, w: ac.w }); });
+    else { const lev = A && A.lev ? A.lev : env, peaks = [];
+      for (let i = 4; i < lev.length - 4; i++) { const v = lev[i]; if (v < 0.35 || v < lev[i - 1] || v < lev[i + 1] || v < lev[i - 3] || v < lev[i + 3]) continue; let lo2 = v; for (let k = 1; k <= 14 && i - k >= 0; k++) lo2 = Math.min(lo2, lev[i - k]); if (v - lo2 < 0.06) continue; peaks.push({ t: i / fps, v, pr: v - lo2 }); }
+      p.phrases.forEach(ph => { const inP = peaks.filter(q => q.t >= ph.a - 0.05 && q.t <= ph.b + 0.05).sort((x, y) => (y.v + y.pr) - (x.v + x.pr)); const keep = inP.slice(0, Math.max(1, Math.ceil(inP.length * 0.5))).sort((x, y) => x.t - y.t);
+        keep.forEach(q => { if (nods.length && q.t - nods[nods.length - 1].t < 0.32) return; nods.push({ t: q.t, a: cl(0.35 + (q.v - 0.5) * 1.3 + q.pr * 2, 0.3, 1), s: R() < 0.5 ? -1 : 1 }); }); }); }
     p.nods = nods;
-    // blinks every two to five seconds, sometimes twice; and with every head turn
-    const blinks = []; for (let t = 0.6 + R() * 1.5; t < dur; t += 2.1 + R() * 3.4) { blinks.push(t); if (R() < 0.14) blinks.push(t + 0.26); }
     // moves: the script's tags, then the ones added on the timeline
     const moves = []; (A && A.tags || []).forEach((g, i) => { const m = readTag(g.tag, rig); if (m) moves.push(Object.assign({ id: 'tag' + i, start: g.t, auto: true, tag: g.tag, word: g.word }, m)); });
     (Array.isArray(cfg.moves) ? cfg.moves : []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
-    moves.forEach(m => { if (m.kind === 'gesture') m.start = Math.max(0, m.start - 0.45); });   // the hand gets there on the word
+    moves.forEach(m => { if (m.kind === 'gesture') { m.at = m.start; m.start = Math.max(0, m.start - 0.45); } });   // the hand gets there on the word
     planBursts(cfg, A, p, moves, rig, dur);
+    if (cfg.autoEmo !== false && sem && !moves.some(m => m.kind === 'emotion')) planMoods(cfg, A, p, moves);
     if (cfg.hands !== 'tags' && A && A.words && A.words.length) planHands(cfg, A, p, moves, R, E, dur, rig);
+    planHead(cfg, A, p, moves, R, dur);
     moves.sort((a, b) => a.start - b.start);
     // lengths: emotions and costumes last until the next one of their kind
     moves.forEach((m, i) => { if (m.end != null) return; if (m.dur) { m.end = m.start + m.dur; return; } if (m.kind === 'burst') { m.end = m.start + 2.2; return; } if (m.kind === 'gesture') { m.end = m.start + ((GEST[m.k] && GEST[m.k].len) || 1.6) + 0.4; return; } const L0 = LEN[m.kind]; if (L0) { m.end = m.start + L0; return; } const nx = moves.slice(i + 1).find(q => q.kind === m.kind && (m.kind !== 'costume' || q.k === m.k)); m.end = nx ? nx.start : dur + 10; });
     p.moves = moves;
-    moves.filter(m => m.kind === 'look' || m.kind === 'pose').forEach(m => { blinks.push(m.start - 0.02); blinks.push(m.end - 0.02); });
-    blinks.sort((a, b) => a - b); p.blinks = blinks;
-    // glances away in the longer pauses
-    const glances = []; for (let i = 0; i < p.phrases.length - 1; i++) { const a = p.phrases[i].b, b = p.phrases[i + 1].a; if (b - a > 0.9 && R() < 0.55) { const s = a + 0.15 + R() * 0.2; glances.push({ a: s, b: Math.min(b - 0.1, s + 0.45 + R() * 0.6), x: (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.4), y: (R() - 0.5) * 0.6 }); } }
-    p.glances = glances;
+    planEyes(cfg, A, p, moves, R, dur);
     p.seeds = [R() * 9, R() * 9, R() * 9, R() * 9];
+    const D = dur + 12;
+    p.ix = { moves: mkIdx(moves, m => m.start - 0.6, m => Math.min(D, m.end + 0.8), D), phr: mkIdx(p.phrases, q => q.a - 0.8, q => q.b + 0.9, D), nods: mkIdx(nods, q => q.t - 0.5, q => q.t + 0.6, D), shakes: mkIdx(p.shakes, q => q.a - 0.1, q => q.b + 0.1, D), tilts: mkIdx(p.tilts, q => q.a - 0.5, q => q.b + 0.6, D), raises: mkIdx(p.raises, q => q.a - 0.3, q => q.b + 0.5, D), glances: mkIdx(p.glances, q => q.a - 0.2, q => q.b + 0.3, D), blinks: mkIdx(p.blinks, q => q, q => q + 0.3, D) };
+    bake(cfg, A, rig, p, dur);
     perfMemo.set(A || 'none', { key, p }); if (perfMemo.size > 16) perfMemo.delete(perfMemo.keys().next().value);
     return p;
   }
@@ -191,36 +227,79 @@ const Character = (() => {
       if (m.k === 'laugh' && m.end - m.start >= 1.4 && cfg.hands !== 'tags') moves.push({ id: 'sl' + m.id, k: 'slap', kind: 'gesture', side: 'both', start: m.end - 0.95, end: m.end + 0.35, auto: true, plan: true, tag: 'Slap the desk (laughing)' });
     });
   }
+  /* Mood from the voice and the words, a sentence at a time, when the script has no mood tags: how worked up he is
+     (arousal: louder, higher, wider and quicker than his own usual) and whether the words are good or bad news. Kept
+     cautious: most sentences stay as they are. */
+  function planMoods(cfg, A, p, moves) {
+    const pros = p.pros, sem = p.sem, ips = pros ? pros.ips : [], heard = !!(pros && pros.heard && !A.guessed);
+    const arAt = (a, b) => { let s = 0, c = 0; ips.forEach(P => { const o = Math.min(b, P.b) - Math.max(a, P.a); if (o > 0) { s += P.arousal * o; c += o; } }); return c ? s / c : 0.4; };
+    const burst = (a, b) => moves.some(m => m.kind === 'burst' && a < (m.end != null ? m.end : m.start + 2) && b > m.start);
+    const runs = []; sem.sents.forEach(S => { const ar = heard ? arAt(S.t0, S.t1) : 0.4 + (S.ex ? 0.18 : 0) + (S.caps ? 0.2 : 0) + (S.ex2 ? 0.1 : 0); let k = 'calm';
+      if (ar >= 0.74 && (S.swear || S.val < 0 || S.ex)) k = 'furious';
+      else if ((ar >= 0.56 && (S.swear || S.val < 0)) || (S.swear && S.ex) || (S.ex && S.val < 0)) k = 'angry';
+      else if (S.ex2 || (S.q && S.ex)) k = 'surprised';
+      else if (S.val > 0 && ar >= 0.45 && !S.q) k = 'happy';
+      else if (S.val < 0 && ar < 0.27) k = 'sad';
+      else if (S.doubt && ar < 0.5 && !S.q) k = 'suspicious';
+      if (k === 'calm' || burst(S.t0, S.t1)) return; const last = runs[runs.length - 1];
+      if (last && last.k === k && S.t0 - last.b < 1.2) last.b = S.t1; else runs.push({ k, a: S.t0, b: S.t1 }); });
+    runs.forEach((r, i) => moves.push({ id: 'md' + i, k: r.k, kind: 'emotion', start: Math.max(0, r.a - 0.2), end: r.b + 0.35, auto: true, plan: true, tag: EMO_NAMES[r.k] + (heard ? ' (voice)' : ' (words)') }));
+  }
   /* Natural hands, planned the way people use them (McNeill, Kendon): the hands come up for a thought (an intonation
-     phrase, speech between pauses), give small beats on the stressed syllables, make at most one bigger gesture when a
-     word calls for it (its stroke lands on that word's stressed syllable, the loudest moment in it), hold through short
-     pauses and go back to the desk at the long ones. How much of the talking has hands going is the activity setting
-     (about a third, a half or three quarters), more when he is worked up, less when he is sad; short throwaway lines
-     stay still. The same big gesture is not used twice running. Tags always win. */
+     phrase), give small beats on the accents, and make a bigger gesture when the words call for one, chosen by what is
+     being said (pointing words, no and never, all and every, doubt, questions, lists, but and however, good and bad),
+     its stroke landing on that word's stressed syllable. They hold through short pauses and go back to the desk at the
+     long ones. How much of the talking has hands going is the activity setting (about a third, a half or three
+     quarters), more when he is worked up, less when he is sad; short throwaway lines stay still. The same big gesture
+     is not used twice running. Tags always win. */
+  const TALKING = { relaxed: 1, open: 1 };
   const ACT = { calm: 0.3, natural: 0.5, auto: 0.5, animated: 0.85 };   // animated asks a little over three quarters: throwaway lines stay still whatever
   function planHands(cfg, A, p, moves, R, E, dur, rig) {
-    const W = A.words, lev = A.lev || A.env, fps = A.fps, target0 = ACT[cfg.hands] || 0.5;
-    // each word's stress: the loudest moment in it, and when that is
-    const pk = W.map(w => { let m = 0, at = (w[0] + w[1]) / 2; for (let f = Math.floor(w[0] * fps); f <= Math.ceil(w[1] * fps) && f < lev.length; f++) if ((lev[f] || 0) > m) { m = lev[f]; at = f / fps; } return { v: m, t: Math.min(Math.max(at, w[0]), w[1]) }; });
+    const W = A.words, lev = A.lev || A.env, fps = A.fps, target0 = ACT[cfg.hands] || 0.5, pros = p.pros, sem = p.sem, U = pros ? pros.units : null;
+    // each word's stress: how prominent it is and when its stressed syllable peaks (with no pitch to go on, how loud)
+    const pk = W.map((w, i) => { if (U && U[i] && U[i].w === i) return { v: U[i].prom, t: U[i].t }; let m = 0, at = (w[0] + w[1]) / 2; for (let f = Math.floor(w[0] * fps); f <= Math.ceil(w[1] * fps) && f < lev.length; f++) if ((lev[f] || 0) > m) { m = lev[f]; at = f / fps; } return { v: m, t: Math.min(Math.max(at, w[0]), w[1]) }; });
     const medOf = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] || 0, medAll = medOf(pk.map(q => q.v));
-    // phrases: speech between pauses of a quarter second, or to the end of a sentence
-    const ph = []; let cur = [];
-    W.forEach((w, i) => { cur.push(i); const raw = String(w[2] || ''), nx = W[i + 1]; if (/[.!?;:]["')]*$/.test(raw) || !nx || nx[0] - w[1] > 0.25) { ph.push({ ids: cur, a: W[cur[0]][0], b: w[1], q: /\?/.test(raw), ex: /!/.test(raw) }); cur = []; } });
-    const moodAt = t => { if (moves.some(m => m.kind === 'burst' && m.k === 'rage' && t >= m.start - 0.3 && t <= (m.end != null ? m.end : m.start + 3))) return 'rage'; let k = cfg.mood || 'calm'; moves.filter(m => m.kind === 'emotion' && m.start <= t + 0.3).sort((x, y) => x.start - y.start).forEach(m => { k = m.k; }); return k; };
+    // phrases: speech between pauses, or to the end of a sentence
+    const ph = [];
+    if (pros && pros.ips.length && U && U.length === W.length) pros.ips.forEach(P => ph.push({ ids: P.u.slice(), a: P.a, b: P.b, q: P.q, ex: P.ex, ar: P.arousal, sent: P.sent }));
+    else { let cur = []; W.forEach((w, i) => { cur.push(i); const raw = String(w[2] || ''), nx = W[i + 1]; if (/[.!?;:]["')]*$/.test(raw) || !nx || nx[0] - w[1] > 0.25) { ph.push({ ids: cur, a: W[cur[0]][0], b: w[1], q: /\?/.test(raw), ex: /!/.test(raw), ar: 0.4, sent: true }); cur = []; } }); }
+    const sentOf = i => sem ? sem.sents.find(S => i >= S.a && i <= S.b) : null;
+    const moodAt = t => { if (moves.some(m => m.kind === 'burst' && m.k === 'rage' && t >= m.start - 0.3 && t <= (m.end != null ? m.end : m.start + 3))) return 'rage'; let k = cfg.mood || 'calm'; moves.filter(m => m.kind === 'emotion' && m.start <= t + 0.3 && (m.end == null || m.end > t)).sort((x, y) => x.start - y.start).forEach(m => { k = m.k; }); return k; };
     const boost = k => k === 'rage' || k === 'furious' ? 0.3 : k === 'angry' ? 0.2 : k === 'happy' || k === 'surprised' ? 0.1 : k === 'sad' ? -0.15 : 0;
     const laughing = (a, b) => moves.some(m => m.kind === 'burst' && m.k === 'laugh' && a < m.end && b > m.start);
+    const can = k => { const G = GEST[k]; return !!G && (!G.art || !!(rig && rig.triggers && rig.triggers[G.art]) || !!G.old); };
     ph.forEach(P => {
       P.med = medOf(P.ids.map(i => pk[i].v)); P.peak = P.ids.reduce((m, i) => pk[i].v > pk[m].v ? i : m, P.ids[0]); P.mood = moodAt(P.a);
-      // the word that calls for a bigger gesture (the common ones only when he leans on them)
-      const cross = P.ex || P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage';   // fists only when he is worked up
-      P.trig = null; P.ids.forEach((i, j) => { const L0 = LEX[W[i][4]]; if (!L0) return; if (!cross && GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake)) return; if (j > 0 && LEX[W[P.ids[j - 1]][4]] && LEX[W[P.ids[j - 1]][4]].k === 'wave') return; if (L0.strong && pk[i].v < Math.max(P.med, medAll) + 0.03 && P.ids.length > 2) return; const sc = (L0.strong ? 1 : 2) + pk[i].v; if (!P.trig || sc > P.trig.sc) P.trig = { k: L0.k, i, sc, why: W[i][4] }; });
-      if (!P.trig && P.q) P.trig = { k: 'offer', i: P.ids[P.ids.length - 1], sc: 1.2, why: '?' };
-      if (P.ex && (P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage')) P.trig = { k: 'fist', i: P.peak, sc: 2.5, why: '!' };
+      const cross = P.ex || P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage', S = sentOf(P.ids[0]), lastOfSent = !!S && P.ids[P.ids.length - 1] === S.b;   // fists only when he is worked up
+      // what the words call for: each candidate is a gesture, the word its stroke lands on, and a score (the word's class and how hard he leans on it)
+      const C = [], add = (k, i, base, need, why) => { if (!can(k) || pk[i].v < (need || 0)) return; C.push({ k, i, sc: base + pk[i].v, why: why || W[i][4] }); };
+      P.ids.forEach((i, j) => { const c = sem ? sem.cls[i] : [], has = k => c.includes(k), w = W[i][4];
+        if (has('greet')) add('wave', i, 2.2);
+        if (has('stop')) add('stop', i, 1.9, 0.3);
+        if (has('neg')) add(w === 'never' ? 'finger wag' : 'no', i, 1.5, 0.3);
+        if (has('all')) add('all', i, 1.6, 0.4);
+        if (has('doubt')) add('shrug', i, 1.8);
+        if (has('list')) add('finger up', i, 1.6, 0.25);
+        if (has('num') && j + 2 < P.ids.length && sem.cls[P.ids[j + 1]].includes('num') && !(j > 0 && sem.cls[P.ids[j - 1]].includes('num'))) add('finger up', i, 1.5, 0, 'counting');   // one, two, three: the finger goes up and beats on each
+        if (has('look') && j <= 1) add('finger up', i, 1.3, 0.3);
+        if (has('you')) add('point', i, 1.1, 0.5);
+        if (has('self')) add('self', i, 0.9, 0.6);
+        if (has('here')) add('here', i, 0.9, 0.55);
+        if (has('there')) add('point aside', i, 0.9, 0.55);
+        if (has('because')) add('explain', i, 1.0, 0.3);
+        if (has('contrast') && j <= 1 && P.ids.length > 2) add('other', P.peak, 1.4, 0, w);   // "but ...": the hand moves across for the other side of it
+        if (has('good')) add('thumbs up', i, 1.4, 0.5);
+        if (has('bad') && cross) add('fist shake', i, 1.5, 0.4);
+        if ((has('rage') || (has('swear') && P.ex)) && cross) add('fist', i, 2.1);
+        if (!sem) { const L0 = LEX[w]; if (L0 && !(GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake) && !cross)) add(L0.k, i, L0.strong ? 1 : 2, L0.strong ? Math.max(P.med, medAll) + 0.03 : 0); } });
+      if (P.q && lastOfSent !== false) add('offer', P.peak, 1.3, 0, '?');
+      if (P.ex && (P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage')) add('fist', P.peak, 2.4, 0, '!');
+      P.cand = C.sort((x, y) => y.sc - x.sc); P.trig = P.cand[0] || null;
       const len = P.b - P.a, throwaway = len < 0.7 || P.ids.length <= 2;
-      P.pri = (P.trig ? 0.8 + P.trig.sc * 0.3 : 0) + (pk[P.peak].v - medAll) * 3 + Math.min(len, 3) / 3 + (P.ex ? 0.4 : 0) + R() * 0.35 - (throwaway && !P.trig ? 2 : 0) - (laughing(P.a, P.b) ? 5 : 0);
+      P.pri = (P.trig ? 0.8 + P.trig.sc * 0.3 : 0) + (pk[P.peak].v - medAll) * 2.5 + Math.min(len, 3) / 3 + (P.ex ? 0.4 : 0) + ((P.ar || 0.4) - 0.4) * 1.5 + R() * 0.35 - (throwaway && !P.trig ? 2 : 0) - (laughing(P.a, P.b) ? 5 : 0);
     });
     // which phrases get hands: the strongest first, until his share of the talking time is reached
-    const budget = ph.reduce((s2, P) => s2 + (P.b - P.a) * cl(target0 + boost(P.mood), 0.1, 0.95), 0); let used = 0;
+    const budget = ph.reduce((s2, P) => s2 + (P.b - P.a) * cl(target0 + boost(P.mood) + ((P.ar || 0.4) - 0.4) * 0.3, 0.1, 0.95), 0); let used = 0;
     ph.slice().sort((x, y) => y.pri - x.pri).forEach(P => { const len = P.b - P.a; if (P.pri > -0.5 && used + len * 0.7 + 0.3 <= budget) { P.on = true; used += len + 0.4; } });   // the best fits, a phrase not cut in half
     // what is fixed already (tags, the bursts' slaps and poses): keep clear of it
     const fixed = moves.filter(m => m.kind === 'gesture' || m.kind === 'pose').map(m => ({ a: m.start - 0.25, b: (m.end != null ? m.end : m.start + ((GEST[m.k] && GEST[m.k].len) || 1.6) + 0.4) + 0.25, side: m.kind === 'pose' ? 'both' : m.side }));
@@ -229,7 +308,8 @@ const Character = (() => {
     const endsSentence = P => /[.!?]["')]*$/.test(String(W[P.ids[P.ids.length - 1]][2] || ''));
     const units = []; ph.filter(P => P.on).forEach(P => { const u = units[units.length - 1], prev = u && u.ph[u.ph.length - 1]; if (u && P.a - u.b < 0.6 && !(endsSentence(prev) && P.a - u.b >= 0.3) && P.b - u.a < 4.5) { u.ph.push(P); u.b = P.b; } else units.push({ ph: [P], a: P.a, b: P.b }); });   // a new thought (a sentence after a breath, or past four and a half seconds) is a new unit
     p.handPhrases = ph.map(P => [+P.a.toFixed(2), +P.b.toFixed(2), P.ids.map(i => W[i][2]).join(" "), +P.pri.toFixed(2), !!P.on, P.mood]);
-    const lastT = {}; let lastBig = null, n = 0;
+    const fam = k => GEST[k] && (GEST[k].art === 'palm up' || k === 'shrug' || k === 'offer' || k === 'other') ? 'palm' : k === 'here' || k === 'point' ? 'point' : k;   // a shrug and an offered palm count as the same move
+    const lastT = {}; let lastBig = null, lastStroke = -9, n = 0;
     units.forEach(u => {
       const first = u.ph[0], i0 = first.ids.find(i => pk[i].v >= Math.max(first.med, medAll * 0.9)), start = Math.max(0, pk[i0 != null ? i0 : first.ids[0]].t - 0.45);
       let end = Math.min(dur, u.b + 0.45);
@@ -237,50 +317,100 @@ const Character = (() => {
       const hot = u.ph.some(P => P.mood === 'rage' || P.mood === 'furious' || P.mood === 'angry'), side = hot && u.ph.some(P => P.ex) && R() < 0.5 ? 'both' : 'L';
       if (end - start < 0.6 || clash(start, end, side)) return;
       const k4 = n++ % 4, base = target0 <= 0.3 && !hot ? 'beat' : k4 === 1 ? 'explain' : k4 === 2 ? 'beat' : 'talk';   // mostly the relaxed hand, sometimes the open one
-      moves.push({ id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, auto: true, plan: true, pri: 1, tag: GEST[base].label });
-      // at most one bigger gesture in the unit, on its word's stressed syllable, never the same one twice running
-      const best = u.ph.map(P => P.trig && Object.assign({ P }, P.trig)).filter(Boolean).sort((x, y) => y.sc - x.sc)[0];
-      const fam = k => GEST[k] && (GEST[k].art === 'palm up' || k === 'shrug' || k === 'offer') ? 'palm' : k;   // a shrug and an offered palm count as the same move
-      if (!best || !GEST[best.k] || fam(best.k) === lastBig || pk[best.i].t - (lastT[fam(best.k)] != null ? lastT[fam(best.k)] : -99) < 8) return;
-      const G = GEST[best.k], s0 = Math.max(start, pk[best.i].t - 0.45), e0 = Math.min(Math.max(end, s0 + 1) + 0.2, s0 + G.len * 0.85 + 0.4), sd = G.side === 'both' ? 'both' : 'L';
-      if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
-      moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
-      lastBig = fam(best.k); lastT[fam(best.k)] = pk[best.i].t;
+      const unit = { id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, at: start + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST[base].label }; moves.push(unit);
+      // a bigger gesture for each thought in the unit that calls for one: on its word's stressed syllable, never the same one twice running, not on top of each other
+      u.ph.forEach(P => { const best = P.cand.find(c => fam(c.k) !== lastBig && pk[c.i].t - (lastT[fam(c.k)] != null ? lastT[fam(c.k)] : -99) >= 8); if (!best) return;
+        const G = GEST[best.k], at = pk[best.i].t; if (at - lastStroke < 1.3) return;
+        const s0 = Math.max(start, at - (G.prep || 0.45)), holdTo = G.hold ? Math.min(P.b + 0.15, at + 2.2) : at + G.len * 0.5, e0 = Math.min(Math.max(holdTo, s0 + 0.9) + 0.4, dur), sd = G.side === 'both' ? 'both' : 'L';
+        if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
+        moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, at, amp: cl(0.85 + (pk[best.i].v - 0.5) * 0.6 + ((P.ar || 0.4) - 0.4) * 0.5, 0.75, 1.3), auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
+        if (TALKING[G.art] && !unit.art) unit.art = G.art;   // one talking hand for the whole thought: his relaxed and open hands are close cousins, and a swap between them in mid air reads as a glitch
+        lastBig = fam(best.k); lastT[lastBig] = at; lastStroke = at; });
     });
+  }
+  /* The head and eyebrows beyond the nods: shakes with no, never, nothing (and smaller ones with all, every, really:
+     McClave 2000), a tilt and the brows through a question or a doubt, quick brow raises on the strongest accents
+     (about one accent in three: Krahmer and Swerts 2007), and a shift of weight when a new thought starts after a
+     pause (Cassell and others 2001). */
+  function planHead(cfg, A, p, moves, R, dur) {
+    const pros = p.pros, sem = p.sem, W = (A && A.words) || [], shakes = [], tilts = [], raises = [], shifts = [];
+    p.shakes = shakes; p.tilts = tilts; p.raises = raises; p.shifts = shifts; if (!pros) return;
+    const U = pros.units, byWord = U.length === W.length;
+    const busy = (a, b) => moves.some(m => (m.kind === 'look' || m.kind === 'pose' || m.kind === 'burst') && a < (m.end != null ? m.end : m.start + 2) && b > m.start);
+    if (sem && byWord) W.forEach((w, i) => { const c = sem.cls[i], u = U[i], neg = c.includes('neg'), tot = c.includes('all') || c.includes('intens');
+      if (!(neg && u.prom >= 0.28) && !(tot && u.prom >= 0.62)) return; if (shakes.length && u.t - shakes[shakes.length - 1].b < 2.2) return;
+      const n = neg ? 3 : 2, a = Math.max(0, u.t - 0.2), b = a + n * 0.27 + 0.12; if (busy(a, b)) return; shakes.push({ a, b, n, amp: (neg ? 1 : 0.6) * (0.7 + 0.6 * u.prom), s: R() < 0.5 ? -1 : 1, why: w[4] }); });
+    if (sem && byWord) sem.sents.forEach(S => { const last = pros.ips.filter(P => P.u[0] >= S.a && P.u[P.u.length - 1] <= S.b).pop(); if (!last) return;
+      if (S.q) { const t0 = Math.min(U[last.peak].t, last.b - 0.45) - 0.15; tilts.push({ a: t0, b: last.b + 0.35, r: (R() < 0.5 ? -1 : 1) * 0.045, y: -0.006 }); raises.push({ a: t0, b: last.b + 0.3, v: S.wh ? -0.2 : 0.42 }); }
+      else if (S.doubt) { const j = (() => { for (let k = S.a; k <= S.b; k++) if (sem.cls[k].includes('doubt')) return k; return S.a; })(); tilts.push({ a: W[j][0] - 0.2, b: W[j][1] + 0.7, r: (R() < 0.5 ? -1 : 1) * 0.04, y: 0 }); raises.push({ a: W[j][0] - 0.15, b: W[j][1] + 0.5, v: 0.35, one: R() < 0.5 ? 'L' : 'R' }); } });
+    pros.accents.forEach(ac => { if (ac.s < 0.62 || raises.some(r => ac.t > r.a - 0.75 && ac.t < r.b + 0.75)) return; const u = byWord && ac.w >= 0 ? U[ac.w] : null; raises.push({ a: ac.t - 0.18, b: (u ? u.b : ac.t + 0.2) + 0.06, v: 0.16 + 0.3 * (ac.s - 0.62) / 0.38 }); });
+    raises.sort((x, y) => x.a - y.a);
+    let pos = 0; pros.ips.forEach((P, i) => { const prev = pros.ips[i - 1]; if (!prev || !prev.sent || prev.gap < 0.55 || P.b - P.a < 1.2 || P.a < 2) return; if (shifts.length && P.a - shifts[shifts.length - 1].t < 6) return; let nx = pos; while (nx === pos) nx = [-1, 0, 1][Math.floor(R() * 3)]; shifts.push({ t: P.a - 0.5, from: pos, x: nx }); pos = nx; });
+  }
+  /* The eyes: where he looks and when he blinks. */
+  function planEyes(cfg, A, p, moves, R, dur) {
+    const pros = p.pros, sem = p.sem, gl = [], bias = R() < 0.5 ? -1 : 1, ips = pros && pros.ips.length ? pros.ips : p.phrases.map((q, i, a) => ({ a: q.a, b: q.b, u: [], sent: true, gap: a[i + 1] ? a[i + 1].a - q.b : 9 }));
+    ips.forEach((P, i) => { const prev = ips[i - 1], gap = prev ? P.a - prev.b : P.a, think = !!sem && P.u.slice(0, 3).some(j => sem.cls[j] && sem.cls[j].includes('think'));
+      // away while he finds the start of the thought, back on the camera by its first stress
+      if (gap >= 0.45 && P.b - P.a >= 1.6 && R() < (think ? 0.75 : 0.36)) { const ac = pros ? pros.accents.find(q => q.t > P.a + 0.1) : null, b = Math.min(ac ? ac.t - 0.05 : P.a + 0.5, P.a + 0.75), a = Math.max(prev ? prev.b + 0.1 : 0, P.a - 0.3 - R() * 0.25); if (b - a > 0.3) gl.push({ a, b, x: (R() < 0.72 ? bias : -bias) * (0.55 + R() * 0.4), y: R() < 0.3 ? -0.5 : R() < 0.15 ? 0.4 : (R() - 0.5) * 0.3 }); }
+      else if (gap > 0.9 && prev && R() < 0.5) { const s = prev.b + 0.15 + R() * 0.2; gl.push({ a: s, b: Math.min(P.a - 0.1, s + 0.45 + R() * 0.6), x: (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.4), y: (R() - 0.5) * 0.6 }); } });
+    moves.forEach(m => { if (m.kind === 'gesture' && m.k === 'point aside' && m.at != null) gl.push({ a: m.at - 0.2, b: m.at + 0.5, x: m.side === 'R' ? -0.85 : 0.85, y: 0 }); });
+    for (let t = 1 + R() * 2; t < dur; t += 1.4 + R() * 2.6) gl.push({ a: t, b: t + 0.25 + R() * 0.5, x: (R() - 0.5) * 0.24, y: (R() - 0.5) * 0.14, small: true });   // small darts: eyes are never dead still
+    gl.sort((x, y) => x.a - y.a); const glances = []; gl.forEach(g => { const last = glances[glances.length - 1]; if (last && g.a < last.b + 0.12) { if (last.small && !g.small) glances[glances.length - 1] = g; return; } glances.push(g); });
+    p.glances = glances;
+    // blinks: at the ends of phrases, with looks away and head turns, and never much more than five seconds without one
+    const bl = []; ips.forEach(P => { if (R() < (P.sent ? 0.7 : 0.4)) bl.push(P.b + 0.06 + R() * 0.18); });
+    glances.forEach(g => { if (g.small) return; if (R() < 0.6) bl.push(g.a + 0.02); if (R() < 0.35) bl.push(g.b + 0.02); });
+    moves.filter(m => m.kind === 'look' || m.kind === 'pose').forEach(m => { bl.push(m.start - 0.02); bl.push(m.end - 0.02); });
+    bl.sort((a, b) => a - b); const out = []; let t = 0.4 + R();
+    const fill = to => { let g = 2.2 + R() * 3.1; while (t + g < to - 0.5) { t += g; out.push(t); if (R() < 0.1) out.push(t + 0.28); g = 2.2 + R() * 3.1; } };
+    bl.forEach(b => { if (b < 0.2 || b > dur) return; fill(b); if (b - t < 0.45) return; out.push(b); t = b; }); fill(dur);
+    p.blinks = out.sort((a, b) => a - b);
   }
   const easeWin = (t, a, b, i, o) => sm((t - a) / i) * (1 - sm((t - b) / o));
   const wave = (t, s, f) => Math.sin(t * f + s) * 0.6 + Math.sin(t * f * 2.31 + s * 1.7) * 0.3 + Math.sin(t * f * 0.43 + s * 0.6) * 0.5;
-  // The pose at a moment
-  function poseAt(cfg, A, rig, p, t) {
-    const hh = rig.pivot.headH, E = p.E, pose = { mouth: 'Neutral', blink: 0, swaps: {}, brow: { L: [0, 0, 0], R: [0, 0, 0] }, head: [0, 0, 0, 0], body: [0], arms: {}, pupil: [0, 0], view: 'front', dangle: 0 };
+
+  /* Where everything is aiming at time t (the plan itself, before the springs). pose.fast holds the quick shakes
+     (rage, laughing, a wagging finger) that are added after the springs so they are not smoothed away. */
+  function targetAt(cfg, A, rig, p, t) {
+    const hh = rig.pivot.headH, E = p.E, ix = p.ix, pose = { mouth: 'Neutral', blink: 0, swaps: {}, brow: { L: [0, 0, 0], R: [0, 0, 0] }, head: [0, 0, 0, 0], body: [0], sit: [0, 0, 1], arms: {}, pupil: [0, 0], view: 'front', dangle: 0, fast: { h: [0, 0, 0], L: [0, 0, 0], R: [0, 0, 0], b: 0 } };
+    const near = ix.moves(t), F = pose.fast;
     // emotions, blended
     let em = { L: [0, 0, 0], R: [0, 0, 0], dy: 0, rot: 0, lean: 0, gain: 1, shake: 0, flush: 0, laugh: 0 }; const base = EMO[cfg.mood] || EMO.calm, mix = [[base, 1]];
-    p.moves.forEach(m => { if ((m.kind !== 'emotion' && m.kind !== 'burst') || t < m.start - 0.3 || t > m.end + 0.4) return; const w = m.kind === 'burst' ? 3 * easeWin(t, m.start - 0.1, m.end - 0.3, 0.25, 0.35) : easeWin(t, m.start - 0.2, m.end, 0.42, 0.42); if (w > 0) mix.push([EMO[m.k], w]); });   // a burst outweighs the mood under it
+    near.forEach(m => { if ((m.kind !== 'emotion' && m.kind !== 'burst') || t < m.start - 0.3 || t > m.end + 0.4) return; const w = m.kind === 'burst' ? 3 * easeWin(t, m.start - 0.1, m.end - 0.3, 0.25, 0.35) : easeWin(t, m.start - 0.2, m.end, 0.42, 0.42); if (w > 0) mix.push([EMO[m.k], w]); });   // a burst outweighs the mood under it
     { let sw0 = 0; for (let i = 1; i < mix.length; i++) sw0 += mix[i][1]; mix[0][1] = Math.max(0, 1 - sw0); const tot = mix.reduce((a2, q) => a2 + q[1], 0) || 1; em.gain = 0;
       mix.forEach(([q, w0]) => { const w = w0 / tot; ['L', 'R'].forEach(sd => { for (let j = 0; j < 3; j++) em[sd][j] += q[sd][j] * w; }); em.dy += q.dy * w; em.rot += q.rot * w; em.lean += q.lean * w; em.gain += q.gain * w; em.shake += q.shake * w; em.flush += (q.flush || 0) * w; em.laugh += (q.laugh || 0) * w; }); }
     const G = E * em.gain, L = p.loud(t);
     // mouth
-    if (A && A.visemes.length) { let lo = 0, hi = A.visemes.length - 1; if (t >= A.visemes[0][0]) { while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (A.visemes[mid][0] <= t) lo = mid; else hi = mid - 1; } pose.mouth = A.visemes[lo][1]; } }
-    // the head: a slow drift, a tilt that changes with each phrase, nods on stressed words, forward when loud
+    if (A && A.visemes.length) { let lo = 0, hi = A.visemes.length - 1; if (t >= A.visemes[0][0]) { while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (A.visemes[mid][0] <= t) lo = mid; else hi = mid - 1; } pose.mouth = A.visemes[lo][1]; } if (pose.mouth === 'Aa' && !A.guessed && L < 0.2 && rig.visemes && rig.visemes.Uh != null) pose.mouth = 'Uh'; }   // said quietly, the mouth does not open as far
+    // the head: a slow drift, a tilt that changes with each phrase, nods on the accents, riding on the pitch of his voice, forward when loud
     const s = p.seeds; let hx = wave(t, s[0], 0.55) * 0.010 * hh * (0.6 + 0.4 * E), hy = wave(t, s[1], 0.7) * 0.006 * hh, hr = wave(t, s[2], 0.45) * 0.008 * (0.6 + 0.4 * E);
-    p.phrases.forEach(ph => { const w = easeWin(t, ph.a - 0.25, ph.b + 0.2, 0.45, 0.6); if (w > 0) { hr += ph.tilt * w * G; hx += ph.x * hh * w * G * 0.5; hy += ph.y * hh * w; } });
-    for (const n of p.nods) { if (t < n.t - 0.08) break; const u = (t - n.t + 0.08) / 0.36; if (u > 1) continue; const k = Math.sin(Math.PI * u) * n.a * G; hy += k * 0.03 * hh; hr += k * 0.012 * n.s; }
+    ix.phr(t).forEach(ph => { const w = easeWin(t, ph.a - 0.25, ph.b + 0.2, 0.45, 0.6); if (w > 0) { hr += ph.tilt * w * G; hx += ph.x * hh * w * G * 0.5; hy += ph.y * hh * w; } });
+    for (const n of ix.nods(t)) { const u = (t - n.t + 0.14) / 0.34; if (u <= 0 || u >= 1) continue; const k = Math.sin(Math.PI * u) * n.a * G; hy += k * 0.03 * hh; hr += k * 0.012 * n.s; }   // down on the stressed syllable
+    hy -= p.f0n(t) * 0.011 * hh * Math.min(1.3, G) * sm(L / 0.25);
+    for (const q of ix.shakes(t)) { const u = (t - q.a) / (q.b - q.a); if (u <= 0 || u >= 1) continue; const k = Math.sin(Math.PI * q.n * u) * Math.pow(Math.sin(Math.PI * u), 0.6) * q.amp * q.s * Math.min(1.4, G); hx += k * 0.02 * hh; hr += k * 0.014; }
+    for (const q of ix.tilts(t)) { const w = easeWin(t, q.a, q.b, 0.3, 0.4); if (w > 0) { hr += q.r * w * Math.min(1.4, G); hy += q.y * hh * w; } }
     hy += em.dy * hh; hr += em.rot; const lean = (L * 0.025 + em.lean) * G;
-    if (em.shake > 0.01) { hx += Math.sin(t * 61) * 0.004 * hh * em.shake * (0.4 + L); hy += Math.sin(t * 47 + 1) * 0.003 * hh * em.shake * (0.4 + L); }
+    if (em.shake > 0.01) { F.h[0] += Math.sin(t * 61) * 0.004 * hh * em.shake * (0.4 + L); F.h[1] += Math.sin(t * 47 + 1) * 0.003 * hh * em.shake * (0.4 + L); }
+    // a shift of weight at a new thought: the whole of him moves over a little, the head stays level
+    let sx = 0; { const S = p.shifts; let k = -1; for (let i = 0; i < S.length; i++) { if (S[i].t <= t) k = i; else break; } if (k >= 0) { const q = S[k], w = sm((t - q.t) / 0.9); sx = q.from + (q.x - q.from) * w; } }
+    pose.sit = [sx * 0.013 * hh, sx * 0.007, 1]; hr -= sx * 0.006;
     pose.head = [hx, hy, hr, lean];
-    // eyebrows: the emotion, plus a lift on the loud bits
-    const lift = -sm(cl((p.slow(t) - 0.3) / 0.45, 0, 1)) * 0.3 * Math.min(1.4, G) * (1 - 0.6 * cl((em.L[1] - 0.1) / 0.2, 0, 1));
-    pose.brow.L = [em.L[0], em.L[1] + lift, em.L[2]]; pose.brow.R = [em.R[0], em.R[1] + lift * 1.1, em.R[2]];
+    // eyebrows: the emotion, a quick raise on the strongest accents, up through a question (down for a why or a what)
+    let lift = 0, liftL = 0, liftR = 0; const damp = 1 - 0.6 * cl((em.L[1] - 0.1) / 0.2, 0, 1);
+    if (p.pros) { for (const q of ix.raises(t)) { const w = easeWin(t, q.a, q.b, 0.17, 0.28); if (w <= 0) continue; const v = -q.v * w * Math.min(1.3, 0.6 + 0.4 * G) * (q.v > 0 ? damp : 1); if (q.one === 'L') liftL += v; else if (q.one === 'R') liftR += v; else lift += v; } lift += -sm(cl((p.slow(t) - 0.4) / 0.45, 0, 1)) * 0.1 * Math.min(1.4, G) * damp; }
+    else lift = -sm(cl((p.slow(t) - 0.3) / 0.45, 0, 1)) * 0.3 * Math.min(1.4, G) * damp;
+    pose.brow.L = [em.L[0], em.L[1] + lift + liftL, em.L[2]]; pose.brow.R = [em.R[0], em.R[1] + (lift + liftR) * 1.08, em.R[2]];
     // blinks (shut for about a tenth of a second)
-    for (const b of p.blinks) { if (b > t) break; if (t - b < 0.11) { pose.blink = 1; break; } }
-    // eyes: on the camera, glancing away in long pauses
-    for (const g of p.glances) { const w = easeWin(t, g.a, g.b, 0.08, 0.1); if (w > 0) { pose.pupil = [g.x * w, g.y * w]; break; } }
+    for (const b of ix.blinks(t)) { if (t >= b && t - b < 0.115) { pose.blink = 1; break; } }
+    // eyes: on the camera; away while he finds a thought, small darts between
+    for (const g of ix.glances(t)) { const w = easeWin(t, g.a, g.b, 0.07, 0.09); if (w > 0) { pose.pupil = [g.x * w, g.y * w]; break; } }
     // breathing, deeper before each phrase
-    let br = Math.sin(t * 2 * Math.PI / 3.9 + s[3]) * 0.0035; p.phrases.forEach(ph => { const u = (t - (ph.a - 0.45)) / 0.45; if (u > 0 && u < 1) br += Math.sin(Math.PI * u) * 0.006; }); pose.body = [br];
+    let br = Math.sin(t * 2 * Math.PI / 3.9 + s[3]) * 0.0035; ix.phr(t).forEach(ph => { const u = (t - (ph.a - 0.45)) / 0.45; if (u > 0 && u < 1) br += Math.sin(Math.PI * u) * 0.006; }); pose.body = [br];
     // moves: looks (head turns), hands, poses, costumes
     const sw = pose.swaps, apply = (k, side) => (rig.triggers[k] || []).forEach(([id, i]) => { if (side && side !== 'both' && isHand(rig, id)) { const sd = sideOf(rig, id); if (sd && sd !== side) return; } sw[id] = i; });
     if (cfg.costume && rig.triggers[cfg.costume]) apply(cfg.costume);
-    for (const m of p.moves) {
+    for (const m of near) {
       if (t < m.start || t >= m.end) continue;
       if (m.kind === 'look') { pose.view = LOOKS[m.k]; }
       else if (m.kind === 'costume') { if (m.off) (rig.triggers[m.k] || []).forEach(([id]) => { delete sw[id]; }); else apply(m.k); }
@@ -288,21 +418,30 @@ const Character = (() => {
     }
     // hands: every gesture in play pulls the wrist towards its place; they blend, so one runs into the next
     const want = { L: [], R: [] }, hh2 = hh;
-    for (const m of p.moves) {
-      if (m.kind !== 'gesture' || t < m.start || t >= m.end) continue;
-      let G = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (G.art && !rig.triggers[G.art]) { if (!G.old) continue; G = Object.assign({}, G, G.old); }   // his own drawings when loaded, else the old ones
-      const u = t - m.start, w = easeWin(t, m.start, m.end - 0.4, 0.48, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
-      sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = G.at;
-        if (G.wag) ar += Math.sin(u * (G.wagHz || 14)) * G.wag * sm((u - 0.2) / 0.25);
-        if (G.shake) { const on = sm((u - 0.3) / 0.2); ax += Math.sin(u * 27) * 0.014 * on; ay += Math.sin(u * 31 + 1) * 0.016 * on; }
-        if (G.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
-        if (G.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
-        if (!G.bang && !G.wag) for (const n of p.nods) { if (n.t < m.start + 0.25) continue; if (n.t > t + 0.1) break; const q = (t - n.t + 0.05) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.03 * k; ar += 0.07 * k; } }
-        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: ay * hh2, rot: ar * mir, art: G.art, fy: G.fy || 0, sc: G.sc || 1, plain: G.plain || 0 }); });
+    for (const m of near) {
+      if (m.kind !== 'gesture' || t < m.start - 0.2 || t >= m.end) continue;
+      let Gs = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (Gs.art && !rig.triggers[Gs.art]) { if (!Gs.old) continue; Gs = Object.assign({}, Gs, Gs.old); }   // his own drawings when loaded, else the old ones
+      else if (m.art && TALKING[Gs.art] && rig.triggers[m.art]) Gs = Object.assign({}, Gs, { art: m.art });   // the unit's talking hand matches the bigger gesture inside it
+      const at = m.at != null ? m.at : m.start + 0.45, prep = cl(at - m.start, 0.25, 0.6), u = t - m.start, us = t - at, amp = m.amp || 1, big = (m.pri || 2) >= 5;
+      const w = t < m.start ? 0 : easeWin(t, m.start, m.end - 0.4, prep, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
+      sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = Gs.at; ay *= amp; let fx = 0, fy = 0, fr = 0, antic = 0;
+        if (big && !Gs.bang) antic = Math.sin(Math.PI * cl((t - (m.start - 0.16)) / 0.3, 0, 1)) * 0.014;   // a small dip before it lifts: the wind up
+        if (Gs.wag) fr += Math.sin(u * (Gs.wagHz || 14)) * Gs.wag * sm((u - 0.2) / 0.25);
+        if (Gs.shake) { const on = sm((u - 0.3) / 0.2); fx += Math.sin(u * 27) * 0.014 * on; fy += Math.sin(u * 31 + 1) * 0.016 * on; }
+        if (Gs.bang) { const v = u - 0.12; ay = v < 0.24 ? -0.17 * sm(v / 0.24) : v < 0.34 ? -0.17 * (1 - sm((v - 0.24) / 0.1)) : 0; if (v > 0.32 && v < 0.56) pose.head[1] += Math.sin((v - 0.32) / 0.24 * Math.PI) * 0.016 * hh2; }
+        if (Gs.sweep) ax += Gs.sweep * amp * (sm((us + 0.2) / 0.36) - 0.5);                           // across, through the stressed syllable
+        if (Gs.tap) ay -= Gs.tap * (us < -0.16 ? sm((us + 0.5) / 0.3) : us < 0 ? 1 - sm((us + 0.16) / 0.16) : 0);   // up first, then down onto the desk on the word
+        if (Gs.wob) ar += Math.sin(us * 9) * Gs.wob * easeWin(t, at - 0.15, at + 0.9, 0.15, 0.4);
+        if (Gs.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
+        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.13) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent
+        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: (ay + antic * (1 - w)) * hh2, rot: ar * mir, art: Gs.art, th: Gs.late || 0.3, fy: Gs.fy || 0, fxp: Gs.fx || 0, sc: Gs.sc || 1, plain: Gs.plain || 0, f: [fx * hh2 * mir * w, fy * hh2 * w, fr * mir * w], an: antic * hh2 }); });
     }
-    ['L', 'R'].forEach(sd => { const L2 = want[sd]; if (!L2.length) return; let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
-      let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; if (!best || q.ww > best.ww) best = q; });
-      if (tw <= 0) return; pose.arms[sd] = { dx: dx / tw * mx, dy: dy / tw * mx, rot: rot / tw * mx, fy: best.art && mx > 0.3 ? best.fy : 0, sc: best.art && mx > 0.3 ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3 }; if (best.art && best.art !== '-hide' && mx > 0.3) apply(best.art, sd); });   // the plain inside of the sleeve as the forearm turns over
+    ['L', 'R'].forEach(sd => { const L2 = want[sd], rest = { dx: -pose.sit[0], dy: 0, rot: 0, fy: 0, sc: 1, plain: 0, hide: false, art: '' }; if (!L2.length) { pose.arms[sd] = rest; return; } let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null, an = 0; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
+      let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; an = Math.max(an, q.an); F[sd][0] += q.f[0]; F[sd][1] += q.f[1]; F[sd][2] += q.f[2]; if (!best || q.ww > best.ww) best = q; });
+      if (tw <= 0) { rest.dy = an; pose.arms[sd] = rest; return; } const on = best.art && mx > 0.3 && best.w > best.th;   // some drawings only make sense once the hand is up (a finger pointing down would go through the desk)
+      // the turn belongs to the drawing showing: his desk hands and his talking hands are drawn at different angles, so a turn blended across two of them would spin the wrong one
+      let rw = 0, rr = 0; L2.forEach(q => { if ((q.art || null) === (best.art || null)) { rw += q.ww; rr += q.rot * q.ww; } });
+      pose.arms[sd] = { dx: dx / tw * mx - pose.sit[0] * (1 - mx), dy: dy / tw * mx + an * (1 - mx), rot: (rw > 0 ? rr / rw : 0) * mx, fy: on ? best.fy : 0, fx: on ? best.fxp : 0, sc: on ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3, art: on && best.art !== '-hide' ? best.art : '' }; });   // the plain inside of the sleeve as the forearm turns over
     // a laugh: head back, eyes screwed shut, mouth wide open on every ha, shoulders bouncing
     const lw = cl(em.laugh, 0, 1);
     if (lw > 0.03) {
@@ -310,8 +449,8 @@ const Character = (() => {
       const ha = voiced ? cl((env - 0.2) / 0.5, 0, 1) : 0.5 + 0.5 * Math.sin(2 * Math.PI * hz * t), bob = Math.abs(Math.sin(Math.PI * hz * t));
       if (lw > 0.4) { pose.mouth = ha > 0.45 ? 'Aa' : 'Uh'; pose.blink = 1; }
       if (lw > 0.72 && rig.views.up != null) pose.view = 'up';
-      pose.head[1] += -bob * 0.022 * hh * lw; pose.head[2] += Math.sin(Math.PI * hz * t * 0.5) * 0.02 * lw; pose.body[0] += bob * 0.009 * lw;
-      ['L', 'R'].forEach(sd => { const a = pose.arms[sd] || { dx: 0, dy: 0, rot: 0 }; a.dy += -bob * 0.014 * hh * lw; pose.arms[sd] = a; });
+      F.h[1] += -bob * 0.022 * hh * lw; F.h[2] += Math.sin(Math.PI * hz * t * 0.5) * 0.02 * lw; F.b += bob * 0.009 * lw;
+      F.L[1] += -bob * 0.014 * hh * lw; F.R[1] += -bob * 0.014 * hh * lw;
     }
     // rage: red in the face (pulsing with the shouting), teeth gritted when he is not talking
     const fw = cl(em.flush, 0, 1);
@@ -319,6 +458,39 @@ const Character = (() => {
     // the hoodie strings swing a little with the head
     pose.dangle = (wave(t, s[0], 0.55) - wave(t - 0.2, s[0], 0.55)) * 0.15 * E + hr * 0.4;
     return pose;
+  }
+  /* The plan played through springs, worked out once at 60 a second: a move overshoots a touch and settles, the hand's
+     turn trails its travel, nothing starts or stops dead (minimum jerk like movement: Flash and Hogan 1985). Each
+     channel is then slid back by its spring's delay, so a stroke still lands on its syllable. */
+  const SPR = { hx: [17, 0.8], hy: [19, 0.72], hr: [16, 0.74], hl: [12, 0.9], sx: [7, 0.9], sr: [7, 0.9], bLy: [22, 0.68], bRy: [22, 0.68], bLr: [26, 0.7], bRr: [26, 0.7], bLx: [26, 0.8], bRx: [26, 0.8], aLx: [20, 0.66], aLy: [22, 0.62], aLr: [14, 0.55], aRx: [20, 0.66], aRy: [22, 0.62], aRr: [14, 0.55] };
+  const BF = 60;
+  function bake(cfg, A, rig, p, dur) {
+    const n = Math.ceil((dur + 2) * BF) + 2, raw = {}, arts = { L: new Array(n), R: new Array(n) }; Object.keys(SPR).forEach(k => { raw[k] = new Float32Array(n); });
+    for (let i = 0; i < n; i++) { const q = targetAt(cfg, A, rig, p, i / BF);
+      raw.hx[i] = q.head[0]; raw.hy[i] = q.head[1]; raw.hr[i] = q.head[2]; raw.hl[i] = q.head[3]; raw.sx[i] = q.sit[0]; raw.sr[i] = q.sit[1];
+      ['L', 'R'].forEach(sd => { raw['b' + sd + 'x'][i] = q.brow[sd][0]; raw['b' + sd + 'y'][i] = q.brow[sd][1]; raw['b' + sd + 'r'][i] = q.brow[sd][2]; const a = q.arms[sd]; raw['a' + sd + 'x'][i] = a.dx; raw['a' + sd + 'y'][i] = a.dy; raw['a' + sd + 'r'][i] = a.rot; arts[sd][i] = a.hide ? '-hide' : a.art || ''; }); }
+    // which hand drawing shows, frame by frame: one that would show for under a fifth of a second is skipped (the one before it stays), so a hand never flickers
+    const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && j - i < BF * 0.2) { for (let k = i; k < j; k++) a[k] = a[i - 1]; } i = j; } art[sd] = a; });
+    const out = {}; Object.keys(SPR).forEach(k => { const [w, z] = SPR[k], src = raw[k], y = new Float32Array(n), sub = 4, h = 1 / BF / sub, cut = /^a[LR]r$/.test(k) ? art[k[1]] : null, lag = Math.round(2 * z / w * BF), o = new Float32Array(n); let x = src[0], v = 0, s0 = 0;
+      for (let i = 0; i < n; i++) { const tg = src[i]; if (cut && i > 0 && cut[i] !== cut[i - 1]) { for (let q = s0; q < i; q++) o[q] = y[Math.min(i - 1, q + lag)]; s0 = i; x = tg; v = 0; }   // a new drawing starts at its own turn: nothing carries over from the last one
+        for (let s2 = 0; s2 < sub; s2++) { v += (w * w * (tg - x) - 2 * z * w * v) * h; x += v * h; } y[i] = x; }
+      for (let q = s0; q < n; q++) o[q] = y[Math.min(n - 1, q + lag)]; out[k] = o; });
+    // the hand's turn follows its travel a little: it drags behind as the arm swings and catches up
+    ['L', 'R'].forEach(sd => { const y = out['a' + sd + 'y'], r = out['a' + sd + 'r'], hh = rig.pivot.headH, mir = sd === 'R' ? -1 : 1; let drag = 0; for (let i = 1; i < n; i++) { const vy = (y[i] - y[i - 1]) * BF / hh; drag += (cl(vy * 0.16, -0.14, 0.14) - drag) * 0.3; r[i] += drag * mir; } });
+    p.bk = { n, ch: out, art };
+  }
+  const bk = (p, k, t) => { const a = p.bk.ch[k], f = t * BF, i = Math.floor(f); return i < 0 ? a[0] : i >= a.length - 1 ? a[a.length - 1] : a[i] + (a[i + 1] - a[i]) * (f - i); };
+  function poseAt(cfg, A, rig, p, t) {
+    const q = targetAt(cfg, A, rig, p, t), F = q.fast, hh = rig.pivot.headH;
+    if (p.bk) {
+      q.head = [bk(p, 'hx', t), bk(p, 'hy', t), bk(p, 'hr', t), bk(p, 'hl', t)]; q.sit = [bk(p, 'sx', t), bk(p, 'sr', t), 1];
+      ['L', 'R'].forEach(sd => { q.brow[sd] = [bk(p, 'b' + sd + 'x', t), bk(p, 'b' + sd + 'y', t), bk(p, 'b' + sd + 'r', t)]; const a = q.arms[sd]; a.dx = bk(p, 'a' + sd + 'x', t); a.dy = Math.min(0.012 * hh, bk(p, 'a' + sd + 'y', t));   // the desk is solid: a hand never goes through it
+        const T = p.bk.art[sd], i = Math.max(0, Math.min(T.length - 1, Math.floor(t * BF + 1e-6))), k = T[i]; a.rot = i + 1 < T.length && T[i + 1] !== k ? p.bk.ch['a' + sd + 'r'][i] : bk(p, 'a' + sd + 'r', t); a.art = k === '-hide' ? '' : k; a.hide = k === '-hide'; if (!a.art) { a.fy = 0; a.fx = 0; } });
+      q.dangle += (bk(p, 'hx', t) - bk(p, 'hx', t - 0.14)) / hh * 6 + (bk(p, 'sx', t) - bk(p, 'sx', t - 0.2)) / hh * 8;   // the strings swing behind the head
+    }
+    q.head[0] += F.h[0]; q.head[1] += F.h[1]; q.head[2] += F.h[2]; q.body[0] += F.b;
+    ['L', 'R'].forEach(sd => { const a = q.arms[sd]; a.dx += F[sd][0]; a.dy += F[sd][1]; a.rot += F[sd][2]; if (a.art) handArt(rig, q.swaps, a.art, sd); });
+    return q;
   }
 
   /* ---------- framing ---------- */
@@ -386,7 +558,15 @@ const Character = (() => {
     }
     // the voice
     const vpick = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm' }); vpick.style.display = 'none'; const vnote = H('p', { className: 'hint', 'aria-live': 'polite' });
-    vpick.addEventListener('change', async () => { const f = vpick.files && vpick.files[0]; if (!f || typeof CutMedia === 'undefined') return; vnote.textContent = 'Bringing in ' + f.name + '…'; try { const m = await CutMedia.importFile(f, (q) => { vnote.textContent = 'Bringing in ' + f.name + '… ' + Math.round(q * 100) + '%'; }); cfg.voice = m.id; cfg.voiceName = f.name; redo(); } catch (e) { vnote.textContent = e.message || String(e); } });
+    vpick.addEventListener('change', async () => { const f = vpick.files && vpick.files[0]; if (!f || typeof CutMedia === 'undefined') return; vnote.textContent = 'Bringing in ' + f.name + '…'; try { const m = await CutMedia.importFile(f, (q) => { vnote.textContent = 'Bringing in ' + f.name + '… ' + Math.round(q * 100) + '%'; }); cfg.voice = m.id; cfg.voiceName = f.name; if (canHear() && scriptIsBlank()) { redo(); hear(); } else redo(); } catch (e) { vnote.textContent = e.message || String(e); } });
+    // the words from the recording itself (Listen), or from a PatterScript file
+    const canHear = () => typeof Listen !== 'undefined' && Listen.state === 'ready', scriptIsBlank = () => !String(cfg.script || '').trim() || cfg.script === defaults().script;
+    const hear = async () => { if (hearing[cfg.voice]) return; const id = cfg.voice, say = t => { hearing[id] = t; const el = document.getElementById('chHear'); if (el) { el.textContent = t; el.disabled = true; } };
+      try { if (Listen.state !== 'ready' && (await Listen.check()) !== 'ready') { say('Getting the listening helper…'); await Listen.download(q => say('Getting the listening helper… ' + Math.round(q * 100) + '%')); }
+        say('Listening…'); const text = await Listen.forMedia(id, { onProgress: q => say('Listening… ' + Math.round(q * 100) + '%') }); delete hearing[id]; if (text && cfg.voice === id) { cfg.script = text; } heardNote = text ? '' : 'It heard no words in that recording.'; redo(); }
+      catch (e) { delete hearing[id]; heardNote = e.message || String(e); redo(); } };
+    const spick = H('input', { type: 'file', accept: '.txt,.md,text/plain' }); spick.style.display = 'none';
+    spick.addEventListener('change', async () => { const f = spick.files && spick.files[0]; if (!f) return; const t = fromPatterScript(await f.text()); if (t) { cfg.script = t; heardNote = ''; redo(); } else { heardNote = 'No script found in that file.'; redo(); } });
     const vinfo = cfg.voice && typeof CutMedia !== 'undefined' ? CutMedia.info(cfg.voice) : null, sounds = typeof CutMedia !== 'undefined' ? CutMedia.list().filter(m => (m.kind === 'audio' || (m.kind === 'video' && m.hasAudio !== false)) && !m.builtin) : [];
     const A = syncOf(cfg);
     root.append(card('Voice',
@@ -400,12 +580,18 @@ const Character = (() => {
     // the script
     const cat = catalogue(rig), tagHint = 'Tags: ' + cat.map(c => '[' + c.k + ']').join(' ') + '. Add a number for seconds, e.g. [point 3]. Hands: [point left]. Emotions last until the next one.';
     let tmr = null;
-    root.append(card('Script', area(cfg.script || '', v => { cfg.script = v; clearTimeout(tmr); tmr = setTimeout(() => changed(), 250); }, 'Paste what you say, with [tags] where you want something to happen', 7, 'Script'), H('p', { className: 'hint', textContent: tagHint }),
+    const hBusy = cfg.voice && hearing[cfg.voice], hasL = typeof Listen !== 'undefined';
+    root.append(card('Script', area(cfg.script || '', v => { cfg.script = v; clearTimeout(tmr); tmr = setTimeout(() => changed(), 250); }, 'What you say. Add a recording and it can write this for you; [tags] are optional', 7, 'Script'),
+      H('div', { className: 'btnrow' }, cfg.voice && hasL ? (() => { const b0 = btn(hBusy || (canHear() ? 'Write the words from the recording' : 'Write the words from the recording (180 MB download, once)'), e => { if (!scriptIsBlank() && !confirm('Replace the script with what it hears in the recording?')) return; hear(); }, scriptIsBlank() ? 'primary' : ''); b0.id = 'chHear'; if (hBusy) b0.disabled = true; return b0; })() : null, btn('Load a PatterScript file', () => spick.click())), spick,
+      heardNote ? H('p', { className: 'hint', 'aria-live': 'polite', textContent: heardNote }) : '',
+      H('p', { className: 'hint', textContent: cfg.voice && hasL ? 'It listens to the recording on this computer and writes down what you said, so his hands, head and face follow your words. Fix any word it misheard. No tags are needed: he picks his own gestures and moods; a tag overrides him at that point.' : 'With a recording he can write this himself. No tags are needed: he picks his own gestures and moods from what is said; a tag overrides him at that point.' }),
+      H('p', { className: 'hint', textContent: tagHint }),
       A && A.words && A.words.length && !A.guessed ? H('p', { className: 'hint', textContent: A.words.length + ' words lined up with the recording. The words show on the timeline: if one is badly out, check the script matches what you said.' }) : ''));
     // how he looks
     root.append(card('Look',
       field('Mood when nothing else is set', sel(cfg.mood || 'calm', Object.keys(EMO).filter(k => !isBurst(k)).map(k => [k, EMO_NAMES[k]]), v => { cfg.mood = v; changed(); }, 'Mood')),
-      field('Hands', seg(cfg.hands === 'tags' ? 'tags' : cfg.hands === 'calm' || cfg.hands === 'animated' ? cfg.hands : 'natural', [['calm', 'Calm'], ['natural', 'Natural'], ['animated', 'Animated'], ['tags', 'Only my tags']], v => { cfg.hands = v; redo(); }), cfg.hands === 'tags' ? 'He keeps his hands on the desk unless a tag says otherwise.' : 'His hands come up for a thought, beat on the words you stress and go down at the pauses, with a bigger gesture only when a word calls for it (pointing at \u201cyou\u201d, a shrug at a question). Calm, Natural and Animated move his hands through about a third, a half and three quarters of the talking, more when he is worked up. Your tags always win.'),
+      field('Hands', seg(cfg.hands === 'tags' ? 'tags' : cfg.hands === 'calm' || cfg.hands === 'animated' ? cfg.hands : 'natural', [['calm', 'Calm'], ['natural', 'Natural'], ['animated', 'Animated'], ['tags', 'Only my tags']], v => { cfg.hands = v; redo(); }), cfg.hands === 'tags' ? 'He keeps his hands on the desk unless a tag says otherwise.' : 'His hands come up for a thought, beat on the words you stress and go down at the pauses, with a gesture chosen by what you are saying (pointing at \u201cyou\u201d, a flat hand on \u201cno\u201d, hands apart on \u201ceverything\u201d, a shrug at \u201cmaybe\u201d, a palm up on a question), landing on the stressed syllable. Calm, Natural and Animated move his hands through about a third, a half and three quarters of the talking, more when he is worked up. Your tags always win.'),
+      field('Mood', seg(cfg.autoEmo === false ? 'off' : 'on', [['on', 'From my voice'], ['off', 'Only my tags']], v => { cfg.autoEmo = v !== 'off'; redo(); }), cfg.autoEmo === false ? 'His mood only changes where a tag says so.' : 'When the script has no mood tags, he reads it from how worked up your voice is and what the words are: angry, happy, sad, surprised, doubtful. One mood tag anywhere and he leaves moods to you.'),
       field('Energy', seg(String(cfg.energy || 1), [['0.6', 'Chilled'], ['1', 'Normal'], ['1.5', 'Lively'], ['2', 'Wired']], v => { cfg.energy = +v; redo(); })),
       ...(rig && Object.keys(rig.triggers).some(k => readTag(k, rig).kind === 'costume') ? [field('Wearing', sel(cfg.costume || '', [['', 'His usual'], ...Object.keys(rig.triggers).filter(k => readTag(k, rig).kind === 'costume').map(k => [k, FRIENDLY[k] || k])], v => { cfg.costume = v; changed(); }, 'Costume'))] : []),
       field('Framing', seg(cfg.frame || 'desk', FRAMES, v => { cfg.frame = v; redo(); })),
@@ -441,5 +627,5 @@ const Character = (() => {
   const soundId = cfg => cfg && cfg.voice || null;
   // Just the puppet at a moment, in its own pixels (no background, no framing): for the Studio to place and light
   function drawRig(g, cfg, t) { const rig = cfg && cfg.puppet ? Puppet.get(cfg.puppet) : null; if (!rig) return null; const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d); Puppet.draw(g, rig, poseAt(cfg, A, rig, p, Math.max(0, t))); return rig; }
-  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
+  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, _GEST: GEST, fromPatterScript, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
 })();

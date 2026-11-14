@@ -181,7 +181,8 @@ const LipSync = (() => {
     return s;
   }
 
-  function analyse(x, script) {
+  function analyse(x, script) { const r = analyse0(x, script); if (typeof Prosody !== 'undefined') Prosody.annotate(r, Prosody.pitch(x)); return r; }
+  function analyse0(x, script) {
     const ft = features(x), dur = x.length / SR, P = parse(script), env = ft.en, lev = ft.lev;
     if (!P.words.length) return { visemes: tidy(guess(ft), 0.03), words: [], tags: [], env, lev, fps: FPS, dur, script: false };
     const al = align(ft, P.words), seg = segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
@@ -203,7 +204,8 @@ const LipSync = (() => {
     const dur = t + 0.3, n = Math.ceil(dur * FPS), env = new Float32Array(n);
     words.forEach(w => { for (let f = Math.floor(w[0] * FPS); f < Math.min(n, w[1] * FPS); f++) env[f] = 0.55 + 0.35 * Math.sin((f - w[0] * FPS) / Math.max(1, (w[1] - w[0]) * FPS) * Math.PI); });
     const at = i => i < words.length ? words[i][0] : t;
-    return { visemes: tidy(vis.sort((a, b) => a[0] - b[0]), 0), words, tags: P.tags.map(g => ({ tag: g.tag, word: g.word, t: at(g.word) })), env, lev: env, fps: FPS, dur, script: true, guessed: true };
+    const R0 = { visemes: tidy(vis.sort((a, b) => a[0] - b[0]), 0), words, tags: P.tags.map(g => ({ tag: g.tag, word: g.word, t: at(g.word) })), env, lev: env, fps: FPS, dur, script: true, guessed: true };
+    if (typeof Prosody !== 'undefined') Prosody.annotate(R0, null); return R0;
   }
   // A recording (Blob) to 16 kHz mono samples
   async function decode(blob) {
