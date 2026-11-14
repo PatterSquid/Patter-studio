@@ -1,0 +1,31 @@
+{
+ "v": 1,
+ "name": "Whisper base (English)",
+ "ort": {
+  "js": "../cutout/ort.webgpu.min.js",
+  "mjs": "../cutout/ort-wasm-simd-threaded.jsep.mjs",
+  "wasm": "../cutout/ort-wasm-simd-threaded.jsep.wasm",
+  "version": "1.20.1"
+ },
+ "models": {
+  "enc": [
+   "enc.onnx"
+  ],
+  "dec": [
+   "dec.onnx.part0",
+   "dec.onnx.part1",
+   "dec.onnx.part2"
+  ],
+  "tokens": "tokens.txt"
+ },
+ "sizes": {
+  "enc.onnx": 29120534,
+  "tokens.txt": 835554,
+  "dec.onnx.part0": 45000000,
+  "dec.onnx.part1": 45000000,
+  "dec.onnx.part2": 40669978,
+  "../cutout/ort.webgpu.min.js": 333594,
+  "../cutout/ort-wasm-simd-threaded.jsep.mjs": 46839,
+  "../cutout/ort-wasm-simd-threaded.jsep.wasm": 21663894
+ }
+}
