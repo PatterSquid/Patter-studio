@@ -39,7 +39,8 @@ const Character = (() => {
     'point aside': { art: 'point', at: [-0.02, -0.3, 1.45], side: 'L', len: 1.5, label: 'Point over there' },
     wave: { art: 'wave', at: [0.1, -0.5, 2.2], side: 'L', len: 1.8, wag: 0.2, label: 'Wave' },
     // his own talking hands (the green screen sheet, HandSheet): used when he has loaded them, else the old drawing in 'old'
-    talk: { art: 'relaxed', at: [-0.05, -0.16, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
+    // the hand held up loosely curled between strokes ('collection': dos Santos and others 2011, it says he is carrying on), low, between the desk and his chest
+    talk: { art: 'relaxed', at: [-0.04, -0.13, 0], side: 'L', len: 2, sway: 1, bt: 1.35, plain: 1, label: 'Relaxed talking hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
     explain: { art: 'open', at: [-0.05, -0.22, 0], side: 'L', len: 2, sway: 1, plain: 1, label: 'Explaining hand', old: { art: 'wave', at: [0.05, -0.17, 2.6] } },
     offer: { art: 'palm up', at: [0.02, -0.2, 0], side: 'L', len: 1.5, plain: 1, label: 'Palm up (here\u2019s the thing)', old: { art: 'wave', at: [0.14, -0.12, 2.35] } },
     stop: { art: 'wave', at: [0.08, -0.26, 2.2], side: 'L', len: 1.4, label: 'Stop (palm up)' },
@@ -52,7 +53,7 @@ const Character = (() => {
     // the everyday ones (he found raised hands all the time unnatural, November 2026): his resting hand stays as he drew it and
     // only lifts off the desk a little, beats on the stressed words and drifts; most talk to camera at a desk looks like this
     desk: { art: null, at: [-0.01, -0.04, 0.05], side: 'L', len: 2, bt: 0.5, drift: 1, label: 'Hand on the desk (wee beats)' },
-    lift: { art: null, at: [-0.03, -0.1, 0.12], side: 'L', len: 1.2, bt: 0.6, label: 'Lift off the desk' },
+    lift: { art: null, at: [-0.03, -0.1, 0.12], side: 'L', len: 1.2, bt: 0.6, follow: 1, label: 'Lift off the desk' },
     beat: { art: 'relaxed', at: [-0.03, -0.07, 0], side: 'L', len: 0.7, plain: 1, label: 'Wee hand beat', old: { art: null, at: [0, -0.07, 0.12], plain: 0 } },
     // gestures by meaning, all made from his own drawings (turned, moved or flipped, never redrawn)
     no: { art: null, at: [0.0, -0.2, 0], side: 'L', len: 1.3, sweep: 0.22, hold: 1, label: 'No (flat hand across)' },
@@ -257,8 +258,8 @@ const Character = (() => {
      quarters), more when he is worked up, less when he is sad; short throwaway lines stay still. The same big gesture
      is not used twice running. Tags always win. */
   const TALKING = { relaxed: 1, open: 1 };
-  const ACT = { calm: 0.3, natural: 0.5, auto: 0.5, animated: 0.85 };
-  const BIG_GAP = { calm: 9, natural: 6, auto: 6, animated: 3.5 };   // seconds between bigger gestures: most of the time the hand just works on the desk   // animated asks a little over three quarters: throwaway lines stay still whatever
+  const ACT = { calm: 0.3, natural: 0.62, auto: 0.62, animated: 0.85 };   // seated talk to camera: the hands are up for most of a thought, then rest at its end
+  const BIG_GAP = { calm: 6, natural: 3.2, auto: 3.2, animated: 2.2 };   // seconds between bigger gestures: most of the time the hand just works on the desk   // animated asks a little over three quarters: throwaway lines stay still whatever
   function planHands(cfg, A, p, moves, R, E, dur, rig) {
     const W = A.words, lev = A.lev || A.env, fps = A.fps, target0 = ACT[cfg.hands] || 0.5, pros = p.pros, sem = p.sem, U = pros ? pros.units : null;
     // each word's stress: how prominent it is and when its stressed syllable peaks (with no pitch to go on, how loud)
@@ -284,11 +285,12 @@ const Character = (() => {
         if (has('greet') && (W[i][0] < 6 || W[i][0] > dur - 8)) add('wave', i, 2.2, 0.3);
         if (has('stop')) add('stop', i, 1.6, 0.6);
         if (has('neg')) add('no', i, 1.3, 0.45);
-        if (has('doubt')) add('shrug', i, 1.5, 0.55);
+        if (has('doubt')) add('shrug', i, 1.5, 0.4);
+        if (has('because') || has('think') || has('contrast')) add('offer', i, 1.1, 0.45);   // laying a point out to the viewer: the palm up 'conduit' (Kendon 2004; about one gesture in six, Chu and others 2014)
         if (has('num') && j + 2 < P.ids.length && sem.cls[P.ids[j + 1]].includes('num') && !(j > 0 && sem.cls[P.ids[j - 1]].includes('num'))) add('finger up', i, 1.5, 0, 'counting');   // one, two, three: the finger goes up and beats on each
-        if (has('you')) add('point', i, 1.0, 0.72);
+        if (has('you')) add('point', i, 1.0, 0.55);
         if (has('self')) add('self', i, 0.8, 0.75);
-        if (has('all') || has('intens') || has('because')) add('lift', i, 0.9, 0.5);
+        if (has('all') || has('intens')) add('lift', i, 0.9, 0.45);
         if ((has('rage') || (has('swear') && P.ex)) && cross) add('fist', i, 2.1, 0.5);
         if (!sem) { const L0 = LEX[w]; if (L0 && !(GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake) && !cross)) add(L0.k, i, L0.strong ? 1 : 2, L0.strong ? Math.max(P.med, medAll) + 0.03 : 0); } });
       if (P.q && lastOfSent !== false) add('offer', P.peak, 1.3, 0, '?');
@@ -315,7 +317,7 @@ const Character = (() => {
       const fx = fixed.find(q => q.a > start && q.a < end); if (fx) end = Math.max(start + 0.6, fx.a);   // stop where a tag takes over
       const hot = u.ph.some(P => P.mood === 'rage' || P.mood === 'furious' || P.mood === 'angry'), side = hot && u.ph.some(P => P.ex) && R() < 0.5 ? 'both' : 'L';
       if (end - start < 0.6 || clash(start, end, side)) return;
-      const k4 = n++ % 5, base = cfg.hands === 'animated' && k4 === 2 ? 'talk' : 'desk';   // his hand on the desk, working away; the raised talking hand only now and then when he is animated
+      const span = u.b - u.a, base = target0 <= 0.3 && !hot ? 'desk' : span < 1.1 ? 'desk' : 'talk'; n++;   // a thought: the hand comes up loosely curled and beats with the stresses; a quick aside stays on the desk
       const unit = { id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, at: start + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST[base].label }; moves.push(unit);
       // a bigger gesture for each thought in the unit that calls for one: on its word's stressed syllable, never the same one twice running, not on top of each other
       u.ph.forEach(P => { const best = P.cand.find(c => fam(c.k) !== lastBig && pk[c.i].t - (lastT[fam(c.k)] != null ? lastT[fam(c.k)] : -99) >= 8); if (!best) return;
@@ -323,9 +325,14 @@ const Character = (() => {
         const s0 = Math.max(start, at - (G.prep || 0.45)), holdTo = G.hold ? Math.min(P.b + 0.15, at + 2.2) : at + G.len * 0.5, e0 = Math.min(Math.max(holdTo, s0 + 0.9) + 0.4, dur), sd = G.side === 'both' ? 'both' : 'L';
         if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
         moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, at, amp: cl(0.8 + (pk[best.i].v - 0.5) * 0.4 + ((P.ar || 0.4) - 0.4) * 0.4, 0.7, 1.1), auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
+        if (G.follow && base === 'talk') moves[moves.length - 1].art = unit.art || GEST.talk.art;
         if (TALKING[G.art] && !unit.art) unit.art = G.art;   // one talking hand for the whole thought: his relaxed and open hands are close cousins, and a swap between them in mid air reads as a glitch
         lastBig = fam(best.k); lastT[lastBig] = at; lastStroke = at; });
     });
+    // the phrases left over: the hand stays on the desk but still works with the stresses, so he is never stock still while he talks
+    if (target0 > 0.3) ph.filter(P => !P.on && P.b - P.a > 0.8 && !laughing(P.a, P.b)).forEach(P => { const a = P.a - 0.2, b = Math.min(dur, P.b + 0.35);
+      if (moves.some(m => m.kind === 'gesture' && a < m.end + 0.3 && b > m.start - 0.3) || clash(a, b, 'L')) return;
+      moves.push({ id: 'd' + Math.round(a * 100), k: 'desk', kind: 'gesture', side: 'L', start: a, end: b, at: a + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST.desk.label }); });
   }
   /* The head and eyebrows beyond the nods: shakes with no, never, nothing (and smaller ones with all, every, really:
      McClave 2000), a tilt and the brows through a question or a doubt, quick brow raises on the strongest accents
@@ -420,7 +427,7 @@ const Character = (() => {
     for (const m of near) {
       if (m.kind !== 'gesture' || t < m.start - 0.2 || t >= m.end) continue;
       let Gs = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (Gs.art && !rig.triggers[Gs.art]) { if (!Gs.old) continue; Gs = Object.assign({}, Gs, Gs.old); }   // his own drawings when loaded, else the old ones
-      else if (m.art && TALKING[Gs.art] && rig.triggers[m.art]) Gs = Object.assign({}, Gs, { art: m.art });   // the unit's talking hand matches the bigger gesture inside it
+      else if (m.art && (TALKING[Gs.art] || Gs.follow) && rig.triggers[m.art]) Gs = Object.assign({}, Gs, { art: m.art });   // a lift inside a raised thought keeps the hand that is up   // the unit's talking hand matches the bigger gesture inside it
       const at = m.at != null ? m.at : m.start + 0.45, prep = cl(at - m.start, 0.25, 0.6), u = t - m.start, us = t - at, amp = m.amp || 1, big = (m.pri || 2) >= 5;
       const w = t < m.start ? 0 : easeWin(t, m.start, m.end - 0.4, prep, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
       sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = Gs.at; ay *= amp; let fx = 0, fy = 0, fr = 0, antic = 0;
