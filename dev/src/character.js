@@ -49,6 +49,10 @@ const Character = (() => {
     'fist shake': { art: 'back fist', at: [0, -0.3, 0.5], sc: 1.1, side: 'L', len: 1.4, shake: 1, label: 'Shake a fist' },
     slap: { art: null, at: [0, 0, 0], side: 'both', len: 1.1, bang: 1, label: 'Slap the desk' },
     'finger wag': { art: 'point', at: [-0.05, -0.36, 2.35], side: 'L', len: 1.4, wag: 0.16, wagHz: 19, label: 'Wag a finger' },
+    // the everyday ones (he found raised hands all the time unnatural, November 2026): his resting hand stays as he drew it and
+    // only lifts off the desk a little, beats on the stressed words and drifts; most talk to camera at a desk looks like this
+    desk: { art: null, at: [-0.01, -0.04, 0.05], side: 'L', len: 2, bt: 0.5, drift: 1, label: 'Hand on the desk (wee beats)' },
+    lift: { art: null, at: [-0.03, -0.1, 0.12], side: 'L', len: 1.2, bt: 0.6, label: 'Lift off the desk' },
     beat: { art: 'relaxed', at: [-0.03, -0.07, 0], side: 'L', len: 0.7, plain: 1, label: 'Wee hand beat', old: { art: null, at: [0, -0.07, 0.12], plain: 0 } },
     // gestures by meaning, all made from his own drawings (turned, moved or flipped, never redrawn)
     no: { art: null, at: [0.0, -0.2, 0], side: 'L', len: 1.3, sweep: 0.22, hold: 1, label: 'No (flat hand across)' },
@@ -253,7 +257,8 @@ const Character = (() => {
      quarters), more when he is worked up, less when he is sad; short throwaway lines stay still. The same big gesture
      is not used twice running. Tags always win. */
   const TALKING = { relaxed: 1, open: 1 };
-  const ACT = { calm: 0.3, natural: 0.5, auto: 0.5, animated: 0.85 };   // animated asks a little over three quarters: throwaway lines stay still whatever
+  const ACT = { calm: 0.3, natural: 0.5, auto: 0.5, animated: 0.85 };
+  const BIG_GAP = { calm: 9, natural: 6, auto: 6, animated: 3.5 };   // seconds between bigger gestures: most of the time the hand just works on the desk   // animated asks a little over three quarters: throwaway lines stay still whatever
   function planHands(cfg, A, p, moves, R, E, dur, rig) {
     const W = A.words, lev = A.lev || A.env, fps = A.fps, target0 = ACT[cfg.hands] || 0.5, pros = p.pros, sem = p.sem, U = pros ? pros.units : null;
     // each word's stress: how prominent it is and when its stressed syllable peaks (with no pitch to go on, how loud)
@@ -274,26 +279,20 @@ const Character = (() => {
       // what the words call for: each candidate is a gesture, the word its stroke lands on, and a score (the word's class and how hard he leans on it)
       const C = [], add = (k, i, base, need, why) => { if (!can(k) || pk[i].v < (need || 0)) return; C.push({ k, i, sc: base + pk[i].v, why: why || W[i][4] }); };
       P.ids.forEach((i, j) => { const c = sem ? sem.cls[i] : [], has = k => c.includes(k), w = W[i][4];
-        if (has('greet')) add('wave', i, 2.2);
-        if (has('stop')) add('stop', i, 1.9, 0.3);
-        if (has('neg')) add(w === 'never' ? 'finger wag' : 'no', i, 1.5, 0.3);
-        if (has('all')) add('all', i, 1.6, 0.4);
-        if (has('doubt')) add('shrug', i, 1.8);
-        if (has('list')) add('finger up', i, 1.6, 0.25);
+        // only what people really do at a desk with their hands up (he found the rest unnatural): the hand comes up for a
+        // question, a shrug, a pointed "you", a greeting, counting, a "no", and a bang when he is raging
+        if (has('greet') && (W[i][0] < 6 || W[i][0] > dur - 8)) add('wave', i, 2.2, 0.3);
+        if (has('stop')) add('stop', i, 1.6, 0.6);
+        if (has('neg')) add('no', i, 1.3, 0.45);
+        if (has('doubt')) add('shrug', i, 1.5, 0.55);
         if (has('num') && j + 2 < P.ids.length && sem.cls[P.ids[j + 1]].includes('num') && !(j > 0 && sem.cls[P.ids[j - 1]].includes('num'))) add('finger up', i, 1.5, 0, 'counting');   // one, two, three: the finger goes up and beats on each
-        if (has('look') && j <= 1) add('finger up', i, 1.3, 0.3);
-        if (has('you')) add('point', i, 1.1, 0.5);
-        if (has('self')) add('self', i, 0.9, 0.6);
-        if (has('here')) add('here', i, 0.9, 0.55);
-        if (has('there')) add('point aside', i, 0.9, 0.55);
-        if (has('because')) add('explain', i, 1.0, 0.3);
-        if (has('contrast') && j <= 1 && P.ids.length > 2) add('other', P.peak, 1.4, 0, w);   // "but ...": the hand moves across for the other side of it
-        if (has('good')) add('thumbs up', i, 1.4, 0.5);
-        if (has('bad') && cross) add('fist shake', i, 1.5, 0.4);
-        if ((has('rage') || (has('swear') && P.ex)) && cross) add('fist', i, 2.1);
+        if (has('you')) add('point', i, 1.0, 0.72);
+        if (has('self')) add('self', i, 0.8, 0.75);
+        if (has('all') || has('intens') || has('because')) add('lift', i, 0.9, 0.5);
+        if ((has('rage') || (has('swear') && P.ex)) && cross) add('fist', i, 2.1, 0.5);
         if (!sem) { const L0 = LEX[w]; if (L0 && !(GEST[L0.k] && (GEST[L0.k].bang || GEST[L0.k].shake) && !cross)) add(L0.k, i, L0.strong ? 1 : 2, L0.strong ? Math.max(P.med, medAll) + 0.03 : 0); } });
       if (P.q && lastOfSent !== false) add('offer', P.peak, 1.3, 0, '?');
-      if (P.ex && (P.mood === 'angry' || P.mood === 'furious' || P.mood === 'rage')) add('fist', P.peak, 2.4, 0, '!');
+      if (P.ex && (P.mood === 'furious' || P.mood === 'rage')) add('fist', P.peak, 2.4, 0, '!');
       P.cand = C.sort((x, y) => y.sc - x.sc); P.trig = P.cand[0] || null;
       const len = P.b - P.a, throwaway = len < 0.7 || P.ids.length <= 2;
       P.pri = (P.trig ? 0.8 + P.trig.sc * 0.3 : 0) + (pk[P.peak].v - medAll) * 2.5 + Math.min(len, 3) / 3 + (P.ex ? 0.4 : 0) + ((P.ar || 0.4) - 0.4) * 1.5 + R() * 0.35 - (throwaway && !P.trig ? 2 : 0) - (laughing(P.a, P.b) ? 5 : 0);
@@ -309,21 +308,21 @@ const Character = (() => {
     const units = []; ph.filter(P => P.on).forEach(P => { const u = units[units.length - 1], prev = u && u.ph[u.ph.length - 1]; if (u && P.a - u.b < 0.6 && !(endsSentence(prev) && P.a - u.b >= 0.3) && P.b - u.a < 4.5) { u.ph.push(P); u.b = P.b; } else units.push({ ph: [P], a: P.a, b: P.b }); });   // a new thought (a sentence after a breath, or past four and a half seconds) is a new unit
     p.handPhrases = ph.map(P => [+P.a.toFixed(2), +P.b.toFixed(2), P.ids.map(i => W[i][2]).join(" "), +P.pri.toFixed(2), !!P.on, P.mood]);
     const fam = k => GEST[k] && (GEST[k].art === 'palm up' || k === 'shrug' || k === 'offer' || k === 'other') ? 'palm' : k === 'here' || k === 'point' ? 'point' : k;   // a shrug and an offered palm count as the same move
-    const lastT = {}; let lastBig = null, lastStroke = -9, n = 0;
+    const lastT = {}, bigGap = BIG_GAP[cfg.hands] || 6; let lastBig = null, lastStroke = -99, n = 0;
     units.forEach(u => {
       const first = u.ph[0], i0 = first.ids.find(i => pk[i].v >= Math.max(first.med, medAll * 0.9)), start = Math.max(0, pk[i0 != null ? i0 : first.ids[0]].t - 0.45);
       let end = Math.min(dur, u.b + 0.45);
       const fx = fixed.find(q => q.a > start && q.a < end); if (fx) end = Math.max(start + 0.6, fx.a);   // stop where a tag takes over
       const hot = u.ph.some(P => P.mood === 'rage' || P.mood === 'furious' || P.mood === 'angry'), side = hot && u.ph.some(P => P.ex) && R() < 0.5 ? 'both' : 'L';
       if (end - start < 0.6 || clash(start, end, side)) return;
-      const k4 = n++ % 4, base = target0 <= 0.3 && !hot ? 'beat' : k4 === 1 ? 'explain' : k4 === 2 ? 'beat' : 'talk';   // mostly the relaxed hand, sometimes the open one
+      const k4 = n++ % 5, base = cfg.hands === 'animated' && k4 === 2 ? 'talk' : 'desk';   // his hand on the desk, working away; the raised talking hand only now and then when he is animated
       const unit = { id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, at: start + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST[base].label }; moves.push(unit);
       // a bigger gesture for each thought in the unit that calls for one: on its word's stressed syllable, never the same one twice running, not on top of each other
       u.ph.forEach(P => { const best = P.cand.find(c => fam(c.k) !== lastBig && pk[c.i].t - (lastT[fam(c.k)] != null ? lastT[fam(c.k)] : -99) >= 8); if (!best) return;
-        const G = GEST[best.k], at = pk[best.i].t; if (at - lastStroke < 1.3) return;
+        const G = GEST[best.k], at = pk[best.i].t; if (at - lastStroke < (G.art || G.bang ? bigGap : 1.5)) return;
         const s0 = Math.max(start, at - (G.prep || 0.45)), holdTo = G.hold ? Math.min(P.b + 0.15, at + 2.2) : at + G.len * 0.5, e0 = Math.min(Math.max(holdTo, s0 + 0.9) + 0.4, dur), sd = G.side === 'both' ? 'both' : 'L';
         if (e0 - s0 < 0.7 || fixed.some(q => s0 < q.b && e0 > q.a && meets(q.side, sd))) return;
-        moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, at, amp: cl(0.85 + (pk[best.i].v - 0.5) * 0.6 + ((P.ar || 0.4) - 0.4) * 0.5, 0.75, 1.3), auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
+        moves.push({ id: 'g' + Math.round(s0 * 100) + best.k.replace(/\W/g, ''), k: best.k, kind: 'gesture', side: sd, start: s0, end: e0, at, amp: cl(0.8 + (pk[best.i].v - 0.5) * 0.4 + ((P.ar || 0.4) - 0.4) * 0.4, 0.7, 1.1), auto: true, plan: true, pri: G.bang || G.wag || G.shake ? 12 : 5, tag: G.label + (best.why && best.why.length > 1 && !G.label.toLowerCase().includes(best.why) ? ' (' + best.why + ')' : '') });
         if (TALKING[G.art] && !unit.art) unit.art = G.art;   // one talking hand for the whole thought: his relaxed and open hands are close cousins, and a swap between them in mid air reads as a glitch
         lastBig = fam(best.k); lastT[lastBig] = at; lastStroke = at; });
     });
@@ -433,7 +432,8 @@ const Character = (() => {
         if (Gs.tap) ay -= Gs.tap * (us < -0.16 ? sm((us + 0.5) / 0.3) : us < 0 ? 1 - sm((us + 0.16) / 0.16) : 0);   // up first, then down onto the desk on the word
         if (Gs.wob) ar += Math.sin(us * 9) * Gs.wob * easeWin(t, at - 0.15, at + 0.9, 0.15, 0.4);
         if (Gs.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
-        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.13) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a; ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent
+        if (Gs.drift) { ax += Math.sin(t * 0.83 + 2) * 0.012; ay += Math.sin(t * 1.7) * 0.006; ar += Math.sin(t * 1.1 + 1) * 0.035; }   // a hand resting while he talks is never quite still
+        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.13) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a * (Gs.bt || 1); ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent
         want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: (ay + antic * (1 - w)) * hh2, rot: ar * mir, art: Gs.art, th: Gs.late || 0.3, fy: Gs.fy || 0, fxp: Gs.fx || 0, sc: Gs.sc || 1, plain: Gs.plain || 0, f: [fx * hh2 * mir * w, fy * hh2 * w, fr * mir * w], an: antic * hh2 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd], rest = { dx: -pose.sit[0], dy: 0, rot: 0, fy: 0, sc: 1, plain: 0, hide: false, art: '' }; if (!L2.length) { pose.arms[sd] = rest; return; } let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null, an = 0; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
