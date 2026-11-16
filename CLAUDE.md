@@ -68,16 +68,27 @@ git add -A && git commit && git push origin main
   second: moving the mouse across the window costs nothing however long the video is.
 * **An even beat for the preview** (polish pass, November 2026): when a tab cannot be drawn inside one screen refresh the
   player shows a new picture every second (or third, fourth) refresh, each held the same length, instead of as many as it
-  can at uneven gaps (`div`, `vs` in `E.Player`; up when one picture in four arrives late or the drawing costs over 0.9 of
-  a refresh, down only with room to spare and not straight after a failed try; remembered per tab in `beatOf`). On a
-  stand in for a slow laptop (screen at scale 2, processor slowed 3 times) the spread of picture times fell from 11 to 4 ms
-  on Charts and 15 to 4 on Newspaper, a steady 30 a second; a fast machine stays at 60. `tests/pacing.py <scale> <slowdown>`
-  measures it. The editor's overlay on the preview (`drawOverlay`) does nothing while playing with nothing selected and
-  the pointer elsewhere (it was cleared and handed to the screen every frame), and clocks rewritten every frame are
-  `contain`ed so the page is not measured again for them.
+  can at uneven gaps (`div`, `vs` in `E.Player`). Up: pictures late one time in four for two checks running (a stumble as
+  playing starts does not count); past two refreshes only when half are late and the drawing is why. Down: when the
+  drawing would fit the quicker beat with room to spare, never straight after a failed try (the wait doubles each time, up
+  to half a minute). Remembered per tab in `beatOf`. A tab that keeps up is never slowed: do not add a rule that slows on
+  drawing cost alone (it dropped tabs that held 60 to 30). `tests/pacing.py out.json 2 <slowdown> vsync <tabs>` measures
+  it with frames started only on a 60 a second screen's refreshes (headless Chromium otherwise starts the next frame at
+  any gap, which hides the judder). On the stand in for a slow laptop (screen at scale 2, processor slowed 2 and 3
+  times) pictures held the same length went from between 52 and 94 in a hundred to between 86 and 100; at full speed
+  nothing changes (60 a second before and after). The numbers move a few points from run to run here. The editor's
+  overlay on the preview (`drawOverlay`) does nothing while playing with nothing selected and the pointer elsewhere (it
+  was cleared and handed to the screen every frame), and clocks rewritten every frame are `contain`ed so the page is not
+  measured again for them. The Speed check reports pictures really shown and the beat (`player.pictures`, `player.beat`).
 * Checks added in the polish pass: `tests/popdet.js` (runjs: every tab's example frame by frame at 60 a second, lists single
   frames that change far more than their neighbours: none in November 2026), `tests/ui_metrics.py` (where the browser's
-  time goes: start up, each tab idle and playing, a heavy Video timeline scrubbed, dragged, zoomed), `tests/pacing.py`. The Smooth preview
+  time goes: start up, each tab idle and playing, a heavy Video timeline scrubbed, dragged, zoomed), `tests/pacing.py`.
+* The cloud workspace can be wiped between sessions (it was, mid polish pass): everything in `dev/tmp_*` and the scratch
+  folder goes, the repo comes back as a fresh clone of `main`. So push work in progress to a branch as you go, and expect
+  to remake fixtures: `tmp_cut/`, `tmp_dogclip.webm`, `tmp_noisy.wav`, voices (ffmpeg, flite), `tmp_room.png` and
+  `tmp_marks.json` (from `dev/assets/studio-room.jpg` and `studio-marks.json`), `tmp_dnhome/` (links to `denoise/` and
+  `cutout/`). His puppet, hand sheet and recordings cannot be remade: the Character tests need him to attach
+  `Massive_v2.puppet` and his hand sheet again (or the art password to unlock `private/art.locked`). The Smooth preview
   (`SP` in app.js) only draws ahead when the tab's live drawing is slow (`player.drawMs` over 12 ms), with at most two
   helpers, and for clips with his puppet (`mainThread`, a big copy per helper) only once he presses Play. The background
   remover lets go of its model two minutes after he leaves the Thumbnail tab (`Cutout.rest`). **His laptop** (speed check,
