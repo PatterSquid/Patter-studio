@@ -70,8 +70,13 @@ const Editor = (() => {
     }
     function addKey() { const e = ed(); if (!e || !e.addKey || !sel || !sel.startsWith('L:')) return false; const st = trackRows.flatMap(tr => tr.items).find(i => i.id === sel); let t = curT; if (st) t = Math.max(st.start, Math.min(st.end, t)); selKey = e.addKey(o.getCfg(), sel, t); o.changed(true); return true; }
     // Zooming keeps the moment under the pointer (or the middle of the view) where it is
-    function setPps(v, clientX, fromSlider) { const r = scroll.getBoundingClientRect(), ax = clientX == null ? scroll.clientWidth / 2 : Math.max(0, Math.min(scroll.clientWidth, clientX - r.left)), tAt = (scroll.scrollLeft + ax) / pps; pps = Math.max(ZMIN, Math.min(ZMAX, v)); fitted = true; build(); scroll.scrollLeft = Math.max(0, tAt * pps - ax); sx = scroll.scrollLeft; if (!fromSlider) zoomIn.value = zPos(pps); }
-    function zoom(f, clientX) { setPps(pps * f, clientX); }
+    let zq = null;   // however many zoom steps arrive in one screen refresh (a wheel or a pinch sends a burst), it is rebuilt once
+    function setPps(v, clientX, fromSlider) {
+      v = Math.max(ZMIN, Math.min(ZMAX, v)); if (!zq) { const r = scroll.getBoundingClientRect(), ax = clientX == null ? scroll.clientWidth / 2 : Math.max(0, Math.min(scroll.clientWidth, clientX - r.left)); zq = { ax, tAt: (scroll.scrollLeft + ax) / pps, slider: !!fromSlider };
+        requestAnimationFrame(() => { const q = zq; zq = null; pps = q.v; fitted = true; build(); scroll.scrollLeft = Math.max(0, q.tAt * pps - q.ax); sx = scroll.scrollLeft; if (!q.slider) zoomIn.value = zPos(pps); }); }
+      zq.v = v; if (!fromSlider) zq.slider = false;
+    }
+    function zoom(f, clientX) { setPps((zq ? zq.v : pps) * f, clientX); }
     const selLayers = () => [...new Set([...(multi.size ? multi : []), ...(sel ? [sel] : [])])].filter(i => typeof i === 'string' && i.startsWith('L:'));
     function markSel() { lanes.querySelectorAll('.tl-clip').forEach(c => c.classList.toggle('on', c.dataset.id === sel || multi.has(c.dataset.id))); }
     function removeSel() { const e = ed(); if (multi.size > 1 && e && e.remove && selKey < 0) { [...multi].forEach(i => e.remove(o.getCfg(), i)); multi.clear(); sel = null; o.changed(true); o.select(null); drawBar(); return; } if (sel && selKey >= 0 && e && e.removeKey) { e.removeKey(o.getCfg(), sel, selKey); selKey = -1; o.changed(true); o.select(sel); return; } if (!sel || !e || !e.remove) return; e.remove(o.getCfg(), sel); sel = null; o.changed(true); o.select(null); drawBar(); }
@@ -219,7 +224,7 @@ const Editor = (() => {
       const up = () => { cancelAnimationFrame(raf); play.removeEventListener('pointermove', mv); play.removeEventListener('pointerup', up); play.removeEventListener('pointercancel', up); o.player.scrub(false); play.classList.remove('drag'); };
       play.addEventListener('pointermove', mv); play.addEventListener('pointerup', up); play.addEventListener('pointercancel', up); raf = requestAnimationFrame(tick);
     }
-    scroll.addEventListener('wheel', ev => { if (ev.ctrlKey || ev.metaKey) { ev.preventDefault(); zoom(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX); } }, { passive: false });
+    scroll.addEventListener('wheel', ev => { if (ev.ctrlKey || ev.metaKey) { ev.preventDefault(); zoom(Math.pow(1.15, Math.max(-3, Math.min(3, -ev.deltaY / 100))), ev.clientX); } }, { passive: false });
     // The playhead moves by transform and the scroll position is remembered, so a playing preview never makes the page
     // measure itself again every frame
     let sx = 0, sw = 0, tcTxt = ''; scroll.addEventListener('scroll', () => { sx = scroll.scrollLeft; }, { passive: true });

@@ -727,3 +727,10 @@ body.gfx .transport,body.anim .transport{gap:12px}
 .ct-row:not(.ct-newrow) .ct-h:hover{background:#111d35}
 .ct-lane{contain:layout style}
 .tl-lane{contain:layout style}
+
+/* Things rewritten every frame of a playing preview keep to themselves, so the rest of the page is never measured again for them */
+.ct-corner{contain:size layout paint}
+.tl-tc{contain:strict}
+.time{width:172px;height:18px;line-height:18px;contain:strict}
+.ct-meter i{width:100%;transform:scaleX(0);transform-origin:left center;transition:transform .06s linear}
+.ct-play{left:0}

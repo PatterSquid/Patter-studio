@@ -160,17 +160,29 @@ const E = (() => {
     // instead of every screen refresh, so the computer is left alone. Any click, key, typing or mouse move wakes it at once.
     let active = performance.now(), sleepT = 0; const recent = []; let lastMod = '';
     const nap = ms => { sleepT = setTimeout(() => { sleepT = 0; last = performance.now(); requestAnimationFrame(frame); }, ms); };
-    const wake = () => { active = performance.now(); if (sleepT) { clearTimeout(sleepT); sleepT = 0; last = active; requestAnimationFrame(frame); } };
+    // Has anything changed? The answer needs the whole clip's settings written out and compared, which for a long video is
+    // a lot to do sixty times a second. So it is done when something may have changed them (a press, a key, typing, a drag
+    // with the button held, a change the app reports) and otherwise four times a second as a safety net; moving the mouse
+    // across the window costs nothing.
+    let dirty = true, heavyKey = '', heavyAt = 0, heavyMod = '';
+    const wake = ev => { if (!ev || ev.type !== 'pointermove' || ev.buttons) dirty = true; active = performance.now(); if (sleepT) { clearTimeout(sleepT); sleepT = 0; last = active; requestAnimationFrame(frame); } };
     ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'dragover', 'drop', 'focusin', 'resize'].forEach(k => window.addEventListener(k, wake, { capture: true, passive: true }));
+    // An even beat: when a tab cannot be drawn inside one screen refresh, a new picture every second (or third) refresh,
+    // each held the same length, looks far smoother than as many as possible at uneven gaps (the judder he saw on his
+    // laptop: 16, 33 and 50 ms pictures mixed together). vs is the screen's refresh, div how many refreshes a picture is held.
+    let vs = 1000 / 60, div = 1, lastRaf = 0, lastShown = 0, seen = 0, miss = 0, drawEma = 0, wasPlaying = false, lastUp = 0, lastDown = -1e9, hold = 1500; const beatOf = {};
     function frame(now) {
+      const rg = now - lastRaf; lastRaf = now; if (rg > 5 && rg < 22) vs = vs * 0.9 + rg * 0.1;
+      if (playing && !scrubbing && div > 1 && now - lastShown < (div - 0.5) * vs) { requestAnimationFrame(frame); return; }   // hold this picture until its time is up
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
       const st = getState(); if (!st || frozen) { nap(250); return; }
       const { mod, cfg, look } = st, { W, H } = dims(look.format);
-      if (mod.id !== lastMod) { lastMod = mod.id; recent.length = 0; }   // each tab's drawing time is its own
+      if (mod.id !== lastMod) { lastMod = mod.id; recent.length = 0; div = beatOf[mod.id] || 1; seen = miss = 0; drawEma = 0; hold = 1500; }   // and its beat is remembered for when he comes back to it   // each tab's drawing time is its own
       dur = mod.duration(cfg, look);
       if (playing && !scrubbing) { t += dt; if (loop) { if (t > loop[1] || t < loop[0] - 0.05) t = loop[0]; } else if (t >= dur) { t = dur; playing = false; } }
       // When paused, only redraw if something actually changed (time, settings or size), so the computer isn't kept busy
-      if (!playing) { const key = t.toFixed(4) + '|' + mode + (previewOnCpu() ? 'c' : 'g') + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + JSON.stringify(cfg) + JSON.stringify(look) + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { if (performance.now() - active > 700) { nap(200); return; } onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
+      if (!playing) { if (dirty || now - heavyAt > 240 || mod.id !== heavyMod) { heavyKey = JSON.stringify(cfg) + JSON.stringify(look); heavyAt = now; heavyMod = mod.id; dirty = false; }
+        const key = t.toFixed(4) + '|' + mode + (previewOnCpu() ? 'c' : 'g') + '|' + mod.id + '|' + (typeof Media !== 'undefined' ? Media.tick : 0) + '|' + (typeof CutMedia !== 'undefined' ? CutMedia.tick : 0) + '|' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '|' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '|' + heavyKey + canvas.clientWidth + 'x' + canvas.clientHeight + '|' + (E.fontVersion || 0) + '|' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0); if (key === lastKey) { if (performance.now() - active > 700) { nap(200); return; } onTime && onTime(Math.min(t, dur), dur, playing); requestAnimationFrame(frame); return; } lastKey = key; } else lastKey = '';
       // Normal previews are at most 1.5 pixels per screen pixel (a sharp laptop screen at scale 2 doesn't need 4 times the work)
       const dpr = mode === 'draft' ? Math.min(1, window.devicePixelRatio || 1) * 0.5 : Math.min(window.devicePixelRatio || 1, mode === 'full' ? 2 : 1.5) * (mode === 'full' ? 1 : quality), cw = canvas.clientWidth, ch = canvas.clientHeight;
       const pxW = Math.round(cw * dpr), pxH = Math.round(ch * dpr);
@@ -191,6 +203,15 @@ const E = (() => {
       ctx.restore(); if (onCpu && pxW > 0 && pxH > 0) { vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.clearRect(0, 0, canvas.width, canvas.height); vctx.drawImage(cpu, 0, 0); } onTime && onTime(Math.min(t, dur), dur, playing);
       // Keep the preview smooth: drop the preview resolution a notch on slow frames, raise it again when there's headroom.
       const ms = performance.now() - fs; avg = avg * 0.9 + ms * 0.1; if (!cf) { recent.push(ms); if (recent.length > 5) recent.shift(); }
+      // Choosing the beat. Up: at full rate, pictures arriving late one time in five mean it cannot be held, so each is shown
+      // for two refreshes; three or four only when the drawing itself takes that long. Down: only when the drawing leaves
+      // plenty of room, and not straight after a failed try (each failed try waits twice as long before the next).
+      if (playing && !scrubbing && wasPlaying) { const gap = now - lastShown, cost = (drawEma = drawEma ? drawEma * 0.85 + ms * 0.15 : ms) + 3; seen++; if (gap > (div + 0.5) * vs) miss++;
+        if (seen >= 12) { let up = 0; if (div === 1 && (miss >= 3 || cost > vs * 0.9)) up = 2; else if (div === 2 && cost > vs * 1.75) up = 3; else if (div === 3 && cost > vs * 2.7) up = 4;
+          if (up) { div = up; if (now - lastDown < 4000) hold = Math.min(30000, hold * 2); lastUp = now; beatOf[mod.id] = div; }
+          else if (div > 1 && cost < (div - 1) * vs * (div === 2 ? 0.6 : 0.85) && now - lastUp > hold) { div--; lastDown = now; beatOf[mod.id] = div; }
+          seen = miss = 0; } }
+      wasPlaying = playing && !scrubbing; lastShown = now;
       if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > 20 && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }
       requestAnimationFrame(frame);
     }

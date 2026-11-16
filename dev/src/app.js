@@ -34,7 +34,7 @@
   let assetTimer = 0;
   let SP = null, saveTimer = null, autoTimer = null, lastVersion = 0, lastThumb = 0, dirty = false;
   const save = () => {
-    dirty = true; state.updated = Date.now(); if (SP) SP.touch(); clearTimeout(saveTimer); saveTimer = setTimeout(writeLight, 300);
+    dirty = true; state.updated = Date.now(); if (SP) SP.touch(); clearTimeout(saveTimer); saveTimer = setTimeout(writeLight, 300); try { player.wake(); } catch (e) { }   // the preview looks again at once
     clearTimeout(autoTimer); autoTimer = setTimeout(autosave, 1500);
   };
   async function autosave(force) {

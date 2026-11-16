@@ -245,8 +245,9 @@ const CutUI = (() => {
     const ruler = H('div', { className: 'ct-ruler' }), rows = H('div', { className: 'ct-rows' }), play = H('div', { className: 'ct-play' }, H('i', {})), snapLine = H('div', { className: 'ct-snapl', hidden: true }), boxEl = H('div', { className: 'ct-box', hidden: true });
     const HEAD = 168; inner.append(ruler, rows, play, snapLine, boxEl); scroll.append(inner); tl.append(bar, scroll);
     const zoomIn = H('input', { type: 'range', min: '0', max: '1000', value: '400', 'aria-label': 'Timeline zoom', title: 'Zoom the timeline (Ctrl + wheel)', on: { input: e => { setZoom(Math.exp(Math.log(4) + (Math.log(800) - Math.log(4)) * e.target.value / 1000), true); } } });
+    let meterEl = null;
     function drawBar() {
-      bar.innerHTML = ''; const s = sel(), isC = s && String(s).startsWith('C:'), f = isC ? V().findItem(cfg(), s) : null, it = f && f.it, m = it && it.asset ? CutMedia.info(it.asset) : null;
+      bar.innerHTML = ''; meterW = -1; meterHot = null; const s = sel(), isC = s && String(s).startsWith('C:'), f = isC ? V().findItem(cfg(), s) : null, it = f && f.it, m = it && it.asset ? CutMedia.info(it.asset) : null;
       bar.append(   // undo and redo live in the header now, for every tab
         ic('split', 'Split at the playhead (S or Ctrl+B)', () => splitNow()), ic('del', 'Delete (Delete)', () => del(false), { disabled: !s }), ic('ripple', 'Delete and close the gap (Shift+Delete)', () => del(true), { disabled: !isC }),
         ic('dup', 'Duplicate (Ctrl+D)', () => dupNow(), { disabled: !isC }),
@@ -255,10 +256,17 @@ const CutUI = (() => {
         ic('marker', 'Add a marker at the playhead (M)', () => addMarker()), ic('shot', 'Save this frame as a picture (for a thumbnail)', () => saveFrame()), H('span', { className: 'ct-sep' }),
         H('button', { type: 'button', className: 'ct-snap' + (snapIsOn() ? ' on' : ''), title: snapIsOn() ? 'Snap is on: clips on the main track butt up together and everything snaps to edges, markers and the playhead. Click to place clips anywhere, with blank screen between them.' : 'Snap is off: put clips anywhere, the space between them is blank screen. Click to snap everything back together.', 'aria-pressed': String(snapIsOn()), on: { click: () => toggleSnap() } }, H('span', { innerHTML: I.snap }), H('b', { textContent: 'Snap' }), H('i', {})),
         H('span', { className: 'ct-gap' }),
-        H('span', { className: 'ct-meter', title: 'Sound level while playing' }, H('i', {})),
+        H('span', { className: 'ct-meter', title: 'Sound level while playing' }, meterEl = H('i', {})),
         ic('fit', 'Fit the whole video in view', () => { fitted = false; build(); }), zoomIn);
     }
-    function setZoom(v, fromSlider) { const c = scroll.scrollLeft + scroll.clientWidth / 2 - HEAD, tc = c / pps; pps = cl(v, 4, 800); fitted = true; build(); scroll.scrollLeft = Math.max(0, tc * pps - scroll.clientWidth / 2 + HEAD); if (!fromSlider) zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); }
+    // Zooming keeps the moment under the pointer (or the middle of the view) where it is. However many zoom steps arrive in
+    // one screen refresh (a wheel or a pinch sends a burst), the timeline is rebuilt once.
+    let zq = null; const zPos = v => String(Math.round((Math.log(v) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)), zoomNow = () => zq ? zq.v : pps;
+    function setZoom(v, fromSlider, clientX) {
+      v = cl(v, 4, 800); if (!zq) { const r = scroll.getBoundingClientRect(), ax = clientX == null ? HEAD + Math.max(0, scroll.clientWidth - HEAD) / 2 : cl(clientX - r.left, HEAD, Math.max(HEAD, scroll.clientWidth)); zq = { ax, tAt: Math.max(0, (scroll.scrollLeft + ax - HEAD) / pps), slider: !!fromSlider };
+        requestAnimationFrame(() => { const q = zq; zq = null; if (!active) return; pps = q.v; fitted = true; build(); scroll.scrollLeft = Math.max(0, q.tAt * pps - q.ax + HEAD); if (!q.slider) zoomIn.value = zPos(pps); }); }
+      zq.v = v; if (!fromSlider) zq.slider = false;
+    }
     let rowList = [], dur = 1;
     function rowsOf(c) {
       const out = [], Wv = Layers.wrap(Video);
@@ -284,7 +292,7 @@ const CutUI = (() => {
       setTime(curT, true); markSel(); paint();
     }
     function drawRuler(Wd) {
-      ruler.innerHTML = ''; ruler.style.width = (HEAD + Wd) + 'px'; ruler.append(H('div', { className: 'ct-corner', textContent: tc(curT, fpsOf()) }));
+      ruler.innerHTML = ''; ruler.style.width = (HEAD + Wd) + 'px'; cornerTx = tc(curT, fpsOf()); cornerEl = H('div', { className: 'ct-corner', textContent: cornerTx }); ruler.append(cornerEl); scX = scroll.scrollLeft; scW = scroll.clientWidth;
       const steps = [1 / 30, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, lane = H('div', { className: 'ct-rl', style: `width:${Wd}px` }), frag = document.createDocumentFragment();
       for (let k = 0, s = 0; s * pps <= Wd; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: step < 1 ? tc(s, fpsOf()).slice(3) : E.rulerLabel(s, step) })); }
       lane.append(frag);
@@ -527,11 +535,14 @@ const CutUI = (() => {
     }
     CutMedia.onChange(() => { if (active) { paintSoon(); if (libTab === 'media' || libTab === 'audio') drawLibSoon(); } });
     scroll.addEventListener('scroll', paintSoon);
-    scroll.addEventListener('wheel', e => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); const r = scroll.getBoundingClientRect(), x = e.clientX - r.left + scroll.scrollLeft - HEAD, tAt = x / pps; pps = cl(pps * (e.deltaY < 0 ? 1.15 : 1 / 1.15), 4, 800); fitted = true; build(); scroll.scrollLeft = Math.max(0, tAt * pps - (e.clientX - r.left) + HEAD); zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); } else if (e.shiftKey) { e.preventDefault(); scroll.scrollLeft += e.deltaY; } }, { passive: false });
+    scroll.addEventListener('wheel', e => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(zoomNow() * Math.pow(1.15, cl(-e.deltaY / 100, -3, 3)), false, e.clientX); } else if (e.shiftKey) { e.preventDefault(); scroll.scrollLeft += e.deltaY; } }, { passive: false });   // a gentle pinch zooms gently
     const laneT = clientX => { const r = rows.getBoundingClientRect(); return Math.max(0, (clientX - r.left - HEAD) / pps); };
     const rowAt = clientY => { const els = [...rows.children]; for (const el of els) { const r = el.getBoundingClientRect(); if (clientY >= r.top && clientY < r.bottom) { const id = el.dataset.row; return id === 'new' ? { kind: 'new' } : rowList.find(x => x.id === id) || null; } } const first = els[0]; if (first && clientY < first.getBoundingClientRect().top) return { kind: 'new' }; return null; };
-    function setTime(t, quiet) { curT = t; play.style.left = '0px'; play.style.transform = 'translateX(' + (HEAD + t * pps) + 'px)'; const cn = ruler.querySelector('.ct-corner'), tx = tc(t, fpsOf()); if (cn && cn.textContent !== tx) cn.textContent = tx;
-      if (!quiet && o.player.playing && !drag) { const x = HEAD + t * pps, l = scroll.scrollLeft, w = scroll.clientWidth; if (x > l + w - 60 || x < l + HEAD) scroll.scrollLeft = Math.max(0, x - HEAD - 60); } }
+    // Every frame while playing: the playhead moves by transform, the clock is written only when it reads differently and
+    // the scroll position is remembered, so nothing here makes the page measure itself
+    let cornerEl = null, cornerTx = '', scX = 0, scW = 0; scroll.addEventListener('scroll', () => { scX = scroll.scrollLeft; }, { passive: true }); new ResizeObserver(() => { scW = scroll.clientWidth; }).observe(scroll);
+    function setTime(t, quiet) { curT = t; play.style.transform = 'translateX(' + (HEAD + t * pps) + 'px)'; const tx = tc(t, fpsOf()); if (cornerEl && cornerTx !== tx) cornerEl.textContent = cornerTx = tx;
+      if (!quiet && o.player.playing && !drag) { const x = HEAD + t * pps; if (x > scX + scW - 60 || x < scX + HEAD) { scroll.scrollLeft = Math.max(0, x - HEAD - 60); scX = scroll.scrollLeft; } } }
     function markSel() { const s = sel(); rows.querySelectorAll('.ct-clip').forEach(el => el.classList.toggle('on', el.dataset.id === s || multi.has(el.dataset.id))); rows.querySelectorAll('.ct-tr').forEach(el => el.classList.toggle('sel', 'T:' + el.dataset.tr === s)); drawBar(); }
     let multi = new Set();
     // Snapping: clip edges on every track, markers, the playhead and the start
@@ -736,7 +747,7 @@ const CutUI = (() => {
       if (e.key === 'ArrowUp') { jump(-1); return true; } if (e.key === 'ArrowDown') { jump(1); return true; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && kfSel && !e.shiftKey && sel() === 'C:' + kfSel.id) { if (delKeyframe()) return true; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && sel()) { del(e.shiftKey); return true; }
-      if (k === '=' || k === '+') { setZoom(pps * 1.3); return true; } if (k === '-' || k === '_') { setZoom(pps / 1.3); return true; }
+      if (k === '=' || k === '+') { setZoom(zoomNow() * 1.3); return true; } if (k === '-' || k === '_') { setZoom(zoomNow() / 1.3); return true; }
       if (k === 'escape') { multi.clear(); return false; }
       return false;
     }
@@ -755,7 +766,8 @@ const CutUI = (() => {
       lib.hidden = !active; tl.hidden = !active; if (active) { drawLibTabs(); drawLib(); requestAnimationFrame(build); CutMedia.loadAll().then(() => { if (active) { drawLib(); build(); } }); } else { CutAudio.stopAll(); if (typeof CutMedia !== 'undefined') CutMedia.pauseAll(); }
     }
     // The level meter and the audio, every frame while playing
-    function frame(t, playing) { if (!active) return; setTime(t); try { CutAudio.sync(cfg(), look(), t, playing); } catch (e) { console.warn(e); } const mt = bar.querySelector('.ct-meter i'); if (mt) { const v = CutAudio.meter(); mt.style.width = Math.round(Math.min(1, v) * 100) + '%'; mt.classList.toggle('hot', v > 0.95); } }
+    let meterW = -1, meterHot = null;
+    function frame(t, playing) { if (!active) return; setTime(t); try { CutAudio.sync(cfg(), look(), t, playing); } catch (e) { console.warn(e); } const mt = meterEl; if (mt && mt.isConnected) { const v = CutAudio.meter(), w = Math.round(Math.min(1, v) * 50) * 2, hot = v > 0.95; if (w !== meterW) { meterW = w; mt.style.transform = 'scaleX(' + w / 100 + ')'; } if (hot !== meterHot) { meterHot = hot; mt.classList.toggle('hot', hot); } } }
     new ResizeObserver(() => { if (active && !fitted) build(); }).observe(tl);
 
     return { replacePick, saveFrame, relinkPick, missingAssets, activate, build, setTime, frame, key, importFiles, drawLib, markSel, get active() { return active; }, splitNow, del, addMarker, freezeNow, detachNow, jump, applyTrans, applyFx, applyLook, addPatter, addBlock, placeAsset, makeSfx, paste, copySel, trimTo, I, ic, tc, short, inspTab, lookThumb, get pps() { return pps; } };
