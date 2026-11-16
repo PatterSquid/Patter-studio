@@ -27,7 +27,7 @@ async def main():
     d1=await D(); ok('copy and paste makes it a second longer', abs(d1-d0-1)<0.02, [d0,d1])
     await select(0.5,1.0); await pg.keyboard.press('Control+x'); await settle(); d2=await D(); ok('cut takes half a second out', abs(d1-d2-0.5)<0.02, [d1,d2])
     await pg.evaluate("()=>{AudioTab._W.head=0;}"); await pg.keyboard.press('Control+v'); await settle(); d3=await D(); ok('and paste puts it back', abs(d3-d1)<0.02, [d1,d3])
-    pk=lambda a,b: pg.evaluate("([a,b])=>{const y=AudioTab._W.out.y; let m=0; for(let i=Math.floor(a*48000);i<b*48000;i++) m=Math.max(m,Math.abs(y[i])); return m;}", [a,b])
+    pk=lambda a,b: pg.evaluate("([a,b])=>{const y=AudioTab._W.out.y; let m=0; for(let i=Math.floor(a*48000);i<Math.min(y.length,b*48000);i++) m=Math.max(m,Math.abs(y[i])); return m;}", [a,b])
     p0=await pk(6,7); await select(6,7); await pg.locator('#audioWs button', has_text='Amplify').click(); await settle(); p1=await pk(6,7)
     ok('amplify by 6 dB doubles the level', abs(p1/p0-2)<0.15, [p0,p1])
     await pg.evaluate("()=>{AudioTab._W.sel=null;}"); await pg.locator('#audioWs button', has_text='Normalise').click(); await settle(); p2=await pk(0, await D())
