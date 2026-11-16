@@ -62,7 +62,22 @@ git add -A && git commit && git push origin main
   testsrc=size=640x360:rate=30 -t 4 -c:v libvpx dev/tmp_dogclip.webm`).
 * Keeping his computer free (he found it slow, November 2026): the preview player (`E.Player`) rests while paused with
   nothing changing and nobody touching anything (checks five times a second instead of every refresh; any pointer, key,
-  typing or player call wakes it), and only writes the time and Play label when they change. The Smooth preview
+  typing or player call wakes it), and only writes the time and Play label when they change. Whether anything changed
+  needs the clip's settings written out and compared, so that is done only when something may have changed them (a press,
+  a key, typing, a drag with the button held, `save()` in app.js calling `player.wake()`) and otherwise four times a
+  second: moving the mouse across the window costs nothing however long the video is.
+* **An even beat for the preview** (polish pass, November 2026): when a tab cannot be drawn inside one screen refresh the
+  player shows a new picture every second (or third, fourth) refresh, each held the same length, instead of as many as it
+  can at uneven gaps (`div`, `vs` in `E.Player`; up when one picture in four arrives late or the drawing costs over 0.9 of
+  a refresh, down only with room to spare and not straight after a failed try; remembered per tab in `beatOf`). On a
+  stand in for a slow laptop (screen at scale 2, processor slowed 3 times) the spread of picture times fell from 11 to 4 ms
+  on Charts and 15 to 4 on Newspaper, a steady 30 a second; a fast machine stays at 60. `tests/pacing.py <scale> <slowdown>`
+  measures it. The editor's overlay on the preview (`drawOverlay`) does nothing while playing with nothing selected and
+  the pointer elsewhere (it was cleared and handed to the screen every frame), and clocks rewritten every frame are
+  `contain`ed so the page is not measured again for them.
+* Checks added in the polish pass: `tests/popdet.js` (runjs: every tab's example frame by frame at 60 a second, lists single
+  frames that change far more than their neighbours: none in November 2026), `tests/ui_metrics.py` (where the browser's
+  time goes: start up, each tab idle and playing, a heavy Video timeline scrubbed, dragged, zoomed), `tests/pacing.py`. The Smooth preview
   (`SP` in app.js) only draws ahead when the tab's live drawing is slow (`player.drawMs` over 12 ms), with at most two
   helpers, and for clips with his puppet (`mainThread`, a big copy per helper) only once he presses Play. The background
   remover lets go of its model two minutes after he leaves the Thumbnail tab (`Cutout.rest`). **His laptop** (speed check,
@@ -98,7 +113,19 @@ the same frame; keep it that way:
   right with **Settings** and **Look** tabs (`.aside-tabs`, `aside[data-at]`), cards drawn as flat sections, help text
   clamped to two lines (all of it on hover); the timeline (`#timeline`) docked along the bottom. The timeline toolbar has
   one **+ Add** menu (`.tl-add`, `.tl-addmenu`: this tab's own things, then the layers; one with options opens its grid
-  `.tl-pop`), Duplicate and Delete only while something is selected, zoom and Snap on the right. Menus open upwards.
+  `.tl-pop`), Duplicate and Delete only while something is selected, the Snap pill (`.tl-snap`; the Video timeline's is `.ct-snap`), and on the right
+  Fit (`.tl-fit`: all of the clip; opening a clip never goes below 30 px a second) and the zoom slider (`.tl-zoom`). Menus
+  open upwards.
+* **One look for both timelines and one play bar** (polish pass, November 2026: he asked for CapCut's standard, improving
+  what is there, no new features). Both timelines have the orange clock in the corner (`.ct-corner`, `.tl-tc`, `E.tc`:
+  minutes, seconds, frames), the same ruler (`E.rulerLabel`, a label every 70 px or so), the orange playhead moved by
+  transform (never `left`: that made the page lay out every frame), a yellow snap line, zoom that keeps the moment under
+  the pointer (Ctrl + wheel; steps in one refresh are applied once: `setZoom` in cut_ui.js, `setPps` in editor.js), and
+  scrolling along when a bar, a trim or the playhead is dragged to the edge (`edgeScroll`). The play bar (`.transport`) is
+  a round play button (`#playBtn`, an icon; `data-s` is Play or Pause), the clock (`#time`: `<b>` now, `<i>` the length),
+  the scrubber and the gear. The Audio tab has the same play button and an orange playhead that is a moved line, not a
+  canvas. Quiet motion only (short colour transitions, menus ease in, `prefers-reduced-motion` respected), slim dark
+  scroll bars, drawn icons on the Video library's tabs. Keep to this vocabulary when adding anything.
 * **Video** keeps its CapCut frame (library left, inspector right, timeline below); undo is in the header now.
 * Nothing scrolls the page at 1366 by 768; only the panels scroll. Tests click tabs and rail buttons with JS
   (`button[data-mod=...]`) and add things through `.tl-add` then `.tl-addmenu button`.
@@ -269,6 +296,13 @@ standard and as easy to use.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
   waveform for the part near the screen; the clip boxes are see-through (`.st`) on top. Do not go back to a canvas per clip:
   hundreds of canvases made the browser composite every frame (110 ms a frame with 500 clips, 17 ms now).
+* **Filmstrips on Patter clips** (`TH` in cut_ui.js, `Video.thumb`, `thumbTime`): Story, charts, news, [ME] parts and the
+  rest show small pictures of themselves along the bar, like footage does. Each is the clip's own content at its own time
+  (keyed by the clip's settings stamp, worked out once per `build`, and a time bucket that follows the zoom), drawn a few
+  at a time in idle moments (`requestIdleCallback`, 8 ms slices, never while playing or dragging), kept (about 25 MB at
+  most, least recently used go first) and redrawn when pictures they needed arrive (`tickSig`). A kind that is slow to draw
+  (`TH.cost` over 45 ms: the maps in headless) gets one picture per clip; [ME] parts share one per 8 seconds of the take.
+  The paint signature uses `lightSig` (a clip without its `cfg`) plus the stamp: never stringify a whole clip per paint.
 * `cut_ui.js` (`CutUI`) is the workspace and timeline; `cut_insp.js` (`CutInspect`) the clip, transition, track and project
   panels and the export window. Selections: `C:id` clip, `T:id` transition after a main clip, `K:id` track, `L:id` layer.
   `window.PatterCut` is the hook the tests use.

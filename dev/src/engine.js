@@ -170,7 +170,7 @@ const E = (() => {
     // An even beat: when a tab cannot be drawn inside one screen refresh, a new picture every second (or third) refresh,
     // each held the same length, looks far smoother than as many as possible at uneven gaps (the judder he saw on his
     // laptop: 16, 33 and 50 ms pictures mixed together). vs is the screen's refresh, div how many refreshes a picture is held.
-    let vs = 1000 / 60, div = 1, lastRaf = 0, lastShown = 0, seen = 0, miss = 0, drawEma = 0, wasPlaying = false, lastUp = 0, lastDown = -1e9, hold = 1500; const beatOf = {};
+    let vs = 1000 / 60, div = 1, lastRaf = 0, lastShown = 0, seen = 0, miss = 0, drawEma = 0, wasPlaying = false, lastUp = 0, lastDown = -1e9, hold = 1500, shownN = 0; const beatOf = {};
     function frame(now) {
       const rg = now - lastRaf; lastRaf = now; if (rg > 5 && rg < 22) vs = vs * 0.9 + rg * 0.1;
       if (playing && !scrubbing && div > 1 && now - lastShown < (div - 0.5) * vs) { requestAnimationFrame(frame); return; }   // hold this picture until its time is up
@@ -211,14 +211,14 @@ const E = (() => {
           if (up) { div = up; if (now - lastDown < 4000) hold = Math.min(30000, hold * 2); lastUp = now; beatOf[mod.id] = div; }
           else if (div > 1 && cost < (div - 1) * vs * (div === 2 ? 0.6 : 0.85) && now - lastUp > hold) { div--; lastDown = now; beatOf[mod.id] = div; }
           seen = miss = 0; } }
-      wasPlaying = playing && !scrubbing; lastShown = now;
-      if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > 20 && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }
+      wasPlaying = playing && !scrubbing; lastShown = now; shownN++;
+      if (!cf && ++count % 30 === 0 && mode === 'normal') { if (avg > (div > 1 ? 27 : 20) && quality > 0.5) quality = Math.max(0.5, quality - 0.15); else if (avg < 8 && quality < 1) quality = Math.min(1, quality + 0.1); }   // on the slower beat there is time for the sharper picture
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
     return {
       setCache(c) { cache = c; wake(); }, play() { playing = true; wake(); }, pause() { playing = false; wake(); }, freeze(v) { frozen = !!v; wake(); }, toggle() { if (!playing && !loop && t >= dur - 1e-3) t = 0; playing = !playing; wake(); return playing; }, reset() { t = loop ? loop[0] : 0; playing = false; wake(); },
-      restart() { t = loop ? loop[0] : 0; playing = true; wake(); }, seek(v) { t = v; wake(); }, setMode(m) { mode = m; quality = 1; wake(); }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } wake(); }, get loop() { return loop; }, scrub(on) { scrubbing = on; wake(); }, wake, get drawMs() { if (!recent.length) return 0; const r = recent.slice().sort((a, b) => a - b); return r[r.length >> 1]; }, get t() { return t; }, get playing() { return playing; },
+      restart() { t = loop ? loop[0] : 0; playing = true; wake(); }, seek(v) { t = v; wake(); }, setMode(m) { mode = m; quality = 1; wake(); }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } wake(); }, get loop() { return loop; }, scrub(on) { scrubbing = on; wake(); }, wake, get drawMs() { if (!recent.length) return 0; const r = recent.slice().sort((a, b) => a - b); return r[r.length >> 1]; }, get t() { return t; }, get playing() { return playing; }, get beat() { return div; }, get pictures() { return shownN; }, get refresh() { return vs; },
     };
   }
   function checker(ctx, x, y, w, h) { const s = 12; ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = '#cfcfcf'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#efefef'; for (let j = 0; j * s < h; j++) for (let i = (j % 2); i * s < w; i += 2) ctx.fillRect(x + i * s, y + j * s, s, s); ctx.restore(); }

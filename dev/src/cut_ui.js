@@ -53,8 +53,11 @@ const CutUI = (() => {
     lib.append(fileIn);
 
     /* ---------- Library ---------- */
-    const LIB = [['media', 'Media', '🎞'], ['audio', 'Audio', '♪'], ['text', 'Text', 'T'], ['stickers', 'Stickers', '☺'], ['effects', 'Effects', '✦'], ['trans', 'Transitions', '⧓'], ['looks', 'Filters', '◐'], ['patter', 'Patter', '▣']];
-    function drawLibTabs() { libTabs.innerHTML = ''; LIB.forEach(([k, l, i]) => libTabs.append(H('button', { type: 'button', role: 'tab', className: libTab === k ? 'on' : '', 'aria-selected': String(libTab === k), title: l, on: { click: () => { libTab = k; drawLibTabs(); drawLib(); } } }, H('i', { textContent: i }), H('span', { textContent: l })))); }
+    // One drawn set of icons for the library, in the same line style as the tool strip on the other tabs
+    const li = p => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const LIB = [['media', 'Media', li('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4"/>')], ['audio', 'Audio', li('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>')], ['text', 'Text', li('<path d="M5 7V5h14v2M12 5v14M9 19h6"/>')], ['stickers', 'Stickers', li('<path d="M20 12.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6.5z"/><path d="M12.5 20v-5.5a2 2 0 0 1 2-2H20"/><path d="M8.5 9.5h.01M13.5 9.5h.01"/>')],
+      ['effects', 'Effects', li('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16v4M17 18h4"/>')], ['trans', 'Transitions', li('<path d="M4 6l7 6-7 6zM20 6l-7 6 7 6z"/>')], ['looks', 'Filters', li('<circle cx="9" cy="10" r="5.5"/><circle cx="15" cy="10" r="5.5"/><circle cx="12" cy="15" r="5.5"/>')], ['patter', 'Patter', li('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13l3-4 3 3 2-2 2 3M9 21h6"/>')]];
+    function drawLibTabs() { libTabs.innerHTML = ''; LIB.forEach(([k, l, i]) => libTabs.append(H('button', { type: 'button', role: 'tab', className: libTab === k ? 'on' : '', 'aria-selected': String(libTab === k), title: l, on: { click: () => { libTab = k; drawLibTabs(); drawLib(); } } }, H('i', { innerHTML: i }), H('span', { textContent: l })))); }
     const drag0 = (el, data) => { el.draggable = true; el.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-cut', JSON.stringify(data)); e.dataTransfer.effectAllowed = 'copy'; dragData = data; }); el.addEventListener('dragend', () => { dragData = null; dropMark(null); }); return el; };
     let dragData = null, mediaFilter = 'all', importing = [];
     function binIds() { const c = cfg(); c.bin = c.bin || []; const used = new Set(V().assetsUsed(c)); used.forEach(id => { const m = CutMedia.info(id); if (!c.bin.includes(id) && !(m && m.builtin)) c.bin.push(id); }); return c.bin.filter(id => { const m = CutMedia.info(id); return m && !m.builtin; }); }
@@ -294,7 +297,7 @@ const CutUI = (() => {
     function drawRuler(Wd) {
       ruler.innerHTML = ''; ruler.style.width = (HEAD + Wd) + 'px'; cornerTx = tc(curT, fpsOf()); cornerEl = H('div', { className: 'ct-corner', textContent: cornerTx }); ruler.append(cornerEl); scX = scroll.scrollLeft; scW = scroll.clientWidth;
       const steps = [1 / 30, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, lane = H('div', { className: 'ct-rl', style: `width:${Wd}px` }), frag = document.createDocumentFragment();
-      for (let k = 0, s = 0; s * pps <= Wd; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: step < 1 ? tc(s, fpsOf()).slice(3) : E.rulerLabel(s, step) })); }
+      for (let k = 0, s = 0; s * pps <= Wd; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major && k) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: step < 1 ? tc(s, fpsOf()).slice(3) : E.rulerLabel(s, step) })); }   // no label at the very start: the playhead rests there and the clock beside it says it
       lane.append(frag);
       (cfg().markers || []).forEach((mk, i) => lane.append(H('b', { className: 'ct-mk', style: `left:${mk.t * pps}px;--c:${mk.col || '#f5c518'}`, title: (mk.label || 'Marker') + ' at ' + tc(mk.t) + '. Drag to move, double click to rename, right click to remove.', on: { pointerdown: e => markerDrag(e, i), dblclick: () => { const n = prompt('Marker name', mk.label || ''); if (n != null) { o.commit(); mk.label = n; changed(); } }, contextmenu: e => { e.preventDefault(); o.commit(); cfg().markers.splice(i, 1); changed(); } } })));
       const r = o.getRange && o.getRange(); if (r) lane.append(H('div', { className: 'ct-range', style: `left:${r[0] * pps}px;width:${Math.max(2, (r[1] - r[0]) * pps)}px`, title: 'Export range (I and O set it)' }));
@@ -471,7 +474,7 @@ const CutUI = (() => {
     const bodyCol = {}; function bodyOf(el) { const c = el._c || '#556677'; if (bodyCol[c]) return bodyCol[c]; let r = 85, g = 102, b = 119; const m = /^#?([0-9a-f]{6})$/i.exec(c) || /^#?([0-9a-f]{3})$/i.exec(c); if (m) { const h = m[1].length === 3 ? m[1].replace(/./g, x => x + x) : m[1]; r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16); } return (bodyCol[c] = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b * 0.7)})`); }
     /* ---------- Filmstrips for Patter clips: small pictures of the clip itself along its bar, like his footage has. Drawn a
        few at a time while nothing else is going on (never while playing or dragging), kept and reused. ---------- */
-    const TH = { items: new Map(), n: 0, q: [], pend: new Set(), sched: 0, ver: 0, gen: 0, use: 0, stamps: new WeakMap(), cur: new Map(), prev: new Map(), st: null, cost: { map: 60, flights: 60, flyover: 60 }, PH: 90, MAX: 360 };
+    const TH = { items: new Map(), n: 0, q: [], pend: new Set(), sched: 0, ver: 0, gen: 0, use: 0, stamps: new WeakMap(), cur: new Map(), prev: new Map(), st: null, cost: { map: 60, flights: 60, flyover: 60 }, PH: (window.devicePixelRatio || 1) > 1.25 ? 120 : 90, MAX: (window.devicePixelRatio || 1) > 1.25 ? 260 : 360 };   // sharp enough for a screen at scale 2, without keeping more than about 25 MB of them
     const hashS = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
     const thKind = it => it.kind === 'clip' ? it.mod : it.kind, canThumb = it => it.kind === 'clip' || it.kind === 'avatar' || it.kind === 'intro';
     const tickSig = () => (typeof Media !== 'undefined' ? Media.tick : 0) + '.' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '.' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '.' + (E.fontVersion || 0) + '.' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0);
@@ -553,7 +556,8 @@ const CutUI = (() => {
     function snapT(v, pts, show) { if (!snapIsOn() || altKey) { snapLine.hidden = true; return v; } const tol = 9 / pps; let best = v, bd = tol, hit = null; pts.forEach(p => { const d = Math.abs(p - v); if (d < bd) { bd = d; best = p; hit = p; } }); if (show !== false) { if (hit != null) { snapLine.hidden = false; snapLine.style.left = (HEAD + hit * pps) + 'px'; snapLine.style.height = (ruler.offsetHeight + rows.offsetHeight) + 'px'; } else snapLine.hidden = true; } return best; }
     const nearPlayhead = x => Math.abs(x - play.getBoundingClientRect().left - 1) <= 5;   // the red line, a few pixels either side
     function scrubStart(e) { if (e.button > 0) return; e.preventDefault(); e.stopPropagation(); o.player.pause(); o.player.scrub(true); const pts = snapPoints(); const go = ev => { let t = laneT(ev.clientX); if (!ev.altKey) t = snapT(t, pts, false); t = Math.min(t, dur); o.player.seek(t); setTime(t, true); }; go(e);
-      let pq = null, rq = 0; const mv = ev => { pq = ev; if (!rq) rq = requestAnimationFrame(() => { rq = 0; if (pq) go(pq); pq = null; }); }, up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(rq); go(pq || ev); pq = null; o.player.scrub(false); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
+      let pq = null, rq = 0, lastEv = null; const stopES = edgeScroll(() => lastEv, ev => go(ev));
+      const mv = ev => { pq = ev; lastEv = ev; if (!rq) rq = requestAnimationFrame(() => { rq = 0; if (pq) go(pq); pq = null; }); }, up = ev => { stopES(); window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(rq); go(pq || ev); pq = null; o.player.scrub(false); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
     play.addEventListener('pointerdown', scrubStart);
     function markerDrag(e, i) { if (e.button > 0) return; e.preventDefault(); e.stopPropagation(); const mk = cfg().markers[i], x0 = e.clientX, t0 = mk.t; let moved = false; o.commit();
       const mv = ev => { if (Math.abs(ev.clientX - x0) > 3) moved = true; if (!moved) return; mk.t = r3(Math.max(0, t0 + (ev.clientX - x0) / pps)); e.target.style.left = mk.t * pps + 'px'; }, up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); if (moved) changed(); else { o.player.seek(mk.t); setTime(mk.t, true); } };
@@ -565,6 +569,9 @@ const CutUI = (() => {
       const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); boxEl.hidden = true; if (!moved) { multi.clear(); select(null); const t = Math.min(dur, laneT(ev.clientX)); o.player.seek(t); setTime(t, true); } else { const first = [...multi][0] || null; o.ed.select(first); markSel(); } };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); }
 
+    // Dragged to the edge of the timeline, the timeline scrolls along and the drag carries on (clips, trims and the playhead)
+    function edgeScroll(get, again) { let raf = 0; const tick = () => { const ev = get(); if (ev) { const r = scroll.getBoundingClientRect(), edge = 44, L = r.left + HEAD; let v = 0; if (ev.clientX > r.right - edge) v = ev.clientX - (r.right - edge); else if (ev.clientX < L + edge && scroll.scrollLeft > 0) v = -(L + edge - ev.clientX);
+          if (v) { const b = scroll.scrollLeft; scroll.scrollLeft = b + cl(v, -edge * 1.5, edge * 1.5) * 0.4; if (Math.abs(scroll.scrollLeft - b) > 0.5) again(ev); } } raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf); }
     /* Dragging clips: move (in time, between tracks, in and out of the main track) and trim */
     function clipDown(e, ctx) {
       if (e.button > 0) return;
@@ -581,21 +588,22 @@ const CutUI = (() => {
       const er = e.currentTarget.getBoundingClientRect(), ez = Math.max(4, Math.min(10, er.width / 5));
       const h = e.target.classList.contains('hl') || e.clientX - er.left < ez ? 'l' : e.target.classList.contains('hr') || er.right - e.clientX < ez ? 'r' : 'm';
       if (locked) { const t = laneT(e.clientX); o.player.seek(t); setTime(t, true); return; }
-      const el = e.currentTarget, x0 = e.clientX, y0 = e.clientY, c = cfg(), lk = look(), tAt = laneT(e.clientX);
+      const el = e.currentTarget, x0 = e.clientX, y0 = e.clientY, c = cfg(), lk = look(), tAt = laneT(e.clientX), sl0 = scroll.scrollLeft; let lastEv = null;
       const snap = JSON.stringify(ctx.layer ? null : ctx.it), others = new Set([ctx.it.id]);
       // trimming on the magnetic main track moves every clip after it, so their edges (one of them sits right on this end) are no snap points
       if (h !== 'm' && !ctx.layer && ctx.r.kind === 'main') { const L = c.items || [], i0 = L.indexOf(ctx.it); if (i0 >= 0) L.slice(i0).forEach(x => others.add(x.id)); }
       const pts = snapPoints(others);
       drag = { el, h, moved: false, committed: false };
       const begin = () => { if (!drag.committed) { o.commit(); drag.committed = true; } };
-      let pend = null, raf2 = 0; const mv = ev => { pend = ev; if (!raf2) raf2 = requestAnimationFrame(() => { raf2 = 0; const q = pend; pend = null; if (q && drag) mv1(q); }); };
+      let pend = null, raf2 = 0; const mv = ev => { pend = ev; lastEv = ev; if (!raf2) raf2 = requestAnimationFrame(() => { raf2 = 0; const q = pend; pend = null; if (q && drag) mv1(q); }); };
       const mv1 = ev => {
-        altKey = ev.altKey; const dx = ev.clientX - x0; if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
+        altKey = ev.altKey; const dx = ev.clientX - x0 + (scroll.scrollLeft - sl0); if (!drag.moved && Math.abs(dx) < 4 && Math.abs(ev.clientY - y0) < 6) return; if (!drag.moved) { drag.moved = true; begin(); el.classList.add('dragging'); if (h === 'm') el.classList.add('moving'); paintSoon(); }
         if (ctx.layer) return layerDrag(ev, ctx, h, dx, pts);
         if (h === 'm') return moveDrag(ev, ctx, el, tAt, pts, c, lk);
         const r = trimDrag(ev, ctx, h, dx, pts, c, lk, JSON.parse(snap)); paintSoon(); return r;
       };
-      const up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf2); if (pend && drag) mv1(pend); pend = null; snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging', 'moving');
+      const stopES = edgeScroll(() => drag && drag.moved && !raf2 ? lastEv : null, ev => mv1(ev));
+      const up = ev => { stopES(); window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf2); if (pend && drag) mv1(pend); pend = null; snapLine.hidden = true; dropMark(null); const d = drag; drag = null; el.classList.remove('dragging', 'moving');
         if (d && d.moved) { if (d.finish) d.finish(ev); changed(); build(); } else { const t = laneT(ev.clientX); o.player.seek(Math.min(t, dur)); setTime(t, true); } };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }
@@ -725,12 +733,12 @@ const CutUI = (() => {
     function paste() { if (!clipboard) return false; o.commit(); const c = cfg(), it = JSON.parse(JSON.stringify(clipboard.it)); it.id = V().nid('c'); const t = o.player.t;
       if (clipboard.main) insertMain(c, it, t); else { it.start = r3(t); V().placeFree(c, clipboard.kind, it, null); } changed(); build(); select('C:' + it.id); return true; }
     function menu(e, it, p, r) {
-      const items = [['Split at the playhead', () => splitNow()], ['Duplicate', () => dupNow()], ['Copy', () => copySel()], ['Paste at the playhead', () => paste()], ['Delete', () => del(false)], ['Delete and close the gap', () => del(true)]];
-      const m = it.asset ? CutMedia.info(it.asset) : null; if (m && m.kind === 'video') { items.push(['Freeze this frame', () => freezeNow()]); if (!it.mute) items.push(['Detach the sound', () => detachNow()]); }
+      const items = [['Split at the playhead', () => splitNow(), 'S'], ['Duplicate', () => dupNow(), 'Ctrl+D'], ['Copy', () => copySel(), 'Ctrl+C'], ['Paste at the playhead', () => paste(), 'Ctrl+V'], ['Delete', () => del(false), 'Del'], ['Delete and close the gap', () => del(true), 'Shift+Del']];
+      const m = it.asset ? CutMedia.info(it.asset) : null; if (m && m.kind === 'video') { items.push(['Freeze this frame', () => freezeNow(), 'F']); if (!it.mute) items.push(['Detach the sound', () => detachNow()]); }
       if (it.kind === 'clip' && it.mod === 'intro') items.push(['Change the intro (episode, pub)', () => { select('C:' + it.id); }]); else if (it.kind === 'clip') items.push(['Edit in the ' + (V().NAMES[it.mod] || '') + ' tab', () => o.openItem(it.id)]);
       if (it.kind !== 'audio' && it.kind !== 'avatar') items.push(['Reset size and position', () => { o.commit(); ['x', 'y', 's', 'rot', 'crop', 'flipH', 'flipV'].forEach(k => delete it[k]); if (it.kf) ['x', 'y', 's', 'rot'].forEach(k => delete it.kf[k]); changed(); }]);
       items.push([it.mute ? 'Unmute' : 'Mute', () => { o.commit(); it.mute = !it.mute; changed(); }]);
-      const pop = H('div', { className: 'ct-menu', role: 'menu' }); items.forEach(([l, fn]) => pop.append(H('button', { type: 'button', role: 'menuitem', textContent: l, on: { click: () => { pop.remove(); fn(); } } })));
+      const pop = H('div', { className: 'ct-menu', role: 'menu' }); items.forEach(([l, fn, key]) => pop.append(H('button', { type: 'button', role: 'menuitem', on: { click: () => { pop.remove(); fn(); } } }, H('span', { textContent: l }), key ? H('kbd', { textContent: key }) : '')));   // the key that does the same, on the right
       document.body.append(pop); pop.style.left = Math.min(e.clientX, innerWidth - pop.offsetWidth - 8) + 'px'; pop.style.top = Math.min(e.clientY, innerHeight - pop.offsetHeight - 8) + 'px';
       setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
     }

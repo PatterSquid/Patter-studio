@@ -85,7 +85,9 @@ const AudioTab = (() => {
     const tick = () => { if (!W.playing) return; drawHead(); const t2 = nowT(); if (t2 > W.t1 || t2 < W.t0) { const span = W.t1 - W.t0; W.t0 = Math.max(0, Math.min(outDur() - span, t2 - span * 0.1)); W.t1 = W.t0 + span; draw(); } W.raf = requestAnimationFrame(tick); }; W.raf = requestAnimationFrame(tick); syncPlayBtn();
   }
   const toggle = () => { if (W.playing) stop(); else play(); };
-  function syncPlayBtn() { const b = W.root && W.root.querySelector('.au-play'); if (b) b.textContent = W.playing ? '❚❚ Pause' : '▶ Play'; }
+  // The same round play button as the play bar under every other tab's preview
+  const AU_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11.3-6.8a1 1 0 0 0 0-1.72L9.5 4.34A1 1 0 0 0 8 5.2z" fill="currentColor"/></svg>', AU_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.4" height="15" rx="1.2" fill="currentColor"/><rect x="13.6" y="4.5" width="4.4" height="15" rx="1.2" fill="currentColor"/></svg>';
+  function syncPlayBtn() { const b = W.root && W.root.querySelector('.au-play'); if (b) { const s2 = W.playing ? 'Pause' : 'Play'; if (b.dataset.s !== s2) { b.dataset.s = s2; b.innerHTML = W.playing ? AU_PAUSE : AU_PLAY; b.setAttribute('aria-label', s2); } } }
 
   /* ---------- drawing the sound ---------- */
   const specCache = { key: '', img: null };
@@ -119,10 +121,11 @@ const AudioTab = (() => {
     W._X = X; W._w = w; drawHead(); overview();
     const info = W.root.querySelector('.au-time'); if (info) info.textContent = fmt(W.head) + ' / ' + fmt(d) + (W.sel ? '   selected ' + (W.sel[1] - W.sel[0]).toFixed(2) + ' s' : '');
   }
+  // The playhead is a line moved across the picture (not a second full size canvas cleared and redrawn every frame)
   function drawHead() {
-    const cv = W.root && W.root.querySelector('.au-head'); if (!cv) return; const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
-    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h); const t = nowT(); if (t < W.t0 || t > W.t1) return; const x = (t - W.t0) / (W.t1 - W.t0) * w; g.fillStyle = '#ff4f4f'; g.fillRect(Math.round(x), 0, 2, h);
-    const info = W.root.querySelector('.au-time'); if (info && W.playing) info.textContent = fmt(t) + ' / ' + fmt(outDur());
+    const el = W.root && W.root.querySelector('.au-head i'); if (!el) return; const w = W._w || el.parentNode.clientWidth, t = nowT();
+    if (t < W.t0 || t > W.t1) { if (!el.hidden) el.hidden = true; } else { if (el.hidden) el.hidden = false; el.style.transform = 'translateX(' + Math.round((t - W.t0) / (W.t1 - W.t0) * w) + 'px)'; }
+    const info = W.root.querySelector('.au-time'); if (info && W.playing) { const tx = fmt(t) + ' / ' + fmt(outDur()); if (info.textContent !== tx) info.textContent = tx; }
   }
   function overview() {
     const cv = W.root && W.root.querySelector('.au-over'); if (!cv) return; const o = cur(); if (!o) return; const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
@@ -215,13 +218,13 @@ const AudioTab = (() => {
       H('div', { className: 'au-name', textContent: cfg.src ? (cfg.name || 'Recording') : 'No recording yet' }),
       btn('Open a recording', () => fileIn.click()), H('button', { type: 'button', className: 'au-rec', textContent: '● Record', on: { click: record } }), fileIn,
       H('span', { className: 'au-sp' }),
-      H('button', { type: 'button', className: 'au-play primary', textContent: '▶ Play', title: 'Play or pause (Space)', on: { click: toggle } }),
+      H('button', { type: 'button', className: 'au-play', innerHTML: AU_PLAY, title: 'Play or pause (Space)', 'aria-label': 'Play', on: { click: toggle } }),
       H('div', { className: 'au-abw' }, ab('b'), ab('a'), ab('r')),
       H('span', { className: 'au-time' }),
       H('span', { className: 'au-sp' }),
       seg(W.view, [['wave', 'Waveform'], ['spec', 'Frequencies']], v => { W.view = v; ws.querySelectorAll('.au-bar .st-seg button').forEach(b => b.classList.toggle('on', b.textContent === (v === 'wave' ? 'Waveform' : 'Frequencies'))); draw(); }),
       btn('－', () => zoom(1.6)), btn('＋', () => zoom(1 / 1.6)), btn('Whole thing', () => { W.t0 = 0; W.t1 = outDur(); draw(); })));
-    const waveBox = H('div', { className: 'au-wbox' }, H('canvas', { className: 'au-wave', 'aria-label': 'The recording: drag to choose a part, click to place the playhead' }), H('canvas', { className: 'au-head' }));
+    const waveBox = H('div', { className: 'au-wbox' }, H('canvas', { className: 'au-wave', 'aria-label': 'The recording: drag to choose a part, click to place the playhead' }), H('div', { className: 'au-head', 'aria-hidden': 'true' }, H('i', { hidden: true })));
     const overCv = H('canvas', { className: 'au-over', title: 'The whole recording: click to jump there' });
     overCv.addEventListener('pointerdown', ev => { const r = overCv.getBoundingClientRect(), d = outDur(), span = W.t1 - W.t0, c = (ev.clientX - r.left) / r.width * d; W.t0 = cl(c - span / 2, 0, Math.max(0, d - span)); W.t1 = W.t0 + span; draw(); });
     const tb = (l, f, tip) => { const b = btn(l, f); b.title = tip; return b; };

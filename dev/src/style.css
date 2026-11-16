@@ -681,7 +681,11 @@ body.gfx .transport,body.anim .transport{gap:12px}
 /* The Graphics and Animator timeline: the Video timeline's ruler, playhead, bars and controls */
 .tl-bar{gap:4px;min-height:30px}
 .tl-bar .tl-gap{margin:0 6px}
-.tl-bar .ct-snap.tl-snap{margin-left:0;height:28px;padding:0 8px 0 6px;font:600 12px system-ui,sans-serif}
+.tl-bar .tl-snap{margin-left:0;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 6px;border-radius:14px;background:#16223a;border:1px solid #2c3d5e;color:#9fb0cc;font:600 12px system-ui,sans-serif;cursor:pointer}
+.tl-snap span{display:inline-flex;width:18px;height:18px}.tl-snap span svg{width:18px;height:18px}
+.tl-snap i{position:relative;width:26px;height:14px;border-radius:7px;background:#33425f;transition:background .15s}
+.tl-snap i::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#cfd8e8;transition:left .15s}
+.tl-snap.on{color:#fff;border-color:var(--bru)}.tl-snap.on i{background:var(--bru)}.tl-snap.on i::after{left:14px}
 .tl-bar .tl-fit{width:30px;height:28px;padding:0}
 .tl-bar .tl-zoom{width:150px;accent-color:var(--bru)}
 .tl-bar .tl-cam{margin-right:8px;font-size:12px;color:var(--muted)}
@@ -734,3 +738,24 @@ body.gfx .transport,body.anim .transport{gap:12px}
 .time{width:172px;height:18px;line-height:18px;contain:strict}
 .ct-meter i{width:100%;transform:scaleX(0);transform-origin:left center;transition:transform .06s linear}
 .ct-play{left:0}
+
+/* The Audio tab's playhead: the same orange line and head as the timelines */
+.au-head{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}
+.au-head i{position:absolute;top:0;bottom:0;left:0;width:2px;margin-left:-1px;background:var(--bru);will-change:transform}
+.au-head i[hidden]{display:none}
+.au-head i::before{content:'';position:absolute;top:0;left:-6px;width:14px;height:13px;background:var(--bru);clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
+
+.au-play{width:38px;height:38px;padding:0;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.au-play:hover{background:#fff;border-color:#fff}
+.au-play svg{width:19px;height:19px;display:block}
+.au-play[data-s=Play] svg,.au-play:not([data-s]) svg{margin-left:2px}
+.au-time{font:600 12.5px ui-monospace,Consolas,monospace;color:var(--fg);letter-spacing:.01em}
+
+/* The Video library's tabs: drawn icons */
+.cl-tabs button i{display:grid;place-items:center;height:22px;line-height:1}
+.cl-tabs button i svg{display:block}
+.cl-tabs button:hover{background:#18274a;color:var(--fg)}
+.cl-tabs button.on{box-shadow:inset 0 -2px 0 var(--bru)}
+
+.ct-menu button{display:flex;align-items:center;justify-content:space-between;gap:22px}
+.ct-menu kbd{font:500 11px ui-monospace,Consolas,monospace;color:var(--muted);background:transparent;border:0;padding:0}

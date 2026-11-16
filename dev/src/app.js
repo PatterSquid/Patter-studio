@@ -4,7 +4,7 @@
   const { H } = UI;
   const MODULES = { charts: Charts, timeline: Timeline, map: (typeof MapMod !== 'undefined' ? MapMod : null), flights: (typeof Flights !== 'undefined' ? Flights : null), flyover: (typeof Flyover !== 'undefined' ? Flyover : null), picto: Picto, news: (typeof News !== 'undefined' ? News : null), story: (typeof Story !== 'undefined' ? Story : null), broll: (typeof Broll !== 'undefined' ? Broll : null), video: (typeof Video !== 'undefined' ? Video : null), studio: (typeof Studio !== 'undefined' ? Studio : null), intro: (typeof Intro !== 'undefined' ? Intro : null), char: (typeof Character !== 'undefined' ? Character : null), audio: (typeof AudioTab !== 'undefined' ? AudioTab : null), thumb: (typeof Thumb !== 'undefined' ? Thumb : null) };
   Object.keys(MODULES).forEach(k => { if (!MODULES[k]) delete MODULES[k]; else MODULES[k] = Layers.wrap(MODULES[k]); });
-  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio' };
+  const TAB_NAMES = { charts: 'Charts', timeline: 'Timeline', map: 'World map', flights: 'Flights', flyover: 'Map flyover', picto: 'Pictogram', news: 'Newspaper', story: 'Story', broll: 'B roll', video: 'Video', studio: 'Studio', char: 'Character', audio: 'Audio', thumb: 'Thumbnail', intro: 'Intro' };
   const KEY = 'patter-studio-v1';
   const $ = id => document.getElementById(id);
   const uid = () => 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -354,7 +354,7 @@
     await autosave(true); const list = (await DB.all('projects').catch(() => [])).sort((a, b) => b.updated - a.updated), tmpls = (await DB.all('templates').catch(() => [])).filter(x => x.kind !== 'piece').sort((a, b) => b.created - a.created);
     const name = H('input', { type: 'text', value: state.name || '', 'aria-label': 'Project name', on: { input: e => { state.name = e.target.value; drawName(); save(); } } });
     const grid = H('div', { className: 'lib-grid' }, ...list.map(p => H('div', { className: 'lib-card' + (p.id === state.pid ? ' cur' : '') }, H('button', { type: 'button', className: 'lib-open', title: 'Open ' + p.name, on: { click: () => openProject(p.id) } }, thumbEl(p.thumb)),
-      H('div', { className: 'lib-meta' }, H('b', { textContent: p.name || 'Untitled' }), H('span', { textContent: (TAB_NAMES[p.module] || '') + ', ' + ago(p.updated) + (p.id === state.pid ? ', open now' : '') })),
+      H('div', { className: 'lib-meta' }, H('b', { textContent: p.name || 'Untitled' }), H('span', { textContent: [TAB_NAMES[p.module], ago(p.updated), p.id === state.pid ? 'open now' : ''].filter(Boolean).join(', ') })),
       H('div', { className: 'btnrow' }, p.id === state.pid ? '' : UI.btn('Open', () => openProject(p.id)), UI.btn('Duplicate', async () => { const r = await DB.get('states', p.id); if (r) { const s = JSON.parse(JSON.stringify(r.state)); s.name = (s.name || 'Project') + ' copy'; await newProject(s); openLibrary(); } }),
         p.id === state.pid ? '' : confirmBtn('Delete', async () => { await DB.del('projects', p.id); await DB.del('states', p.id); await DB.delVersions(p.id); openLibrary(); })))));
     const tname = H('input', { type: 'text', placeholder: 'Template name, for example Weekly news intro', 'aria-label': 'Template name' });
@@ -449,9 +449,10 @@
     }
     // The real thing: play this tab's preview for three seconds and count the frames that actually reach the screen
     if (state.module !== 'audio' && state.module !== 'thumb') {
-      const wasT = 0; player.seek(0); player.play(); await nap(300); const ts = []; await new Promise(r => { const f = t => { ts.push(t); if (t - ts[0] < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); player.pause(); player.seek(wasT);
-      const dd = ts.slice(1).map((t, i) => t - ts[i]), fps = (dd.length) / ((ts[ts.length - 1] - ts[0]) / 1000), slow = dd.filter(x => x > 40).length;
-      say('Playing ' + (TAB_NAMES[state.module] || state.module) + ' for real', fps.toFixed(0) + ' frames a second, ' + slow + ' stutters, smooth preview ' + (scrub.classList.contains('cached') ? 'ready' : 'not used'), fps < 24 ? true : fps < 45 ? 'warn' : false);
+      const wasT = 0; player.seek(0); player.play(); await nap(1200); const ts = [], p0 = player.pictures; await new Promise(r => { const f = t => { ts.push(t); if (t - ts[0] < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); const pics = player.pictures - p0, beat = player.beat; player.pause(); player.seek(wasT);
+      // Pictures really shown (on a slow tab the player holds each one for two or three screen refreshes, at an even beat), and how often the screen itself was kept waiting
+      const dd = ts.slice(1).map((t, i) => t - ts[i]), secs = (ts[ts.length - 1] - ts[0]) / 1000, fps = pics / secs, slow = dd.filter(x => x > Math.max(40, player.refresh * (beat + 1.2))).length;
+      say('Playing ' + (TAB_NAMES[state.module] || state.module) + ' for real', fps.toFixed(0) + ' pictures a second' + (beat > 1 ? ' (each held for ' + beat + ' screen refreshes, to keep them even)' : '') + ', ' + slow + ' stutters, screen refresh ' + (1000 / player.refresh).toFixed(0) + ' a second, smooth preview ' + (scrub.classList.contains('cached') ? 'ready' : 'not used'), fps < 18 ? true : (fps < 27 || slow > 8) ? 'warn' : false);
     }
     const text = 'Patter Studio speed check\n' + rows.map(([k, v, b]) => (b === true ? '!! ' : b === 'warn' ? '!  ' : '   ') + k + ': ' + v).join('\n');
     copyBtn.disabled = false; copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'Copied: paste it to Claude'; } catch (e) { const ta = H('textarea', { value: text, rows: 12, style: 'width:100%' }); copyBtn.after(ta); ta.select(); } };

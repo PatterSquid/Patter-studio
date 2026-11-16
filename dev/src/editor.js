@@ -63,7 +63,7 @@ const Editor = (() => {
         bar.append(btn('Delete', 'Delete the selected item (Delete)', () => removeSel(), !sel || !e.remove));
         const lays = selLayers(); if (lays.length && typeof Layers !== 'undefined' && Layers.hooks.savePiece) bar.append(btn(lays.length > 1 ? 'Save ' + lays.length + ' as a piece' : 'Save as a piece', 'Keep the selected layers to drop into any clip later (from Saved)', () => Layers.hooks.savePiece(o.getCfg(), lays))); }
       if (e && e.addKey && sel && sel.startsWith('L:')) bar.append(btn('◆ Key', 'Add a keyframe to the selected layer at the playhead (K)', () => addKey()));
-      bar.append(H('span', { className: 'tl-gap' }), H('button', { type: 'button', className: 'ct-snap tl-snap' + (snapOn ? ' on' : ''), title: snapOn ? 'Snap is on: bars and the playhead catch on edges and keyframes as you drag. Click to turn it off (or hold Alt while dragging the playhead).' : 'Snap is off. Click to make bars and the playhead catch on edges and keyframes.', 'aria-pressed': String(snapOn), on: { click: () => { snapOn = !snapOn; drawBar(); } } }, H('span', { innerHTML: MAGNET }), H('b', { textContent: 'Snap' }), H('i', {})));
+      bar.append(H('span', { className: 'tl-gap' }), H('button', { type: 'button', className: 'tl-snap' + (snapOn ? ' on' : ''), title: snapOn ? 'Snap is on: bars and the playhead catch on edges and keyframes as you drag. Click to turn it off (or hold Alt while dragging the playhead).' : 'Snap is off. Click to make bars and the playhead catch on edges and keyframes.', 'aria-pressed': String(snapOn), on: { click: () => { snapOn = !snapOn; drawBar(); } } }, H('span', { innerHTML: MAGNET }), H('b', { textContent: 'Snap' }), H('i', {})));
       bar.append(H('span', { className: 'tl-fill' }));
       if (e && e.camera) bar.append(H('label', { className: 'check tl-cam', title: 'Untick to see the whole scene while you arrange things. The export always uses the camera.' }, H('input', { type: 'checkbox', checked: !camOff, on: { change: ev => { camOff = !ev.target.checked; } } }), 'Camera moves'));
       bar.append(H('button', { type: 'button', className: 'ci tl-fit', title: 'Fit the whole clip in view', 'aria-label': 'Fit the whole clip in view', innerHTML: FIT, on: { click: () => { fitted = false; fitAll = true; build(); scroll.scrollLeft = 0; } } }), zoomIn);
@@ -91,7 +91,7 @@ const Editor = (() => {
       const W = Math.max(sw, (dur + 1) * pps); inner.style.width = W + 'px';
       // Ruler: a label every 70 pixels or so, small ticks between, the same as the Video timeline
       ruler.innerHTML = ''; const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, frag = document.createDocumentFragment();
-      for (let k = 0, s = 0; s * pps <= W; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: E.rulerLabel(s, step) })); }
+      for (let k = 0, s = 0; s * pps <= W; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major && k) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: E.rulerLabel(s, step) })); }
       ruler.append(frag);
       ruler.append(H('b', { className: 'tl-end', style: `left:${dur * pps}px`, title: 'End of the clip' }));
       // Tracks
@@ -172,9 +172,11 @@ const Editor = (() => {
       const h = ev.target.dataset && ev.target.dataset.h, mode = h === 'l' ? 'l' : h === 'r' ? 'r' : (it.move === false ? null : 'm'); if (!mode) { seekAt(ev); return; }
       o.player.pause(); (() => { try { el.setPointerCapture(ev.pointerId); } catch (e) { } })();
       const group = mode === 'm' && multi.size > 1 && multi.has(it.id) ? trackRows.flatMap(r => r.items).filter(i => multi.has(i.id) && i.id !== it.id && !i.locked && i.move !== false).map(i => ({ i, s0: i.start, e0: i.end, el: lanes.querySelector(`.tl-clip[data-id="${CSS.escape(i.id)}"]`) })) : [];
-      drag = { kind: 'clip', it, tr, el, mode, x0: ev.clientX, s0: it.start, e0: it.end, track: tr.id, moved: false, group };
+      drag = { kind: 'clip', it, tr, el, mode, x0: ev.clientX, s0: it.start, e0: it.end, track: tr.id, moved: false, group, sl0: scroll.scrollLeft };
+      // Dragged to the edge of the timeline, it scrolls along and the bar keeps going
+      let lastE = null, esRaf = 0; const esTick = () => { if (drag && drag.moved && lastE) { const sr = scroll.getBoundingClientRect(), edge = 40; let v = 0; if (lastE.clientX > sr.right - edge) v = lastE.clientX - (sr.right - edge); else if (lastE.clientX < sr.left + edge && scroll.scrollLeft > 0) v = -(sr.left + edge - lastE.clientX); if (v) { const b = scroll.scrollLeft; scroll.scrollLeft = b + Math.max(-60, Math.min(60, v)) * 0.4; if (Math.abs(scroll.scrollLeft - b) > 0.5) mv(lastE); } } esRaf = requestAnimationFrame(esTick); };
       const mv = e2 => {
-        const dt = (e2.clientX - drag.x0) / pps; if (Math.abs(e2.clientX - drag.x0) > 2 && !drag.moved) { drag.moved = true; el.classList.add('dragging'); } if (!drag.moved) return;
+        lastE = e2; const dt = (e2.clientX - drag.x0 + scroll.scrollLeft - drag.sl0) / pps; if (Math.abs(e2.clientX - drag.x0) > 2 && !drag.moved) { drag.moved = true; el.classList.add('dragging'); } if (!drag.moved) return;
         const len = drag.e0 - drag.s0, maxL = it.maxLen || 1e9, minL = it.minLen || 0.2; let s = drag.s0, en = drag.e0;
         if (mode === 'm') { s = Math.max(0, drag.s0 + dt); const ss = snap(s, it.id), se = snap(s + len, it.id); if (ss !== s) s = ss; else if (se !== s + len) s = se - len; s = Math.max(0, s); en = s + len; }
         else if (mode === 'l') { s = Math.min(drag.e0 - minL, Math.max(0, snap(drag.s0 + dt, it.id))); if (drag.e0 - s > maxL) s = drag.e0 - maxL; }
@@ -188,8 +190,8 @@ const Editor = (() => {
         drag.s = s; drag.e = en; ed().update(o.getCfg(), it.id, { start: s, end: en, track }); o.changed(false); relayout(it.id);
         const tt = mode === 'r' ? en - 0.02 : s + 0.05; o.player.seek(tt); setTime(tt);
       };
-      const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); const moved = drag && drag.moved; drag = null; snapLine.hidden = true; el.classList.remove('dragging'); if (moved) { o.changed(true); } else { o.player.seek(it.start + 0.01); setTime(it.start + 0.01); } };
-      el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      const up = () => { cancelAnimationFrame(esRaf); el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); const moved = drag && drag.moved; drag = null; snapLine.hidden = true; el.classList.remove('dragging'); if (moved) { o.changed(true); } else { o.player.seek(it.start + 0.01); setTime(it.start + 0.01); } };
+      el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); esRaf = requestAnimationFrame(esTick);
     }
     // Scrubbing on the ruler or empty lane space
     function seekAt(ev) { const r = inner.getBoundingClientRect(), tt = Math.max(0, Math.min(dur, (ev.clientX - r.left) / pps)); o.player.seek(tt); setTime(tt); }
