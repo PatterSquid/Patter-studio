@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.14.1",
+  "version": "2026.11.16.1",
   "file": "app/patter-studio.html",
-  "notes": "Avatar animated from the voice: hands, nods, brows, gaze and mood chosen from what is said and how; writes the words from a recording"
+  "notes": "One look for both timelines (clock, ruler, snap line, fit and zoom), pictures along Patter clips in the Video timeline, one play bar on every tab, steadier preview on slow machines, lighter on the computer while scrubbing and dragging"
 }
