@@ -270,7 +270,7 @@ const CutUI = (() => {
       return out;
     }
     function build() {
-      if (!active) return; const c = cfg(), lk = look(); dur = Math.max(1, Layers.wrap(Video).duration(c, lk)); introSounds();
+      if (!active) return; const c = cfg(), lk = look(); dur = Math.max(1, Layers.wrap(Video).duration(c, lk)); introSounds(); TH.gen++;
       const avail = Math.max(200, scroll.clientWidth - HEAD - 30); if (!fitted && !drag) { pps = cl(avail / (dur + 1), 4, 800); if (dur > 0.5) fitted = true;   /* fit once, then the zoom stays put while he edits (re-fitting mid-drag changed what a mouse move meant); Fit does it again */ zoomIn.value = String(Math.round((Math.log(pps) - Math.log(4)) / (Math.log(800) - Math.log(4)) * 1000)); }
       const Wd = Math.max(avail, (dur + 8) * pps); inner.style.width = (HEAD + Wd) + 'px';
       drawBar(); drawRuler(Wd);
@@ -285,8 +285,9 @@ const CutUI = (() => {
     }
     function drawRuler(Wd) {
       ruler.innerHTML = ''; ruler.style.width = (HEAD + Wd) + 'px'; ruler.append(H('div', { className: 'ct-corner', textContent: tc(curT, fpsOf()) }));
-      const steps = [1 / 30, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, lane = H('div', { className: 'ct-rl', style: `width:${Wd}px` });
-      for (let s = 0; s * pps <= Wd; s += minor) { const major = Math.abs(s / step - Math.round(s / step)) < 1e-6; lane.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) lane.append(H('span', { style: `left:${s * pps + 3}px`, textContent: step < 1 ? tc(s, fpsOf()).slice(3) : short(s) })); }
+      const steps = [1 / 30, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, lane = H('div', { className: 'ct-rl', style: `width:${Wd}px` }), frag = document.createDocumentFragment();
+      for (let k = 0, s = 0; s * pps <= Wd; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: step < 1 ? tc(s, fpsOf()).slice(3) : E.rulerLabel(s, step) })); }
+      lane.append(frag);
       (cfg().markers || []).forEach((mk, i) => lane.append(H('b', { className: 'ct-mk', style: `left:${mk.t * pps}px;--c:${mk.col || '#f5c518'}`, title: (mk.label || 'Marker') + ' at ' + tc(mk.t) + '. Drag to move, double click to rename, right click to remove.', on: { pointerdown: e => markerDrag(e, i), dblclick: () => { const n = prompt('Marker name', mk.label || ''); if (n != null) { o.commit(); mk.label = n; changed(); } }, contextmenu: e => { e.preventDefault(); o.commit(); cfg().markers.splice(i, 1); changed(); } } })));
       const r = o.getRange && o.getRange(); if (r) lane.append(H('div', { className: 'ct-range', style: `left:${r[0] * pps}px;width:${Math.max(2, (r[1] - r[0]) * pps)}px`, title: 'Export range (I and O set it)' }));
       ruler.append(lane); lane.addEventListener('pointerdown', scrubStart);
@@ -349,11 +350,12 @@ const CutUI = (() => {
       const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); cancelAnimationFrame(raf); if (moved) { changed(); build(); } select('T:' + it.id); };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
     }
+    const lenText = d => d < 60 ? d.toFixed(1) + 's' : Math.floor(d / 60) + ':' + String(Math.floor(d % 60)).padStart(2, '0');
     function clipEl(p, r) {
       const it = p.it, m = it.asset ? CutMedia.info(it.asset) : null, kind = it.kind === 'clip' ? it.mod : it.kind === 'media' ? (m && m.kind === 'image' ? 'image' : 'media') : it.kind;
-      const el = H('div', { className: 'ct-clip st k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 });
+      const el = H('div', { className: 'ct-clip st k-' + it.kind + (it.mute ? ' muted' : '') + (r.T && r.T.lock || (r.kind === 'main' && cfg().mainLock) ? ' locked' : ''), style: `left:${p.t0 * pps}px;width:${Math.max(4, p.d * pps)}px;--c:${V().COLS[kind] || '#556'}`, 'data-id': 'C:' + it.id, tabIndex: 0 }); el._c = V().COLS[kind] || '#555566';
       const badges = []; if (it.speed && +it.speed !== 1) badges.push('⏩' + (+it.speed).toFixed(2).replace(/\.?0+$/, '') + 'x'); if (V().hasCurve(it)) badges.push('〰 curve'); if (it.rev) badges.push('⟲'); if (it.still != null) badges.push('❄'); if (it.col && (it.col.look || Object.keys(it.col).some(k => k !== 'look' && k !== 'lookAmt' && +it.col[k]))) badges.push('◐'); if (it.fx && it.fx.length) badges.push('✦' + it.fx.length); if (it.key && it.key.on) badges.push('⬚'); if (it.mask && it.mask.k && it.mask.k !== 'none') badges.push('◯'); if (it.kf && Object.values(it.kf).some(L => L && L.length)) badges.push('◆'); if (it.mute) badges.push('🔇'); if (it.enhance) badges.push('🎙');
-      el.append(H('span', { className: 'lbl', textContent: V().NAME(it) + (badges.length ? '  ' + badges.join(' ') : '') }), H('b', { className: 'hl', title: 'Drag to trim' }), H('b', { className: 'hr', title: 'Drag to trim' }));
+      el.append(H('span', { className: 'lbl' }, V().NAME(it) + (badges.length ? '  ' + badges.join(' ') : ''), p.d * pps > 96 ? H('em', { textContent: lenText(p.d) }) : ''), H('b', { className: 'hl', title: 'Drag to trim' }), H('b', { className: 'hr', title: 'Drag to trim' }));
       const snd = hasSound(it, m), isAud = it.kind === 'audio';
       if (!isAud) { if (+it.vfIn) el.append(H('i', { className: 'fdi' + (it.vfCol === 'white' ? ' wh' : ''), style: `width:${Math.min(p.d, +it.vfIn) * pps}px` })); if (+it.vfOut) el.append(H('i', { className: 'fdo' + (it.vfCol === 'white' ? ' wh' : ''), style: `width:${Math.min(p.d, +it.vfOut) * pps}px` })); }
       if (!(r.T && r.T.lock) && !(r.kind === 'main' && cfg().mainLock)) fadeHandles(el, it, p, isAud);
@@ -458,12 +460,49 @@ const CutUI = (() => {
     let paintTimer = 0; const paintSoon = () => { cancelAnimationFrame(paintTimer); paintTimer = requestAnimationFrame(paint); };
     // One canvas per track paints every clip's body, filmstrip and waveform for the part on screen (a canvas per clip made
     // the browser composite hundreds of layers every frame: 110 ms a frame with 500 clips, 17 ms with this)
-    const bodyCol = {}; function bodyOf(el) { const c = getComputedStyle(el).getPropertyValue('--c').trim() || '#556677'; if (bodyCol[c]) return bodyCol[c]; let r = 85, g = 102, b = 119; const m = /^#?([0-9a-f]{6})$/i.exec(c) || /^#?([0-9a-f]{3})$/i.exec(c); if (m) { const h = m[1].length === 3 ? m[1].replace(/./g, x => x + x) : m[1]; r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16); } return (bodyCol[c] = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b * 0.7)})`); }
+    const bodyCol = {}; function bodyOf(el) { const c = el._c || '#556677'; if (bodyCol[c]) return bodyCol[c]; let r = 85, g = 102, b = 119; const m = /^#?([0-9a-f]{6})$/i.exec(c) || /^#?([0-9a-f]{3})$/i.exec(c); if (m) { const h = m[1].length === 3 ? m[1].replace(/./g, x => x + x) : m[1]; r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16); } return (bodyCol[c] = `rgb(${Math.round(r * 0.7)},${Math.round(g * 0.7)},${Math.round(b * 0.7)})`); }
+    /* ---------- Filmstrips for Patter clips: small pictures of the clip itself along its bar, like his footage has. Drawn a
+       few at a time while nothing else is going on (never while playing or dragging), kept and reused. ---------- */
+    const TH = { items: new Map(), n: 0, q: [], pend: new Set(), sched: 0, ver: 0, gen: 0, use: 0, stamps: new WeakMap(), cur: new Map(), prev: new Map(), st: null, cost: { map: 60, flights: 60, flyover: 60 }, PH: 90, MAX: 360 };
+    const hashS = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+    const thKind = it => it.kind === 'clip' ? it.mod : it.kind, canThumb = it => it.kind === 'clip' || it.kind === 'avatar' || it.kind === 'intro';
+    const tickSig = () => (typeof Media !== 'undefined' ? Media.tick : 0) + '.' + (typeof Character !== 'undefined' ? Character.ticks : 0) + '.' + (typeof Packs !== 'undefined' ? Packs.version : 0) + '.' + (E.fontVersion || 0) + '.' + (typeof GeoData !== 'undefined' ? GeoData.state.version : 0);
+    function studioStamp() { if (!TH.st || TH.st.g !== TH.gen) { let j = ''; try { j = JSON.stringify(V().thumbStudio(cfg())) + (typeof Studio !== 'undefined' && Studio.hooks && Studio.hooks.char ? JSON.stringify(Studio.hooks.char() || 0) : ''); } catch (e) { } TH.st = { g: TH.gen, v: hashS(j) }; } return TH.st.v; }
+    // What a clip's pictures depend on: worked out once per rebuild of the timeline, not on every scroll
+    function stampOf(it, lk) { let s = TH.stamps.get(it); if (!s || s.g !== TH.gen) { let j = ''; try { j = it.kind === 'clip' ? JSON.stringify([it.mod, it.cfg, it.look]) : it.kind === 'avatar' ? studioStamp() : JSON.stringify([it.text, it.gull]); } catch (e) { } s = { g: TH.gen, v: it.id + '|' + hashS(j) }; TH.stamps.set(it, s); } return s.v + '|' + lk.scheme + lk.format; }
+    function thGet(base, tt, it) {
+      if (TH.cur.get(it.id) !== base) { if (TH.cur.has(it.id)) TH.prev.set(it.id, TH.cur.get(it.id)); TH.cur.set(it.id, base); }
+      let M = TH.items.get(base); if (!M) TH.items.set(base, M = new Map());
+      const e = M.get(tt), tk = tickSig();
+      if (e) { e.u = ++TH.use; if (e.tk !== tk && e.tries < 3) thAsk(base, tt, it); return e; }   // drawn before its pictures had loaded: once more, and the old one shows meanwhile
+      thAsk(base, tt, it);
+      let best = null, bd = Infinity; const near = Mp => { if (Mp) Mp.forEach((x, k) => { if (x.cv && Math.abs(k - tt) < bd) { bd = Math.abs(k - tt); best = x; } }); };
+      near(M); if (!best) near(TH.items.get(TH.prev.get(it.id)));   // the nearest one there is (or the one from before the last change) until its own is ready
+      return best;
+    }
+    function thAsk(base, tt, it) { const key = base + '@' + tt; if (TH.pend.has(key)) return; TH.pend.add(key); TH.q.unshift({ key, base, tt, it }); if (TH.q.length > 160) { const d = TH.q.pop(); TH.pend.delete(d.key); } thSched(0); }
+    function thSched(ms) { if (TH.sched) return; TH.sched = 1; const run = () => { if (window.requestIdleCallback) requestIdleCallback(thPump, { timeout: 600 }); else setTimeout(thPump, 40); }; if (ms) setTimeout(run, ms); else run(); }
+    function thPump() {
+      TH.sched = 0; if (!active) { TH.q.length = 0; TH.pend.clear(); return; } if (!TH.q.length) return;
+      if (o.player.playing || drag) { thSched(350); return; }   // leave the computer alone while he plays or drags
+      const t0 = performance.now(), c = cfg(), lk = look(), { W, H } = E.dims(lk.format), ph = TH.PH, pw = Math.max(8, Math.round(ph * W / H)), tk = tickSig(); let n = 0;
+      while (TH.q.length && (n === 0 || performance.now() - t0 < 8)) {
+        const j = TH.q.shift(); TH.pend.delete(j.key); n++;
+        const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph; const g = cv.getContext('2d'); let ok = false; const a = performance.now();
+        try { g.setTransform(pw / W, 0, 0, ph / H, 0, 0); g.save(); ok = V().thumb(g, j.it, j.tt, c, lk, W, H); g.restore(); } catch (e) { ok = false; }
+        const k = thKind(j.it), ms = performance.now() - a; TH.cost[k] = TH.cost[k] == null ? ms : TH.cost[k] * 0.6 + ms * 0.4;
+        let M = TH.items.get(j.base); if (!M) TH.items.set(j.base, M = new Map()); const old = M.get(j.tt); if (!old) TH.n++;
+        M.set(j.tt, { cv: ok ? cv : null, u: ++TH.use, tk, tries: old ? old.tries + 1 : 0 });
+      }
+      if (TH.n > TH.MAX) { const all = []; TH.items.forEach((M, b) => M.forEach((e, k) => all.push([e.u, b, k]))); all.sort((x, y) => x[0] - y[0]); all.slice(0, all.length >> 2).forEach(([u, b, k]) => { const M = TH.items.get(b); M.delete(k); TH.n--; if (!M.size) TH.items.delete(b); }); }
+      TH.ver++; paintSoon(); if (TH.q.length) thSched(0);
+    }
+    const lightSig = it => it.cfg === undefined ? JSON.stringify(it) : JSON.stringify(it, (k, v) => k === 'cfg' ? undefined : v);   // a Patter clip's own settings are in its stamp
     function paint() {
-      if (!active) return; const sw = scroll.clientWidth, vl = Math.max(0, scroll.scrollLeft - HEAD - sw), vr = scroll.scrollLeft - HEAD + sw * 2, dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (!active) return; const sw = scroll.clientWidth, vl = Math.max(0, scroll.scrollLeft - HEAD - sw), vr = scroll.scrollLeft - HEAD + sw * 2, dpr = Math.min(2, window.devicePixelRatio || 1), c = cfg(), lk = look(), FD = E.dims(lk.format), ar = FD.W / FD.H;
       rows.querySelectorAll('.ct-lane').forEach(lane => { const cv = lane._cv; if (!cv) return; const lw = lane.clientWidth, ch = lane.clientHeight, x0 = Math.max(0, Math.min(vl, lw)), x1 = Math.max(x0, Math.min(vr, lw)), cw = Math.ceil(x1 - x0); if (cw <= 0 || ch <= 0) return;
         const els = [...lane.children].filter(el => el._p && el.classList.contains('st') && !el.classList.contains('moving') && el.offsetLeft < x1 && el.offsetLeft + el.offsetWidth > x0);
-        const sig = [x0, cw, ch, dpr, pps, CutMedia.thumbTick].concat(els.map(el => { const it = el._p.it, m = it.asset ? CutMedia.info(it.asset) : null; return el.offsetLeft + ',' + el.offsetWidth + ',' + el.className + ',' + JSON.stringify(it) + ',' + (m ? (m.thumbs ? 1 : 0) + (m.peaks ? 2 : 0) + (m.level || 0) : -1); })).join('|');
+        const sig = [x0, cw, ch, dpr, pps, CutMedia.thumbTick, TH.ver].concat(els.map(el => { const it = el._p.it, m = it.asset ? CutMedia.info(it.asset) : null; return el.offsetLeft + ',' + el.offsetWidth + ',' + el.className + ',' + lightSig(it) + ',' + (canThumb(it) ? stampOf(it, lk) : '') + ',' + (m ? (m.thumbs ? 1 : 0) + (m.peaks ? 2 : 0) + (m.level || 0) : -1); })).join('|');
         if (cv._sig === sig) return; cv._sig = sig;
         cv.style.left = x0 + 'px'; cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr); if (cv.width !== pw) cv.width = pw; if (cv.height !== ph) cv.height = ph;
         const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
@@ -476,7 +515,13 @@ const CutUI = (() => {
           if (thumbs) { const tw = Math.max(20, Math.round(thH * (m.thumbs.w / m.thumbs.h))); for (let x = Math.floor(a / tw) * tw; x < b; x += tw) { const local = (x + tw / 2) / pps, sT = m.kind === 'image' ? 0 : V().srcTime(it, Math.min(p.d, local)), bm = CutMedia.thumb(it.asset, sT); if (bm) g.drawImage(bm, x - a, 0, tw, thH); } }
           if (wave) { const y0 = thumbs ? thH : 0, hh = bh - y0, mid = y0 + hh / 2, span = V().speedOf(it) / pps; g.fillStyle = it.kind === 'audio' ? 'rgba(160,255,200,0.9)' : 'rgba(150,230,255,0.85)';
             for (let x = 0; x < w; x++) { const local = (a + x) / pps, sT = V().srcTime(it, local); let v = 0; for (let k = 0; k < 3; k++) v = Math.max(v, CutMedia.peakAt(it.asset, sT + span * k / 3)); const gn = Math.min(1.6, Math.sqrt(CutAudio.clipGain({ it, d: p.d, trackDb: 0 }, local))); const hv = v * gn * hh * 0.48; g.fillRect(x, mid - hv, 1, Math.max(1, hv * 2)); } }
-          if (it.kind === 'clip' && !thumbs) { g.fillStyle = 'rgba(255,255,255,0.06)'; for (let x = -(a % 16); x < w; x += 16) g.fillRect(x, 0, 8, bh); }
+          if (canThumb(it) && !thumbs) {   // a Patter clip, a talking part or the old intro: its own pictures along the bar
+            const tw = Math.max(16, Math.round(bh * ar)), kind = thKind(it), one = it.kind === 'avatar' || (TH.cost[kind] || 0) > 45, q = it.kind === 'avatar' ? 8 : Math.pow(2, cl(Math.round(Math.log2(Math.max(1e-3, tw / pps))), -3, 5)), base = stampOf(it, lk); let any = false;
+            g.fillStyle = 'rgba(255,255,255,0.05)'; for (let x = -(a % 16); x < w; x += 16) g.fillRect(x, 0, 8, bh);
+            for (let x = Math.floor(a / tw) * tw; x < b; x += tw) { const local = one && it.kind !== 'avatar' ? Math.min(p.d * 0.5, 1.5) : cl((x + tw / 2) / pps, 0, Math.max(0, p.d - 0.02)); let tt = 0; try { tt = V().thumbTime(it, local, c, lk, p.o); } catch (e) { } tt = Math.max(0, Math.round(tt / q) * q);
+              const e = thGet(base, tt, it); if (e && e.cv) { g.drawImage(e.cv, x - a, 0, tw, bh); any = true; } }
+            if (any) { g.globalAlpha = 1; g.fillStyle = 'rgba(8,12,22,0.16)'; g.fillRect(0, 0, w, bh); }   // sat back a touch, so the label, line and handles read on top
+          }
           g.restore(); });
       });
     }

@@ -66,10 +66,10 @@
   <section class="stagecol">
     <div class="pvbox"><div class="preview" id="prevWrap"><canvas id="prev" role="img" aria-label="Live preview of the clip"></canvas></div></div>
     <div class="transport">
-      <button id="playBtn" aria-label="Play">Play</button>
+      <button id="playBtn" aria-label="Play" title="Play or pause (Space)"></button>
       <button id="restartBtn" aria-label="Play from the start">Restart</button>
+      <span class="time" id="time" title="Where the playhead is, and how long the clip is: minutes, seconds, frames"><b>00:00:00</b><i> / 00:00:00</i></span>
       <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the clip">
-      <span class="time" id="time">0.0 / 0.0 s</span>
       <details class="pvset"><summary title="Preview settings" aria-label="Preview settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></summary><div class="pvset-pop">
       <label class="pq" title="How sharp the preview is. Draft is fastest on slow laptops. Export is always full quality."><span class="lab">Preview</span><select id="pq" aria-label="Preview quality"><option value="draft">Draft</option><option value="normal">Normal</option><option value="full">Full</option></select></label>
       <label class="pq" title="Where the preview is drawn. Processor is much faster on laptops with built in graphics; try Graphics card on a PC with a proper graphics card. Exports are not affected."><span class="lab">Draw on</span><select id="pdraw" aria-label="Draw the preview on"><option value="cpu">Processor</option><option value="gpu">Graphics card</option></select></label>

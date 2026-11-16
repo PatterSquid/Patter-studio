@@ -10,19 +10,18 @@ const Editor = (() => {
   const { H } = UI;
   function create(o) {
     // o: { tl, canvas, wrap, player, getMod, getCfg, getLook, changed, commit, select }
-    let multi = new Set(), sel = null, selKey = -1, pps = 0, fitted = false, snapOn = true, camOff = false, dur = 1, curT = 0, drag = null, hover = null;
+    let multi = new Set(), sel = null, selKey = -1, pps = 0, fitted = false, fitAll = false, snapOn = true, camOff = false, dur = 1, curT = 0, drag = null, hover = null;
     const bar = H('div', { className: 'tl-bar' }), body = H('div', { className: 'tl-body' }), heads = H('div', { className: 'tl-heads' }), scroll = H('div', { className: 'tl-scroll' }), inner = H('div', { className: 'tl-inner' });
     const ruler = H('div', { className: 'tl-ruler' }), lanes = H('div', { className: 'tl-lanes' }), play = H('div', { className: 'tl-play' }, H('i', {}));
     inner.append(ruler, lanes, play); scroll.append(inner); body.append(heads, scroll); o.tl.append(bar, body);
     const ovl = H('canvas', { className: 'ovl', 'aria-hidden': 'true' }); o.wrap.append(ovl);
-    // Small fixed play controls at the left end of the ruler
-    const tpReset = H('button', { type: 'button', className: 'tl-tpb', title: 'Back to the start (Home)', 'aria-label': 'Back to the start', innerHTML: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 2h2v12H3zM13 2v12L6 8z" fill="currentColor"/></svg>', on: { click: () => { o.player.reset(); setTime(0); } } });
-    const tpPlay = H('button', { type: 'button', className: 'tl-tpb', title: 'Play or pause (Space)', 'aria-label': 'Play', on: { click: () => o.player.toggle() } });
-    const PLAY = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg>', PAUSE = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 2h4v12H3zM9 2h4v12H9z" fill="currentColor"/></svg>';
-    let tpState = null; const syncPlay = pl => { if (pl === tpState) return; tpState = pl; tpPlay.innerHTML = pl ? PAUSE : PLAY; tpPlay.setAttribute('aria-label', pl ? 'Pause' : 'Play'); }; syncPlay(false);
-    const tpEl = H('div', { className: 'tl-hr tl-tp' }, tpReset, tpPlay);
+    // The clock at the left end of the ruler, as on the Video timeline (Play is in the bar just above)
+    const tcEl = H('div', { className: 'tl-hr tl-tc', title: 'Where the playhead is: minutes, seconds, frames' }), syncPlay = () => { };
+    const snapLine = H('div', { className: 'tl-snapl', hidden: true }); inner.append(snapLine);
+    const ZMIN = 8, ZMAX = 600, zPos = v => String(Math.round((Math.log(v) - Math.log(ZMIN)) / (Math.log(ZMAX) - Math.log(ZMIN)) * 1000));
+    const zoomIn = H('input', { type: 'range', min: '0', max: '1000', value: '400', className: 'tl-zoom', 'aria-label': 'Timeline zoom', title: 'Zoom the timeline (Ctrl + wheel)', on: { input: e => setPps(Math.exp(Math.log(ZMIN) + (Math.log(ZMAX) - Math.log(ZMIN)) * e.target.value / 1000), null, true) } });
+    const MAGNET = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 3v8a6 6 0 0 0 12 0V3M6 3h4v8M14 3h4" stroke="currentColor" stroke-width="2" fill="none"/></svg>', FIT = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 12h16M4 12l4-4M4 12l4 4M20 12l-4-4M20 12l-4 4" stroke="currentColor" stroke-width="2" fill="none"/></svg>';
     const ed = () => { const m = o.getMod(); return m && m.editor; };
-    const fmt = s => { const m = Math.floor(s / 60), r = s - m * 60; return (m ? m + ':' + (r < 10 ? '0' : '') : '') + r.toFixed(m ? 0 : r < 10 ? 1 : 0); };
 
     // Toolbar
     let pop = null;
@@ -64,12 +63,15 @@ const Editor = (() => {
         bar.append(btn('Delete', 'Delete the selected item (Delete)', () => removeSel(), !sel || !e.remove));
         const lays = selLayers(); if (lays.length && typeof Layers !== 'undefined' && Layers.hooks.savePiece) bar.append(btn(lays.length > 1 ? 'Save ' + lays.length + ' as a piece' : 'Save as a piece', 'Keep the selected layers to drop into any clip later (from Saved)', () => Layers.hooks.savePiece(o.getCfg(), lays))); }
       if (e && e.addKey && sel && sel.startsWith('L:')) bar.append(btn('◆ Key', 'Add a keyframe to the selected layer at the playhead (K)', () => addKey()));
-      bar.append(H('span', { className: 'tl-fill' }), btn('−', 'Zoom out the timeline', () => zoom(1 / 1.4)), btn('+', 'Zoom in the timeline', () => zoom(1.4)));
+      bar.append(H('span', { className: 'tl-gap' }), H('button', { type: 'button', className: 'ct-snap tl-snap' + (snapOn ? ' on' : ''), title: snapOn ? 'Snap is on: bars and the playhead catch on edges and keyframes as you drag. Click to turn it off (or hold Alt while dragging the playhead).' : 'Snap is off. Click to make bars and the playhead catch on edges and keyframes.', 'aria-pressed': String(snapOn), on: { click: () => { snapOn = !snapOn; drawBar(); } } }, H('span', { innerHTML: MAGNET }), H('b', { textContent: 'Snap' }), H('i', {})));
+      bar.append(H('span', { className: 'tl-fill' }));
       if (e && e.camera) bar.append(H('label', { className: 'check tl-cam', title: 'Untick to see the whole scene while you arrange things. The export always uses the camera.' }, H('input', { type: 'checkbox', checked: !camOff, on: { change: ev => { camOff = !ev.target.checked; } } }), 'Camera moves'));
-      const sn = H('label', { className: 'check tl-snap' }, H('input', { type: 'checkbox', checked: snapOn, on: { change: ev => { snapOn = ev.target.checked; } } }), 'Snap'); bar.append(sn);
+      bar.append(H('button', { type: 'button', className: 'ci tl-fit', title: 'Fit the whole clip in view', 'aria-label': 'Fit the whole clip in view', innerHTML: FIT, on: { click: () => { fitted = false; fitAll = true; build(); scroll.scrollLeft = 0; } } }), zoomIn);
     }
     function addKey() { const e = ed(); if (!e || !e.addKey || !sel || !sel.startsWith('L:')) return false; const st = trackRows.flatMap(tr => tr.items).find(i => i.id === sel); let t = curT; if (st) t = Math.max(st.start, Math.min(st.end, t)); selKey = e.addKey(o.getCfg(), sel, t); o.changed(true); return true; }
-    function zoom(f) { const c = scroll.scrollLeft + scroll.clientWidth / 2, tc = c / pps; pps = Math.max(8, Math.min(600, pps * f)); fitted = true; build(); scroll.scrollLeft = tc * pps - scroll.clientWidth / 2; }
+    // Zooming keeps the moment under the pointer (or the middle of the view) where it is
+    function setPps(v, clientX, fromSlider) { const r = scroll.getBoundingClientRect(), ax = clientX == null ? scroll.clientWidth / 2 : Math.max(0, Math.min(scroll.clientWidth, clientX - r.left)), tAt = (scroll.scrollLeft + ax) / pps; pps = Math.max(ZMIN, Math.min(ZMAX, v)); fitted = true; build(); scroll.scrollLeft = Math.max(0, tAt * pps - ax); sx = scroll.scrollLeft; if (!fromSlider) zoomIn.value = zPos(pps); }
+    function zoom(f, clientX) { setPps(pps * f, clientX); }
     const selLayers = () => [...new Set([...(multi.size ? multi : []), ...(sel ? [sel] : [])])].filter(i => typeof i === 'string' && i.startsWith('L:'));
     function markSel() { lanes.querySelectorAll('.tl-clip').forEach(c => c.classList.toggle('on', c.dataset.id === sel || multi.has(c.dataset.id))); }
     function removeSel() { const e = ed(); if (multi.size > 1 && e && e.remove && selKey < 0) { [...multi].forEach(i => e.remove(o.getCfg(), i)); multi.clear(); sel = null; o.changed(true); o.select(null); drawBar(); return; } if (sel && selKey >= 0 && e && e.removeKey) { e.removeKey(o.getCfg(), sel, selKey); selKey = -1; o.changed(true); o.select(sel); return; } if (!sel || !e || !e.remove) return; e.remove(o.getCfg(), sel); sel = null; o.changed(true); o.select(null); drawBar(); }
@@ -78,14 +80,17 @@ const Editor = (() => {
     let trackRows = [];
     function build() {
       const m = o.getMod(), cfg = o.getCfg(), look = o.getLook(); dur = Math.max(1, m.duration(cfg, look));
-      const fit = Math.max(30, (scroll.clientWidth - 30) / (dur + 0.5)); if (!fitted || !pps) pps = fit;
-      const W = Math.max(scroll.clientWidth, (dur + 1) * pps); inner.style.width = W + 'px';
-      // Ruler
-      ruler.innerHTML = ''; const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60], step = steps.find(s => s * pps >= 60) || 60, minor = step / (step >= 1 ? 4 : 5);
-      for (let s = 0; s <= dur + 1 + 1e-6; s += minor) { const major = Math.abs(s / step - Math.round(s / step)) < 1e-6; ruler.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) ruler.append(H('span', { style: `left:${s * pps + 3}px`, textContent: fmt(Math.round(s * 100) / 100) })); }
+      sw = scroll.clientWidth; sx = scroll.scrollLeft;
+      // Opening a clip shows its bars at a size he can read and grab; the Fit button shows all of it however long it is
+      const fit = Math.max(fitAll ? ZMIN : 30, (sw - 30) / (dur + 0.5)); if (!fitted || !pps) { pps = Math.max(ZMIN, Math.min(ZMAX, fit)); zoomIn.value = zPos(pps); } fitAll = false;
+      const W = Math.max(sw, (dur + 1) * pps); inner.style.width = W + 'px';
+      // Ruler: a label every 70 pixels or so, small ticks between, the same as the Video timeline
+      ruler.innerHTML = ''; const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300], step = steps.find(s => s * pps >= 70) || 300, minor = step / 5, frag = document.createDocumentFragment();
+      for (let k = 0, s = 0; s * pps <= W; k++, s = k * minor) { const major = k % 5 === 0; frag.append(H('i', { className: major ? 'mj' : '', style: `left:${s * pps}px` })); if (major) frag.append(H('span', { style: `left:${s * pps + 4}px`, textContent: E.rulerLabel(s, step) })); }
+      ruler.append(frag);
       ruler.append(H('b', { className: 'tl-end', style: `left:${dur * pps}px`, title: 'End of the clip' }));
       // Tracks
-      heads.innerHTML = ''; lanes.innerHTML = ''; heads.append(tpEl);
+      heads.innerHTML = ''; lanes.innerHTML = ''; heads.append(tcEl);
       const e = ed(); trackRows = e && e.tracks ? e.tracks(cfg, look) : [{ id: 'clip', name: m.name || 'Clip', items: [{ id: '_all', start: 0, end: dur, label: m.name || 'Clip', move: false, trim: 'none' }] }];
       trackRows.forEach(tr => {
         const hd = H('div', { className: 'tl-h' + (tr.layer ? ' lay' : ''), title: tr.name, style: tr.colour ? `border-left:4px solid ${tr.colour}` : '', on: tr.layer ? { click: () => select(tr.items[0] && tr.items[0].id) } : undefined }, H('span', { className: 'tl-hn', textContent: tr.name }));
@@ -101,7 +106,7 @@ const Editor = (() => {
     function clipEl(it, tr) {
       const tmc = o.getCfg().timing, el = H('div', { className: 'tl-clip' + (it.timed && tmc && tmc[it.id] ? ' custom' : '') + (it.id === sel || multi.has(it.id) ? ' on' : '') + (it.locked ? ' locked' : '') + (it.move === false && it.trim === 'none' ? ' fixed' : '') + (it.small ? ' small' : ''), title: it.title || it.label, 'data-id': it.id, tabIndex: 0 });
       el.style.left = it.start * pps + 'px'; el.style.width = Math.max(6, (it.end - it.start) * pps) + 'px'; el.style.background = it.colour || tr.colour || '#3b5a8f';
-      el.append(H('span', { textContent: it.label }));
+      el.append(H('span', { textContent: it.small && (it.end - it.start) * pps < 12 + String(it.label || '').length * 6.4 ? '' : it.label }));   // a word that will not fit is left to its tooltip rather than cut to a letter
       if (it.trim === 'both' || it.trim === 'start') el.append(H('b', { className: 'hl', 'data-h': 'l' }));
       if (it.trim === 'both' || it.trim === 'end') el.append(H('b', { className: 'hr', 'data-h': 'r' }));
       if (it.keys) it.keys.forEach((kt, ki) => { const d = H('i', { className: 'tl-key' + (it.id === sel && ki === selKey ? ' on' : ''), title: 'Keyframe at ' + kt.toFixed(2) + ' s. Drag to retime, click to jump to it.', 'data-k': ki }); d.style.left = (kt - it.start) * pps + 'px'; d.addEventListener('pointerdown', ev => startKeyDrag(ev, it, ki, d)); el.append(d); });
@@ -152,7 +157,7 @@ const Editor = (() => {
       const up = () => { rangeEl.removeEventListener('pointermove', mv); rangeEl.removeEventListener('pointerup', up); o.changed(false); };
       rangeEl.addEventListener('pointermove', mv); rangeEl.addEventListener('pointerup', up); });
     function edges(exceptId) { const out = [curT, 0]; trackRows.forEach(tr => tr.items.forEach(i => { if (i.id !== exceptId) { out.push(i.start, i.end); (i.keys || []).forEach(k => out.push(k)); } })); const r = o.getRange && o.getRange(); if (r) out.push(r[0], r[1]); return out; }
-    function snap(v, exceptId) { if (!snapOn) return v; const tol = 8 / pps; let best = v, bd = tol; edges(exceptId).forEach(e => { const d = Math.abs(e - v); if (d < bd) { bd = d; best = e; } }); return best; }
+    function snap(v, exceptId) { if (!snapOn) { snapLine.hidden = true; return v; } const tol = 8 / pps; let best = v, bd = tol, hit = null; edges(exceptId).forEach(e => { const d = Math.abs(e - v); if (d < bd) { bd = d; best = e; hit = e; } }); if (hit != null && drag) { snapLine.hidden = false; snapLine.style.transform = 'translateX(' + hit * pps + 'px)'; } else snapLine.hidden = true; return best; }   // a yellow line shows what it caught on
     function startClipDrag(ev, it, tr, el) {
       if (ev.button > 0) return; ev.preventDefault();
       // Shift or Ctrl click adds to (or takes away from) the selection
@@ -164,7 +169,7 @@ const Editor = (() => {
       const group = mode === 'm' && multi.size > 1 && multi.has(it.id) ? trackRows.flatMap(r => r.items).filter(i => multi.has(i.id) && i.id !== it.id && !i.locked && i.move !== false).map(i => ({ i, s0: i.start, e0: i.end, el: lanes.querySelector(`.tl-clip[data-id="${CSS.escape(i.id)}"]`) })) : [];
       drag = { kind: 'clip', it, tr, el, mode, x0: ev.clientX, s0: it.start, e0: it.end, track: tr.id, moved: false, group };
       const mv = e2 => {
-        const dt = (e2.clientX - drag.x0) / pps; if (Math.abs(e2.clientX - drag.x0) > 2) drag.moved = true; if (!drag.moved) return;
+        const dt = (e2.clientX - drag.x0) / pps; if (Math.abs(e2.clientX - drag.x0) > 2 && !drag.moved) { drag.moved = true; el.classList.add('dragging'); } if (!drag.moved) return;
         const len = drag.e0 - drag.s0, maxL = it.maxLen || 1e9, minL = it.minLen || 0.2; let s = drag.s0, en = drag.e0;
         if (mode === 'm') { s = Math.max(0, drag.s0 + dt); const ss = snap(s, it.id), se = snap(s + len, it.id); if (ss !== s) s = ss; else if (se !== s + len) s = se - len; s = Math.max(0, s); en = s + len; }
         else if (mode === 'l') { s = Math.min(drag.e0 - minL, Math.max(0, snap(drag.s0 + dt, it.id))); if (drag.e0 - s > maxL) s = drag.e0 - maxL; }
@@ -178,7 +183,7 @@ const Editor = (() => {
         drag.s = s; drag.e = en; ed().update(o.getCfg(), it.id, { start: s, end: en, track }); o.changed(false); relayout(it.id);
         const tt = mode === 'r' ? en - 0.02 : s + 0.05; o.player.seek(tt); setTime(tt);
       };
-      const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); const moved = drag && drag.moved; drag = null; if (moved) { o.changed(true); } else { o.player.seek(it.start + 0.01); setTime(it.start + 0.01); } };
+      const up = () => { el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); const moved = drag && drag.moved; drag = null; snapLine.hidden = true; el.classList.remove('dragging'); if (moved) { o.changed(true); } else { o.player.seek(it.start + 0.01); setTime(it.start + 0.01); } };
       el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     }
     // Scrubbing on the ruler or empty lane space
@@ -214,10 +219,14 @@ const Editor = (() => {
       const up = () => { cancelAnimationFrame(raf); play.removeEventListener('pointermove', mv); play.removeEventListener('pointerup', up); play.removeEventListener('pointercancel', up); o.player.scrub(false); play.classList.remove('drag'); };
       play.addEventListener('pointermove', mv); play.addEventListener('pointerup', up); play.addEventListener('pointercancel', up); raf = requestAnimationFrame(tick);
     }
-    scroll.addEventListener('wheel', ev => { if (ev.ctrlKey || ev.metaKey) { ev.preventDefault(); zoom(ev.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
+    scroll.addEventListener('wheel', ev => { if (ev.ctrlKey || ev.metaKey) { ev.preventDefault(); zoom(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX); } }, { passive: false });
+    // The playhead moves by transform and the scroll position is remembered, so a playing preview never makes the page
+    // measure itself again every frame
+    let sx = 0, sw = 0, tcTxt = ''; scroll.addEventListener('scroll', () => { sx = scroll.scrollLeft; }, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { sw = scroll.clientWidth; }).observe(scroll);
     function setTime(t, force) {
-      curT = t; play.style.left = t * pps + 'px';
-      if (!drag && o.player.playing && !force) { const x = t * pps, l = scroll.scrollLeft, w = scroll.clientWidth; if (x > l + w - 40 || x < l) scroll.scrollLeft = Math.max(0, x - 40); }
+      curT = t; play.style.transform = 'translateX(' + t * pps + 'px)'; const tx = E.tc(t); if (tx !== tcTxt) tcEl.textContent = tcTxt = tx;
+      if (!drag && o.player.playing && !force) { const x = t * pps; if (x > sx + sw - 40 || x < sx) { scroll.scrollLeft = Math.max(0, x - 40); sx = scroll.scrollLeft; } }
     }
 
     // Selection
@@ -229,15 +238,20 @@ const Editor = (() => {
     // Preview overlay: selection boxes and dragging things around on the board
     const geom = () => { const look = o.getLook(), { W, H: Hh } = E.dims(look.format), cw = ovl.clientWidth, ch = ovl.clientHeight, k = Math.min(cw / W, ch / Hh); return { W, Hh, k, ox: (cw - W * k) / 2, oy: (ch - Hh * k) / 2 }; };
     const toScene = ev => { const r = ovl.getBoundingClientRect(), g = geom(); return [(ev.clientX - r.left - g.ox) / g.k, (ev.clientY - r.top - g.oy) / g.k, g]; };
-    let hitsNow = [];
+    let hitsNow = [], ovlInk = true, ovlStyle = '', over = false, ow = 0, oh = 0;
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { ow = ovl.clientWidth; oh = ovl.clientHeight; }).observe(ovl);
+    ovl.addEventListener('pointerenter', () => { over = true; }); 
     function drawOverlay(t) {
-      const e = ed(), dpr = Math.min(window.devicePixelRatio || 1, 2), cw = ovl.clientWidth, ch = ovl.clientHeight;
-      if (ovl.width !== Math.round(cw * dpr) || ovl.height !== Math.round(ch * dpr)) { ovl.width = Math.round(cw * dpr); ovl.height = Math.round(ch * dpr); }
-      const c = ovl.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, ovl.width, ovl.height);
-      ovl.style.pointerEvents = e && e.hits ? 'auto' : 'none'; ovl.style.touchAction = sel ? 'none' : 'pan-y';
-      ovl.style.cursor = e && e.hits ? (drag && drag.kind === 'canvas' ? 'grabbing' : hover ? 'grab' : 'default') : 'default';
-      if (!e || !e.hits) { hitsNow = []; return; }
+      const e = ed(), dpr = Math.min(window.devicePixelRatio || 1, 2), cw = ow || (ow = ovl.clientWidth), ch = oh || (oh = ovl.clientHeight);
+      if (ovl.width !== Math.round(cw * dpr) || ovl.height !== Math.round(ch * dpr)) { ovl.width = Math.round(cw * dpr); ovl.height = Math.round(ch * dpr); ovlInk = true; }
+      const pe = e && e.hits ? 'auto' : 'none', ta = sel ? 'none' : 'pan-y', cur = e && e.hits ? (drag && drag.kind === 'canvas' ? 'grabbing' : hover ? 'grab' : 'default') : 'default', sk = pe + ta + cur;
+      if (sk !== ovlStyle) { ovlStyle = sk; ovl.style.pointerEvents = pe; ovl.style.touchAction = ta; ovl.style.cursor = cur; }
+      // Playing with nothing selected and the pointer elsewhere: nothing to work out or draw, so the layer is left alone
+      const quiet = !sel && !hover && !drag && !over && o.player.playing, c = ovl.getContext('2d');
+      if (quiet || !e || !e.hits) { hitsNow = []; if (ovlInk) { c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, ovl.width, ovl.height); ovlInk = false; } return; }
       const g = geom(); try { hitsNow = e.hits(o.getCfg(), o.getLook(), t, g.W, g.Hh) || []; } catch (err) { hitsNow = []; }
+      const show = hitsNow.some(h => h.id === sel || h.id === hover) || !!(drag && drag.guides && drag.guides.length);
+      if (!show && !ovlInk) return; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, ovl.width, ovl.height); ovlInk = show;
       c.setTransform(dpr * g.k, 0, 0, dpr * g.k, dpr * g.ox, dpr * g.oy);
       const px = 1 / g.k;
       hitsNow.forEach(h => {
@@ -258,7 +272,7 @@ const Editor = (() => {
       return null;
     }
     ovl.addEventListener('pointermove', ev => { if (drag) return; const e = ed(); if (!e || !e.hits) return; const [x, y, g] = toScene(ev), hit = hitAt(x, y, g); hover = hit ? hit.h.id : null; });
-    ovl.addEventListener('pointerleave', () => { hover = null; });
+    ovl.addEventListener('pointerleave', () => { hover = null; over = false; });
     ovl.addEventListener('pointerdown', ev => {
       const e = ed(); if (!e || !e.hits) return; const [x, y, g] = toScene(ev), hit = hitAt(x, y, g);
       if (!hit) { select(null); return; }

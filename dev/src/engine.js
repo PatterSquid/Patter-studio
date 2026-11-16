@@ -305,5 +305,8 @@ const E = (() => {
   const setTm = (cfg, id, v) => { if (!cfg.timing || typeof cfg.timing !== 'object') cfg.timing = {}; cfg.timing[id] = Math.round(Math.max(0.1, Math.min(600, v)) * 100) / 100; };
   // Where previews are drawn: the processor by default (much faster on built in graphics), or straight on the graphics card
   const previewOnCpu = () => { try { return localStorage.getItem('patter-draw') !== 'gpu'; } catch (e) { return true; } };
-  return { previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
+  // Clock readouts shared by every timeline and the play bar: minutes, seconds and frames, and the short labels on a ruler
+  const tc = (s, fps = 30) => { s = Math.max(0, +s || 0); const m = Math.floor(s / 60), sec = Math.floor(s % 60), f = Math.min(fps - 1, Math.floor((s - Math.floor(s)) * fps + 1e-6)); return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0') + ':' + String(f).padStart(2, '0'); };
+  const rulerLabel = (s, step) => { s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60; if (step >= 1) return m + ':' + String(Math.round(r)).padStart(2, '0'); const d = step < 0.1 ? 2 : 1, v = r.toFixed(d); return m + ':' + (r < 10 ? '0' : '') + v; };
+  return { tc, rulerLabel, previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
 })();

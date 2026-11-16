@@ -164,7 +164,9 @@
   const wrap = $('prevWrap');
   function layoutPreview() { const tall = state.look.format === '9:16'; wrap.classList.toggle('tall', tall); wrap.style.aspectRatio = tall ? '9 / 16' : '16 / 9'; }
   layoutPreview();
-  const scrub = $('scrub'), timeEl = $('time'), playBtn = $('playBtn');
+  const scrub = $('scrub'), timeEl = $('time'), playBtn = $('playBtn'), timeNow = timeEl.querySelector('b'), timeAll = timeEl.querySelector('i'); let timeA = '', timeB = '';
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11.3-6.8a1 1 0 0 0 0-1.72L9.5 4.34A1 1 0 0 0 8 5.2z" fill="currentColor"/></svg>', ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.4" height="15" rx="1.2" fill="currentColor"/><rect x="13.6" y="4.5" width="4.4" height="15" rx="1.2" fill="currentColor"/></svg>';
+  playBtn.innerHTML = ICON_PLAY; playBtn.dataset.s = 'Play';
   const viewLook = () => (ed && ed.camOff && mod().editor && mod().editor.camera ? Object.assign({}, state.look, { noCam: true }) : state.look);
   const player = E.Player($('prev'), () => ({ mod: mod(), cfg: cfg(), look: viewLook() }), (t, d, playing) => {
     if (ed) { ed.setTime(t); ed.drawOverlay(t); ed.syncPlay(playing); }
@@ -172,7 +174,8 @@
     { const mm = mod(); if (mm && typeof mm.tick === 'function') mm.tick(t, playing && !scrubbing, cfg()); }
     // Only touch the page when something shows differently (writing the same text still makes the browser lay out again)
     if (!scrubbing) { const v = Math.round(t / d * 1000); if (+scrub.value !== v) scrub.value = v; }
-    const tt = t.toFixed(1) + ' / ' + d.toFixed(1) + ' s', pl = playing ? 'Pause' : 'Play'; if (timeEl.textContent !== tt) timeEl.textContent = tt; if (playBtn.textContent !== pl) { playBtn.textContent = pl; playBtn.setAttribute('aria-label', pl); }
+    const ta = E.tc(t), tb = ' / ' + E.tc(d), pl = playing ? 'Pause' : 'Play'; if (ta !== timeA) timeNow.textContent = timeA = ta; if (tb !== timeB) timeAll.textContent = timeB = tb;
+    if (playBtn.dataset.s !== pl) { playBtn.dataset.s = pl; playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY; playBtn.setAttribute('aria-label', pl); }
   });
   let scrubbing = false;
   // The preview waits paused on the first frame unless Autoplay is ticked (remembered on this computer)

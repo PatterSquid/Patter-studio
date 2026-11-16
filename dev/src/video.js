@@ -354,6 +354,17 @@ const Video = (() => {
   }
   /* Picture fades on the clip itself: vfIn / vfOut seconds, vfCol 'black' or 'white'. On the main track the picture dips from
      or to that colour; on an overlay track it fades to see through. vfSound (on unless false) fades its sound with it. */
+  // A small picture of one clip at a moment of its own, for the timeline's filmstrip: the clip's own content, without its
+  // move, effects or anything laid over it. tt is the clip's own time (thumbTime). False when there is nothing to show.
+  function thumb(g, it, tt, cfg, look, W, H) {
+    const lk = Object.assign({}, look, { preview: true, paused: true, thumb: true });
+    if (it.kind === 'clip') { const Mo = modOf(it.mod); if (!Mo || !it.cfg) return false; Mo.draw(g, tt, it.cfg, lookFor(it, lk), W, H); return true; }
+    if (it.kind === 'avatar') { if (!studioOn(cfg)) return false; const st = studioCfg(cfg); lk.paused = false; g.save(); try { Studio.drawAt(g, studioT(st, tt), tt, st, lk, W, H); } finally { g.restore(); } return true; }   // as the playing preview draws him: the lighter lighting pass
+    if (it.kind === 'intro') { if (typeof PatterIntro === 'undefined') return false; PatterIntro.draw(g, tt, W, H, { text: it.text, gull: it.gull }); return true; }
+    return false;
+  }
+  const thumbTime = (it, local, cfg, look, o) => it.kind === 'clip' ? clipInner(it, local, look) : it.kind === 'avatar' && o ? avStart(cfg, o, look) + local : local;
+  const thumbStudio = cfg => studioOn(cfg) ? studioCfg(cfg) : null;
   function picFade(it, local, d) { const fi = +it.vfIn || 0, fo = +it.vfOut || 0; let a = 0; if (fi > 0 && local < fi) a = Math.max(a, 1 - cl(local / fi, 0, 1)); if (fo > 0 && local > d - fo) a = Math.max(a, 1 - cl((d - local) / fo, 0, 1)); return a; }
   const fadeCol = it => it.vfCol === 'white' ? '#ffffff' : '#000000';
   // One main track clip, whole frame: background, the clip, (its gap card for avatars), then its fade from or to black
@@ -469,7 +480,7 @@ const Video = (() => {
     return 'C:' + b.id;
   }
 
-  return { id: 'video', name: 'Video', defaults, duration, draw, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
+  return { id: 'video', name: 'Video', defaults, duration, draw, thumb, thumbTime, thumbStudio, editor, mediaFor, mediaAt, blurHint, needsMap, hooks, layout, lenOf, NAMES, COLS, NAME, form: (root, cfg, changed) => editor.scene(root, cfg, changed),
     // for the editor workspace, audio and export
     PRO, TRLEN, picFade, natural, clipSpan, clipInner, speedOf, srcSpan, srcTime, allPlaced, pageOnlyAt, studioCfg, findItem, tracksOf, placeFree, pruneTracks, split, setKey, kfAt, placeOf, animOf, framesAt, imagesUsed, assetsUsed, isCut, mainEnd, trLen, TRMAX, fitWords, lookFor, modOf, raw, nid, drawItem, transition,
     runsOn, CURVES, curvePts, curveMul, hasCurve, rateOf, pinCurve, gapOf, setMainStarts, mainStarts, closeGaps, TRANS, ANIM_IN, ANIM_OUT, ANIM_LOOP, MASKS, EASES, studioOn, studioCfg, avStart };

@@ -645,3 +645,85 @@ body:not(.thb) #thumbWs{display:none!important}
 .ct-clip:hover .fh,.ct-clip .fh.on,.ct-clip.on .fh{opacity:.95}
 .ct-clip .fdi.wh{background:linear-gradient(to bottom right,rgba(255,255,255,.5) 50%,transparent 50%)}
 .ct-clip .fdo.wh{background:linear-gradient(to bottom left,rgba(255,255,255,.5) 50%,transparent 50%)}
+
+/* ===== Polish pass, November 2026: one look for both timelines, a proper play bar, quiet motion, slim scroll bars ===== */
+/* Motion: short and quiet, on the things he presses. Nothing moves for anyone who has asked their computer for less motion. */
+button,nav button,.rail button,select,input[type=text],textarea,.ci,.cl-tabs button,.aside-tabs button{transition:background-color .12s ease,border-color .12s ease,color .12s ease,box-shadow .12s ease,opacity .12s ease}
+button:active:not(:disabled):not(.primary):not(.ct-clip){transform:translateY(.5px)}
+@keyframes popIn{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes popDown{from{opacity:0;transform:translateY(-4px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.tl-pop,.pvset-pop{animation:popIn .13s ease-out both;transform-origin:bottom left}
+.ct-menu{animation:popDown .11s ease-out both;transform-origin:top left}
+dialog[open]{animation:popIn .16s ease-out both}
+dialog::backdrop{animation:fadeIn .16s ease-out both}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001s!important;transition-duration:.001s!important}}
+/* Scroll bars: slim and dark, in keeping with the rest */
+*{scrollbar-width:thin;scrollbar-color:#2c3e61 transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2c3e61;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#44598a;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* The play bar: a round play button, the clock, then the scrubber */
+#playBtn{min-width:0;width:38px;height:38px;padding:0;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--paper);color:var(--ink);border-color:var(--paper)}
+#playBtn:hover{background:#fff;border-color:#fff}
+#playBtn svg{width:19px;height:19px;display:block}
+#playBtn[data-s=Play] svg{margin-left:2px}
+.time{min-width:0;flex:none;text-align:left;font:600 12.5px ui-monospace,Consolas,monospace;letter-spacing:.01em;white-space:nowrap}
+.time b{font-weight:600;color:var(--fg)}
+.time i{font-style:normal;color:var(--muted)}
+.transport input[type=range]{height:18px}
+body.cut .transport{padding:5px 12px;gap:10px}
+body.gfx .transport,body.anim .transport{gap:12px}
+
+/* The Graphics and Animator timeline: the Video timeline's ruler, playhead, bars and controls */
+.tl-bar{gap:4px;min-height:30px}
+.tl-bar .tl-gap{margin:0 6px}
+.tl-bar .ct-snap.tl-snap{margin-left:0;height:28px;padding:0 8px 0 6px;font:600 12px system-ui,sans-serif}
+.tl-bar .tl-fit{width:30px;height:28px;padding:0}
+.tl-bar .tl-zoom{width:150px;accent-color:var(--bru)}
+.tl-bar .tl-cam{margin-right:8px;font-size:12px;color:var(--muted)}
+.tl-body{grid-template-columns:168px minmax(0,1fr);background:#0a1120;border-color:#1f2e4b}
+.tl-heads{background:#0d1628}
+.tl-hr,.tl-ruler{height:26px}
+.tl-tc{display:flex;align-items:center;padding-left:10px;font:600 12px ui-monospace,Consolas,monospace;color:var(--bru)}
+.tl-ruler{background:#0d1628;cursor:ew-resize}
+.tl-ruler i{height:5px;background:#34466a}
+.tl-ruler i.mj{height:11px;background:#6b80a8}
+.tl-ruler span{top:3px;color:#8fa1bf;pointer-events:none}
+.tl-ruler .tl-end{width:1px;background:#4a6290}
+.tl-h{height:34px;padding:0 6px 0 10px;border-bottom-color:#18243b;font-weight:600}
+.tl-lane{height:34px;border-bottom-color:#18243b}
+.tl-clip{top:3px;height:27px;border-radius:5px;border:1px solid rgba(255,255,255,.2);font-size:11.5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -12px 14px -12px rgba(0,0,0,.4);transition:filter .12s ease,box-shadow .12s ease}
+.tl-clip span{padding:0 9px}
+.tl-clip:hover{filter:brightness(1.12)}
+.tl-clip.on{outline:2px solid #fff;outline-offset:0}
+.tl-clip.dragging{cursor:grabbing;z-index:4;box-shadow:0 6px 16px rgba(0,0,0,.55)}
+.tl-clip b{width:7px;background:transparent;transition:background-color .12s ease}
+.tl-clip:hover b,.tl-clip.on b{background:rgba(255,255,255,.6)}
+.tl-play{left:0;will-change:transform}
+.tl-play i{left:-7px;width:16px;height:16px}
+.tl-snapl{position:absolute;top:0;bottom:0;left:0;width:1px;background:#ffd34d;z-index:5;pointer-events:none}
+.tl-snapl[hidden]{display:none}
+
+/* The Video timeline */
+.ct-rl i{height:5px;background:#34466a}
+.ct-rl i.mj{height:11px;background:#6b80a8}
+.ct-rl span{top:3px;color:#8fa1bf}
+.ct-play{background:var(--bru);will-change:transform}
+.ct-play i{background:var(--bru);left:-7px;width:16px;height:16px}
+.ct-clip{border-radius:5px;border-color:rgba(255,255,255,.22);transition:filter .12s ease}
+.ct-clip.st::before{content:'';position:absolute;left:0;right:0;top:0;height:20px;background:linear-gradient(rgba(6,10,20,.74),rgba(6,10,20,0));pointer-events:none;border-radius:4px 4px 0 0}
+.ct-clip .lbl{font-weight:600;letter-spacing:.01em;top:2px;left:7px}
+.ct-clip .lbl em{font-style:normal;font-weight:500;opacity:.72;margin-left:7px;font-variant-numeric:tabular-nums}
+.ct-clip:hover{filter:brightness(1.08)}
+.ct-clip.locked:hover,.ct-clip.muted:hover{filter:saturate(.6) brightness(1.05)}
+.ct-clip .hl,.ct-clip .hr{width:7px;transition:background-color .12s ease}
+.ct-clip.on .hl,.ct-clip.on .hr,.ct-clip:hover .hl,.ct-clip:hover .hr{background:rgba(255,255,255,.7)}
+.ct-clip.on .hl{border-radius:4px 0 0 4px}.ct-clip.on .hr{border-radius:0 4px 4px 0}
+.ct-h{transition:background-color .12s ease}
+.ct-row:not(.ct-newrow) .ct-h:hover{background:#111d35}
+.ct-lane{contain:layout style}
+.tl-lane{contain:layout style}
