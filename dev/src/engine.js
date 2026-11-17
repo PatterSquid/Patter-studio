@@ -73,7 +73,7 @@ const E = (() => {
     const sh = (opt.shadow ?? 16) * u;
     ctx.fillStyle = P.shadow; ctx.fillRect(x + sh, y + sh, w, h);
     ctx.fillStyle = opt.fill || P.paper; ctx.fillRect(x, y, w, h);
-    if (opt.grain) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = grain(ctx); ctx.fillRect(x, y, w, h); ctx.restore(); }
+    if (opt.grain) { ctx.save(); ctx.globalAlpha = 0.5; ctx.imageSmoothingEnabled = false; ctx.fillStyle = grain(ctx);   /* faint noise looks the same unsmoothed, and sampling it smoothed under the camera's zoom was half a chart frame */ ctx.fillRect(x, y, w, h); ctx.restore(); }
     ctx.lineWidth = 7 * u; ctx.strokeStyle = P.ink; ctx.lineJoin = 'miter'; ctx.strokeRect(x, y, w, h);
   }
   let grainPat = null;

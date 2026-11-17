@@ -122,6 +122,14 @@ const News = (() => {
     }
     ctx.restore();
   }
+  /* The card is painted at up to four times its size so zooms stay sharp; shrinking all of it every frame was most of a
+     Newspaper preview frame and made small print shimmer. The preview draws from a halved copy no smaller than it shows. */
+  function cardMip(c, ctx) {
+    const m = ctx.getTransform(), k = Math.hypot(m.a, m.b) * c.AW / c.card.width; let lv = 0; while (k * Math.pow(2, lv + 1) <= 1 && lv < 4) lv++;
+    if (!lv) return c.card; const ms = c.mips || (c.mips = [c.card]);
+    for (let i = ms.length; i <= lv; i++) { const p = ms[i - 1], q = document.createElement('canvas'); q.width = Math.max(1, Math.ceil(p.width / 2)); q.height = Math.max(1, Math.ceil(p.height / 2)); const g = q.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(p, 0, 0, q.width, q.height); ms.push(q); }
+    return ms[lv];
+  }
   function drawCard(ctx, t, c, p, C, cfg, look, W, H) {
     const T = c.T, s = c.f, e = t - T.entry; if (e < 0) return;
     const li = t - T.land; let ox = 0, oy = 0, rot = c.rot * Math.PI / 180, sc = 1, alpha = 1;
@@ -136,7 +144,7 @@ const News = (() => {
     const lift = cl(1 - li / 0.35, 0, 1), sh = 20 + lift * 26, sq = cfg.impact === 'burst' && li > 0 && li < 0.3 ? 1 - Math.sin(li / 0.3 * Math.PI) * 0.018 : 1;
     ctx.save(); ctx.globalAlpha = alpha; ctx.translate(c.x + ox, c.y + oy); ctx.rotate(rot); ctx.scale(s * sc / sq, s * sc * sq);
     const AW = c.AW, AH = c.AH;
-    ctx.fillStyle = C.shadow; ctx.fillRect(-AW / 2 + sh, -AH / 2 + sh, AW, AH); ctx.drawImage(c.card, -AW / 2, -AH / 2, AW, AH); ctx.lineWidth = 7; ctx.strokeStyle = C.ink; ctx.strokeRect(-AW / 2, -AH / 2, AW, AH);
+    ctx.fillStyle = C.shadow; ctx.fillRect(-AW / 2 + sh, -AH / 2 + sh, AW, AH); ctx.drawImage(look.preview ? cardMip(c, ctx) : c.card, -AW / 2, -AH / 2, AW, AH); ctx.lineWidth = 7; ctx.strokeStyle = C.ink; ctx.strokeRect(-AW / 2, -AH / 2, AW, AH);
     if (cfg.tape) [[-AW / 2 + 64, -AH / 2 - 4, -0.42], [AW / 2 - 64, -AH / 2 - 4, 0.38]].forEach(([tx, ty, tr]) => { ctx.save(); ctx.translate(tx, ty); ctx.rotate(tr); ctx.fillStyle = 'rgba(248,244,226,0.84)'; ctx.beginPath(); ctx.moveTo(-68, -20); ctx.lineTo(68, -20); for (let k = 0; k < 6; k++) ctx.lineTo(68 - (k % 2) * 5, -20 + (k + 1) * 6.7); ctx.lineTo(-68, 20); for (let k = 0; k < 6; k++) ctx.lineTo(-68 + (k % 2) * 5, 20 - (k + 1) * 6.7); ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(13,20,32,0.45)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); });
     ctx.translate(-AW / 2, -AH / 2);
     if (c.hlSpans.length) { const hp = ease.io4((t - T.hl) / 0.75), n = c.hlSpans.length, r = E.rng(41);

@@ -83,6 +83,17 @@ git add -A && git commit && git push origin main
 * Checks added in the polish pass: `tests/popdet.js` (runjs: every tab's example frame by frame at 60 a second, lists single
   frames that change far more than their neighbours: none in November 2026), `tests/ui_metrics.py` (where the browser's
   time goes: start up, each tab idle and playing, a heavy Video timeline scrubbed, dragged, zoomed), `tests/pacing.py`.
+* **Paint cost** (second pass, November 2026): script time is tiny everywhere; a frame's time is painting, and a canvas only
+  paints when it is read, so profiles put it all on `getImageData`. `tests/opcost.py <tab> [moment 0..1]` paints every call
+  of one frame on its own and lists the lines of code that cost most; `tests/slowframes.py <tab> [n]` lists a tab's slowest
+  moments; `tests/samepix.py <tabs> <n> [portA portB]` compares frames from two builds (serve the old one on 8766 from a
+  worktree). What costs: anything drawn resampled over much of the frame (under the camera's zoom or at a fraction of a
+  pixel: about 6 ms at 1080p here for a full frame, 0.6 ms for a plain copy). Fixed: the chart panel grain is sampled
+  unsmoothed (it was 12 ms of a 21 ms frame; faint noise looks the same, at most 6 levels in 255 different); Story's baked
+  scenery is cropped to where it has drawing (`trimBake`, pixel identical; worst frames 27 to 14 ms); Newspaper cards
+  in the preview draw from halved copies near their size on screen (`cardMip`; exports unchanged). Left as they are on
+  purpose: the zooming background (unsmoothed it shimmers), Story's chalk speckle (bold, would shimmer), the Studio's
+  plant strips and rain beads (the life of the room).
 * The cloud workspace can be wiped between sessions (it was, mid polish pass): everything in `dev/tmp_*` and the scratch
   folder goes, the repo comes back as a fresh clone of `main`. So push work in progress to a branch as you go, and expect
   to remake fixtures: `tmp_cut/`, `tmp_dogclip.webm`, `tmp_noisy.wav`, voices (ffmpeg, flite), `tmp_room.png` and

@@ -98,8 +98,24 @@
   function baked(set, which, k) {
     const key = set; let m = bakeCache.get(key); if (!m) { m = {}; bakeCache.set(key, m); } const id = which + k.toFixed(3) + BOARD + SETA + (EDGE ? 'e' : ''); if (m[id]) return m[id];
     const c = mkC(WW * k, WH * k), g = c.getContext('2d'); g.scale(k, k); const arr = which === 'back' ? set.back : set.front;
-    arr.forEach(s => { if (s.fill) fillPoly(g, s.p, BOARD, 1); g.globalAlpha = SETA; line(g, s.p, s.col, s.w); g.globalAlpha = 1; }); g.globalAlpha = SETA; if (which === 'back') set.texts.forEach(tx => text(g, tx.s, tx.x, tx.y, tx.size, tx.col, tx.al)); g.globalAlpha = 1; return (m[id] = c);
+    arr.forEach(s => { if (s.fill) fillPoly(g, s.p, BOARD, 1); g.globalAlpha = SETA; line(g, s.p, s.col, s.w); g.globalAlpha = 1; }); g.globalAlpha = SETA; if (which === 'back') set.texts.forEach(tx => text(g, tx.s, tx.x, tx.y, tx.size, tx.col, tx.al)); g.globalAlpha = 1; return (m[id] = trimBake(c, k));
   }
+  /* Kept as only the part with drawing in it: under a moving camera the whole layer is resampled every frame, and most of a
+     place is empty board (two full frame layers were two thirds of a Story frame while the camera moved). The crop keeps
+     every pixel where it was, with a clear border, so the picture is exactly the same. */
+  function trimBake(c, k) {
+    const full = { c, x: 0, y: 0, w: WW, h: WH }, fx = WW / c.width, fy = WH / c.height, s = 4, tw = Math.ceil(c.width / s), th = Math.ceil(c.height / s);
+    try {
+      const t = mkC(tw, th), tg = t.getContext('2d', { willReadFrequently: true }); tg.drawImage(c, 0, 0, tw, th); const d = tg.getImageData(0, 0, tw, th).data;
+      let x0 = tw, y0 = th, x1 = -1, y1 = -1;
+      for (let y = 0; y < th; y++) { const r = y * tw * 4; for (let x = 0; x < tw; x++) if (d[r + x * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+      if (x1 < 0) { const e = mkC(1, 1); return { c: e, x: 0, y: 0, w: 1, h: 1, empty: true }; }
+      const X0 = Math.max(0, (x0 - 2) * s), Y0 = Math.max(0, (y0 - 2) * s), X1 = Math.min(c.width, (x1 + 3) * s), Y1 = Math.min(c.height, (y1 + 3) * s);
+      if ((X1 - X0) * (Y1 - Y0) > c.width * c.height * 0.8) return full;
+      const o = mkC(X1 - X0, Y1 - Y0); o.getContext('2d').drawImage(c, -X0, -Y0); return { c: o, x: X0 * fx, y: Y0 * fy, w: (X1 - X0) * fx, h: (Y1 - Y0) * fy };
+    } catch (e) { return full; }
+  }
+  const drawBaked = (g, B) => { if (!B.empty) g.drawImage(B.c, B.x, B.y, B.w, B.h); };
   // In the editor, bake the next pictures while the browser is idle so playback never stutters at a scene change
   const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : null; let idleBusy = false;
   function prebake(set, k) { if (!idle || idleBusy || !set) return; const m = bakeCache.get(set), b = BOARD, sa = SETA; if (m && m['back' + k.toFixed(3) + b + sa] && m['front' + k.toFixed(3) + b + sa]) return; idleBusy = true;

@@ -23,7 +23,7 @@
     // Paused in the editor the whole scene shows at once, so every change is visible straight away; playing and exports draw it in
     const rev = look && look.paused ? 1 : cl(lt / INTRO, 0, 1);
     if (sc.weather === 'night') { g.save(); const L = []; for (let i = 0; i < 40; i++) { const r = rng(i * 13)(), r2v = rng(i * 7 + 1)(); L.push(circP(r * WW, 60 + r2v * 360, 2, 2, 0, 6.3, 6)); } lines(g, L, CH.white, 3); line(g, circP(1650, 160, 50, 50, -1.2, 1.9, 16), CH.yellow, 5); g.restore(); }
-    if (rev < 1) drawSetLive(g, set, rev, 'back'); else g.drawImage(baked(set, 'back', bakeK(o, v.k)), 0, 0, WW, WH);
+    if (rev < 1) drawSetLive(g, set, rev, 'back'); else drawBaked(g, baked(set, 'back', bakeK(o, v.k)));
     // Flashing lights from pack places (an alarm, a siren on the wall)
     if (set.blink && rev >= 1) set.blink.forEach(b => { if (b.on && !(sc.acts || []).some(a => PACK.acts[a.k] && PACK.acts[a.k].trigger === b.on && lt >= a.start + a.dur * 0.45)) return; if (Math.floor(lt / b.every) % 2) return; g.save(); g.globalAlpha *= 0.85; fillPoly(g, circP(b.x, b.y, b.r, b.r), b.col); g.globalAlpha *= 0.35; fillPoly(g, circP(b.x, b.y, b.r * 2.6, b.r * 2.6), b.col); g.restore(); });
     g.save(); g.globalAlpha *= SETA; drawAnim(g, set, lt, sc); g.restore();
@@ -60,7 +60,7 @@
       Q.fx.filter(f => f.k === 'splash').forEach(f => drawSplash(g, f, wtr ? wtr.y : FL, lt)); const mp = q => [Q.x + (q[0] - Q.x) * sz, FL + (q[1] - FL) * sz]; drawn.push({ it, Q, F: sz === 1 ? F : Object.assign({}, F, { hc: mp(F.hc), top: FL + (F.top - FL) * sz, hr: F.hr * sz }) }); };
     const isBehind = it => it.st.behind && !(it.st.active && MOVES.includes(it.st.active.a.k));
     list.filter(isBehind).forEach(drawC);
-    if (rev < 1) drawSetLive(g, set, rev, 'front'); else g.drawImage(baked(set, 'front', bakeK(o, v.k)), 0, 0, WW, WH);
+    if (rev < 1) drawSetLive(g, set, rev, 'front'); else drawBaked(g, baked(set, 'front', bakeK(o, v.k)));
     list.filter(it => !isBehind(it)).forEach(drawC);
     drawWater(g, wtr, lt, true);
     // Speech, thoughts and phone calls
