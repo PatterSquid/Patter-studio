@@ -149,11 +149,12 @@ const Listen = (() => {
   const heardMem = new Map(), heardWait = new Map();
   function heardNow(id) { return heardMem.get(id) || null; }
   async function heard(id) { if (heardMem.has(id)) return heardMem.get(id); let h = null; try { h = await get('heard:' + id); } catch (e) { h = null; } if (h && h.words && !heardMem.has(id)) heardMem.set(id, h); return heardMem.get(id) || null; }
-  function keepHeard(id, words, dur) { if (!words || !words.length) return null; const h = { v: 1, words, dur: dur || 0 }; heardMem.set(id, h); put('heard:' + id, h).catch(() => { }); if (typeof LipSync !== 'undefined' && LipSync.forget) LipSync.forget(id); return h; }
+  function keepHeard(id, words, dur, text) { if (!words || !words.length) return null; const h = { v: 1, words, dur: dur || 0, text: text || '' }; heardMem.set(id, h); put('heard:' + id, h).catch(() => { }); if (typeof LipSync !== 'undefined' && LipSync.forget) LipSync.forget(id); return h; }
   /* A recording in the library (a CutMedia id) to words. */
   async function forMedia(id, o = {}) {
     if (heardWait.has(id)) return heardWait.get(id);
-    const p = (async () => { const b = await CutMedia.blobOf(id); if (!b) throw new Error('That recording is not in the library any more.'); const x = await LipSync.decode(b); const r = await transcribe(x, Object.assign({}, o, { full: true })); keepHeard(id, r.words, x.length / 16000); return r.text; })();
+    const p = (async () => { const had = await heard(id); if (had && had.text) return had.text;   // listened to already
+      const b = await CutMedia.blobOf(id); if (!b) throw new Error('That recording is not in the library any more.'); const x = await LipSync.decode(b); const r = await transcribe(x, Object.assign({}, o, { full: true })); keepHeard(id, r.words, x.length / 16000, r.text); return r.text; })();
     heardWait.set(id, p); try { return await p; } finally { heardWait.delete(id); }
   }
   function stop() { if (W) W.terminate(); W = null; jobs.forEach(Jb => Jb.rej(new Error('Stopped'))); jobs.clear(); }

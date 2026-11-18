@@ -240,7 +240,10 @@ const LipSync = (() => {
   }
 
   // frames to segments: [t0, t1, unitIndex or -1 for silence]
-  function segments(al) { const out = []; let cur = null; for (let t = 0; t < al.path.length; t++) { const q = al.st[al.path[t]], key = q.unit == null ? -1 : q.unit; if (!cur || cur[2] !== key) { cur = [t / FPS, (t + 1) / FPS, key]; out.push(cur); } else cur[1] = (t + 1) / FPS; } return out; }
+  /* A frame is 32 ms of sound starting at t / FPS, so what it shows happened around its middle: times are given from there
+     (measured against speech with known word times, starts were 20 ms early without it). */
+  const MID = WIN / 2 / SR;
+  function segments(al) { const out = []; let cur = null; for (let t = 0; t < al.path.length; t++) { const q = al.st[al.path[t]], key = q.unit == null ? -1 : q.unit; if (!cur || cur[2] !== key) { cur = [t ? t / FPS + MID : 0, (t + 1) / FPS + MID, key, t, t + 1]; out.push(cur); } else { cur[1] = (t + 1) / FPS + MID; cur[4] = t + 1; } } return out; }
 
   /* ---------- shapes from sound alone (no script) ---------- */
   function guess(ft) {
@@ -253,35 +256,69 @@ const LipSync = (() => {
     return seg;
   }
 
-  /* ---------- tidy the shapes: lead the sound a touch, drop flickers, keep lip closures ---------- */
+  /* ---------- the shapes the eye needs ----------
+     A drawn mouth swaps between a dozen pictures, and in quick speech the sounds come faster than pictures can be read (he
+     runs at 50 to 80 ms a sound; a shape wants 60 ms or more to be seen, two frames of a 30 a second video). So the list is
+     thinned by what the eye would miss, not by what happens to be shortest: lips shut (M B P) and teeth on lip (F V) are the
+     shapes everyone notices, so they are always kept and given their two frames, taken from before them (lips close before
+     the sound, and open on it); vowels are the jaw opening, kept next; the tongue sounds behind the teeth (D S L R) look
+     alike and are the first to go, their time handed to the stronger neighbour. The shapes lead the sound by a twenty fifth
+     of a second, as a mouth does and as animators time it (picture a little early reads as in sync, picture late reads as
+     dubbed: ITU-R BT.1359, and the old two frames ahead rule). */
+  const RANK = { M: 3, F: 3, 'W-Oo': 2, Aa: 2, Ee: 2, Oh: 2, Uh: 2, L: 1, S: 1, R: 1, D: 0, Neutral: 1 }, SEEN = 0.062, LEAD = 0.04;
   function tidy(list, lead) {
-    let s = list.map(([t, v]) => [Math.max(0, t - lead), v]);
-    for (let pass = 0; pass < 2; pass++) {
-      const out = [];
-      for (let i = 0; i < s.length; i++) { const len = (s[i + 1] ? s[i + 1][0] : s[i][0] + 1) - s[i][0], min = s[i][1] === 'M' ? 0.04 : s[i][1] === 'Neutral' ? 0.07 : 0.055;
-        if (len < min && out.length && i < s.length - 1) continue; if (out.length && out[out.length - 1][1] === s[i][1]) continue; out.push(s[i]); }
-      s = out;
+    let s = []; list.forEach(([t, v]) => { const L = s[s.length - 1]; if (L && L[1] === v) return; if (L && t <= L[0]) { L[1] = v; return; } s.push([t, v]); });
+    const end = i => (s[i + 1] ? s[i + 1][0] : s[i][0] + 1), len = i => end(i) - s[i][0];
+    // lips shut and teeth on lip: at least two frames, taken from the shape before (or after, when there is none to take from)
+    for (let i = 0; i < s.length; i++) { if (RANK[s[i][1]] !== 3) continue; const need = SEEN - len(i); if (need <= 0) continue;
+      if (i > 0 && len(i - 1) - need >= 0.03) s[i][0] -= need; else if (i > 0 && s[i - 1][1] === 'Neutral') s[i][0] -= Math.min(need, Math.max(0, len(i - 1) - 0.01)); else if (s[i + 1] && len(i + 1) - need >= 0.03) s[i + 1][0] += need; }
+    // then thin: the weakest of the too short shapes goes first, its time to the stronger neighbour (the one before on a tie)
+    for (let guard = 0; guard < 4000; guard++) {
+      let k = -1, kr = 9, kl = 9; for (let i = 0; i < s.length - 1; i++) { const v = s[i][1], r = RANK[v] == null ? 1 : RANK[v], min = r === 3 ? 0.03 : v === 'Neutral' ? 0.07 : r === 2 ? 0.045 : 0.055, l = len(i); if (l < min && (r < kr || (r === kr && l < kl))) { k = i; kr = r; kl = l; } }
+      if (k < 0) break;
+      const pr = k > 0 ? (RANK[s[k - 1][1]] == null ? 1 : RANK[s[k - 1][1]]) : -1, nr = RANK[s[k + 1][1]] == null ? 1 : RANK[s[k + 1][1]];
+      if (k > 0 && pr >= nr) s.splice(k, 1); else { s[k + 1][0] = s[k][0]; s.splice(k, 1); }
+      for (let i = s.length - 1; i > 0; i--) if (s[i][1] === s[i - 1][1]) s.splice(i, 1);
     }
-    return s;
+    return s.map(([t, v]) => [Math.max(0, +(t - lead).toFixed(3)), v]);
+  }
+  /* The mouth follows the sound whatever the words say: where a word has been placed but nothing can be heard he is not
+     saying it there (shut, unless it is the hold of a p or a t), and where there is clear speech with no word on it (a
+     word the script lacks, a laugh, an "eh") the shape is read from the sound itself, so he is never caught with his
+     mouth shut while he can be heard. */
+  function toSound(seg, al, ft, heardShapes) {
+    const out = [];
+    seg.forEach(([a, b, k, f0, f1]) => {
+      const n = Math.max(1, f1 - f0); let quiet = 0, loud = 0; for (let t = f0; t < f1 && t < ft.n; t++) { if (ft.en[t] < 0.07) quiet++; if (ft.en[t] > 0.34) loud++; }
+      if (k >= 0) { const U = al.units[k]; if (quiet === n && n >= 7 && U.k !== 'B' && U.k !== 'T') { out.push([a, 'Neutral']); return; } out.push([a, null, k, f0, f1]); return; }
+      if (loud >= 7 && heardShapes) { let on = false; for (let t = f0; t < f1 && t < ft.n; t++) { const sp = ft.en[t] > 0.3; if (sp) { const v = heardShapes[t]; if (!on || out[out.length - 1][1] !== v) out.push([t / FPS + MID, v]); on = true; } else if (on || t === f0) { out.push([t === f0 ? a : t / FPS + MID, 'Neutral']); on = false; } } return; }
+      out.push([a, 'Neutral']);
+    });
+    return out;
   }
 
   function analyse(x, script, heard) { const r = analyse0(x, script, heard); if (typeof Prosody !== 'undefined') Prosody.annotate(r, Prosody.pitch(x)); return r; }
   function analyse0(x, script, heard) {
     const ft = features(x), dur = x.length / SR, P = parse(script), env = ft.en, lev = ft.lev;
-    if (!P.words.length) return { visemes: tidy(guess(ft), 0.03), words: [], tags: [], env, lev, fps: FPS, dur, script: false };
+    if (!P.words.length) return { visemes: tidy(guess(ft).map(([t, v]) => [t ? t + MID : 0, v]), LEAD), words: [], tags: [], env, lev, fps: FPS, dur, script: false };
     const pin = pinWords(P, heard, ft.n, ft); let al = pin ? align(ft, P.words, pin.win) : null; const pinned = al ? pin.hit : 0; if (!al) al = align(ft, P.words);
     if (OWN_W > 0 && P.words.length >= 12) for (let pass = 0; pass < 2; pass++) { const own = learn(ft, al); if (!own) break; const a2 = align(ft, P.words, pinned ? pin.win : null, own); if (!a2) break; al = a2; }
     const seg = segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
-    seg.forEach(([a, b, k]) => {
-      if (k < 0) { vis.push([a, 'Neutral']); return; }
+    let bySound = null; const soundShape = () => { if (!bySound) { bySound = new Array(ft.n).fill('Neutral'); const g = guess(ft); g.forEach(([t, v], i) => { const f0 = Math.round(t * FPS), f1 = g[i + 1] ? Math.round(g[i + 1][0] * FPS) : ft.n; for (let f = f0; f < f1; f++) bySound[f] = v === 'Neutral' ? 'Uh' : v; }); } return bySound; };
+    const fit = toSound(seg, al, ft, seg.some(q => q[2] < 0 && q[4] - q[3] >= 7) ? soundShape() : null);
+    fit.forEach(q => { if (q[1] != null) vis.push([q[0], q[1]]); });
+    seg.forEach(([a, b, k]) => { if (k < 0) return; const U = al.units[k], w = wt[U.word]; w[0] = Math.min(w[0], a); w[1] = Math.max(w[1], b); });
+    fit.forEach(([a, vv, k, f0, f1]) => {
+      if (vv != null) return; const b = f1 / FPS + MID;
       const U = al.units[k]; let v = U.v;
-      if (U.k === V) { let m = 0, c = 0; for (let t = Math.floor(a * FPS); t < Math.min(ft.n, Math.ceil(b * FPS)); t++) { m += ft.en[t]; c++; } m /= Math.max(1, c); if (v === 'Aa' && m < 0.38) v = 'Uh'; if (m < 0.18 && v !== 'Oh' && v !== 'W-Oo') v = 'D'; }
-      vis.push([a, v]); const w = wt[U.word]; w[0] = Math.min(w[0], a); w[1] = Math.max(w[1], b);
+      if (U.k === V) { let m = 0, c = 0; for (let t = f0; t < Math.min(ft.n, f1); t++) { m += ft.en[t]; c++; } m /= Math.max(1, c); if (v === 'Aa' && m < 0.38) v = 'Uh'; if (m < 0.18 && v !== 'Oh' && v !== 'W-Oo') v = 'D'; }
+      vis.push([a, v]);
     });
+    vis.sort((p, q) => p[0] - q[0]);
     const words = P.words.map((W, i) => [wt[i][0], wt[i][1], W.text || W.w, i, W.w]).filter(w => isFinite(w[0]));
     const at = i => { const w = wt[i]; if (w && isFinite(w[0])) return w[0]; const p = wt[i - 1]; return p && isFinite(p[1]) ? p[1] : 0; };
     const tags = P.tags.map(g => ({ tag: g.tag, word: g.word, t: g.word >= P.words.length ? (wt.length ? Math.max(0, ...wt.map(w => isFinite(w[1]) ? w[1] : 0)) : dur) : at(g.word) }));
-    return { visemes: tidy(vis, 0.035), words, tags, env, lev, fps: FPS, dur, script: true, pinned };
+    return { visemes: tidy(vis, LEAD), words, tags, env, lev, fps: FPS, dur, script: true, pinned };
   }
   // No recording yet: time the script at a steady talking pace, so he can be seen saying it (the timing is a guess)
   function fromText(script, rate) {
@@ -310,7 +347,7 @@ const LipSync = (() => {
   async function forMedia(id, script, getBlob, engine) {
     const k = key(id, script, engine); if (cache.has(k)) return cache.get(k); if (pending.has(k)) return pending.get(k);
     const p = (async () => { const b = await getBlob(id); if (!b) return null; let heard = null; try { heard = typeof Listen !== 'undefined' && Listen.heard ? await Listen.heard(id) : null; } catch (e) { heard = null; } const x = await decode(b), r = analyse(x, script, heard);
-      if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.02); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
+      if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.03); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
   return { _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };

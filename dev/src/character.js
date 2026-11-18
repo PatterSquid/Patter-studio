@@ -406,7 +406,11 @@ const Character = (() => {
     // the head: a slow drift, a tilt that changes with each phrase, nods on the accents, riding on the pitch of his voice, forward when loud
     const s = p.seeds; let hx = wave(t, s[0], 0.55) * 0.010 * hh * (0.6 + 0.4 * E), hy = wave(t, s[1], 0.7) * 0.006 * hh, hr = wave(t, s[2], 0.45) * 0.008 * (0.6 + 0.4 * E);
     ix.phr(t).forEach(ph => { const w = easeWin(t, ph.a - 0.25, ph.b + 0.2, 0.45, 0.6); if (w > 0) { hr += ph.tilt * w * G; hx += ph.x * hh * w * G * 0.5; hy += ph.y * hh * w; } });
-    for (const n of ix.nods(t)) { const u = (t - n.t + 0.14) / 0.34; if (u <= 0 || u >= 1) continue; const k = Math.sin(Math.PI * u) * n.a * G; hy += k * 0.03 * hh; hr += k * 0.012 * n.s; }   // down on the stressed syllable
+    /* The lowest point of a nod belongs on the beat of the stressed syllable, which is heard at the start of its vowel, a
+       little before the loudest moment the accent is timed from; gestures that arrive a touch early read as on the beat, late
+       ones as lagging (Loehr 2004; Leonard and Cummins 2011). Measured on his recording the finished nods bottomed out 30 ms
+       after the loudest moment (up to 90): now 20 ms before it. tests/char_timing.js measures it. */
+    for (const n of ix.nods(t)) { const u = (t - n.t + 0.19) / 0.34; if (u <= 0 || u >= 1) continue; const k = Math.sin(Math.PI * u) * n.a * G; hy += k * 0.03 * hh; hr += k * 0.012 * n.s; }   // down on the stressed syllable
     hy -= p.f0n(t) * 0.011 * hh * Math.min(1.3, G) * sm(L / 0.25);
     for (const q of ix.shakes(t)) { const u = (t - q.a) / (q.b - q.a); if (u <= 0 || u >= 1) continue; const k = Math.sin(Math.PI * q.n * u) * Math.pow(Math.sin(Math.PI * u), 0.6) * q.amp * q.s * Math.min(1.4, G); hx += k * 0.02 * hh; hr += k * 0.014; }
     for (const q of ix.tilts(t)) { const w = easeWin(t, q.a, q.b, 0.3, 0.4); if (w > 0) { hr += q.r * w * Math.min(1.4, G); hy += q.y * hh * w; } }
@@ -454,7 +458,7 @@ const Character = (() => {
         if (Gs.wob) ar += Math.sin(us * 9) * Gs.wob * easeWin(t, at - 0.15, at + 0.9, 0.15, 0.4);
         if (Gs.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
         if (Gs.drift) { ax += Math.sin(t * 0.83 + 2) * 0.012; ay += Math.sin(t * 1.7) * 0.006; ar += Math.sin(t * 1.1 + 1) * 0.035; }   // a hand resting while he talks is never quite still
-        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.13) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a * (Gs.bt || 1); ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent
+        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.18) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a * (Gs.bt || 1); ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent (its low point just ahead of the loudest moment, like the nods)
         want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: (ay + antic * (1 - w)) * hh2, rot: ar * mir, art: Gs.art, th: Gs.late || 0.3, fy: Gs.fy || 0, fxp: Gs.fx || 0, sc: Gs.sc || 1, plain: Gs.plain || 0, f: [fx * hh2 * mir * w, fy * hh2 * w, fr * mir * w], an: antic * hh2 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd], rest = { dx: -pose.sit[0], dy: 0, rot: 0, fy: 0, sc: 1, plain: 0, hide: false, art: '' }; if (!L2.length) { pose.arms[sd] = rest; return; } let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null, an = 0; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
@@ -543,11 +547,21 @@ const Character = (() => {
 
   /* ---------- sound in this tab's preview ---------- */
   let audio = null, audioId = null;
+  let drift = 0; const seen = [];
   function tickSound(t, playing, cfg) {
     if (!cfg || !cfg.voice || typeof CutMedia === 'undefined') { stopSound(); return; }
     if (audioId !== cfg.voice) { stopSound(); audioId = cfg.voice; audio = new Audio(); CutMedia.urlOf(cfg.voice).then(u => { if (audioId === cfg.voice && u && audio) audio.src = u; }); }
     if (!audio || !audio.src) return; audio.volume = cl(Math.pow(10, (+cfg.vol || 0) / 20), 0, 1);
-    if (playing) { if (t >= audio.duration - 0.02) { if (!audio.paused) audio.pause(); return; } if (audio.paused) { try { audio.currentTime = t; } catch (e) { } audio.play().catch(() => { }); } else if (Math.abs(audio.currentTime - t) > 0.12) { try { audio.currentTime = t; } catch (e) { } } }
+    /* The voice is held to the picture's clock: a small drift is taken up by playing a shade faster or slower (never heard,
+       the pitch is kept), a big one by jumping. Before, anything inside an eighth of a second was left alone, so the mouth
+       could run that far ahead of or behind the sound for a whole preview. */
+    if (playing) { if (t >= audio.duration - 0.02) { if (!audio.paused) audio.pause(); return; }
+      if (audio.paused) { try { audio.currentTime = t + 0.02; audio.playbackRate = 1; } catch (e) { } audio.play().catch(() => { }); drift = 0; seen.length = 0; }
+      else { const raw = audio.currentTime - t; let r = 1;
+        // the element's clock moves in steps (a sound card buffer at a time), so a reading is right just after a step and behind until the next: the freshest of the last quarter second is the true place
+        seen.push(raw); if (seen.length > 15) seen.shift(); drift = Math.max(...seen);
+        if (Math.abs(raw) > 0.25) { try { audio.currentTime = t + 0.03; } catch (e) { } seen.length = 0; drift = 0; } else if (Math.abs(drift) > 0.008) r = 1 - cl(drift * 1.2, -0.08, 0.08);
+        if (Math.abs(audio.playbackRate - r) > 1e-3) { try { audio.playbackRate = r; } catch (e) { } } } }
     else if (!audio.paused) audio.pause();
   }
   function stopSound() { if (audio) { try { audio.pause(); } catch (e) { } } audio = null; audioId = null; }
@@ -652,5 +666,5 @@ const Character = (() => {
   const soundId = cfg => cfg && cfg.voice || null;
   // Just the puppet at a moment, in its own pixels (no background, no framing): for the Studio to place and light
   function drawRig(g, cfg, t) { const rig = cfg && cfg.puppet ? Puppet.get(cfg.puppet) : null; if (!rig) return null; const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d); Puppet.draw(g, rig, poseAt(cfg, A, rig, p, Math.max(0, t))); return rig; }
-  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, _GEST: GEST, fromPatterScript, get ticks() { return tick + Puppet.tick; }, exportWithSound: null };
+  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, _GEST: GEST, fromPatterScript, get ticks() { return tick + Puppet.tick; }, get _drift() { return audio && !audio.paused ? drift : null; }, exportWithSound: null };
 })();
