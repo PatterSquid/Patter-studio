@@ -81,7 +81,8 @@ git add -A && git commit && git push origin main
   was cleared and handed to the screen every frame), and clocks rewritten every frame are `contain`ed so the page is not
   measured again for them. The Speed check reports pictures really shown and the beat (`player.pictures`, `player.beat`).
 * Checks added in the polish pass: `tests/popdet.js` (runjs: every tab's example frame by frame at 60 a second, lists single
-  frames that change far more than their neighbours: none in November 2026), `tests/ui_metrics.py` (where the browser's
+  frames that change far more than their neighbours; `{"mods":["story"]}` picks tabs. The Story example lists six and B roll two on
+  every build: they are the cuts between scenes, not faults), `tests/ui_metrics.py` (where the browser's
   time goes: start up, each tab idle and playing, a heavy Video timeline scrubbed, dragged, zoomed), `tests/pacing.py`.
 * **Paint cost** (second pass, November 2026): script time is tiny everywhere; a frame's time is painting, and a canvas only
   paints when it is read, so profiles put it all on `getImageData`. `tests/opcost.py <tab> [moment 0..1]` paints every call
@@ -94,6 +95,29 @@ git add -A && git commit && git push origin main
   in the preview draw from halved copies near their size on screen (`cardMip`; exports unchanged). Left as they are on
   purpose: the zooming background (unsmoothed it shimmers), Story's chalk speckle (bold, would shimmer), the Studio's
   plant strips and rain beads (the life of the room).
+* **How it answers the hand** (third pass, November 2026: "runs like a proper software"). `tests/tour.py out.json [tabs]`
+  goes round every tab with real clicks, typing, a slider drag, a scrub and a short play and records long tasks (over
+  50 ms), the slowest input event, frame gaps and where the browser's time went; `tests/prof_step.py
+  <boot|open:TAB|play:TAB|slider:TAB|type:TAB|idle:TAB>` is a processor profile of one such step, with the browser's own
+  calls charged to the function that made them; `tests/idle.py` shows what each tab does untouched (all under 2 in a
+  hundred busy, five checks a second). What was found and fixed:
+  * Story and B roll: every step of a zoom or Whole board slider baked the scenery at that size (and `prebake` did the same
+    in idle time): a fifth of a second a step. Now, paused in the editor, a size is baked only once it has stayed asked for (`bakedSoon`, 140 ms;
+    `prebake` 300 ms; the scenery is drawn live meanwhile; playing and exports always bake). Baked sizes were never let go:
+    `keepBake` keeps the most recently used up to `BAKE_BUDGET` pixels. The chalk speckle tile is made once a colour
+    (`patTile`; every new drawing surface made its own). Panel pictures are reused (`picPool`).
+  * The Smooth preview started its helpers at 12 ms a frame, for clips the player now shows live at an even 30 or 60: two
+    helpers each loading the whole app after every change, for a smaller, softer picture. It starts at 24 ms, or when the
+    player has had to drop below 30 (`player.beat >= 3`). That was also the 340 ms stall on pressing Play in a video of
+    Patter clips.
+  * Chart labels: `numFmt` keeps its number formats (toLocaleString built one a label a frame). Studio `cloudTex` sums its
+    noise a row at a time (70 ms to 17 the first time his studio is drawn; same numbers). Thumbnail text is measured once a
+    wording, font and size (`laid`).
+  * Before and after here: start up long tasks 614 to about 300 ms, opening Story 330 to about 90, Story slider drag 622 ms
+    of stalls to none, B roll 302 to none, Play in the Video tab 340 to none. Frames without the preview flag are pixel
+    for pixel what was published (`PREVIEW=0 tests/samepix.py`). Memory steady over `tests/leak.py`.
+  * Left alone: the map tabs' first draw (the graphics card reading the globe back, slow only in this software browser),
+    the first frame of each tab (one time drawing of its background and textures).
 * The cloud workspace can be wiped between sessions (it was, mid polish pass): everything in `dev/tmp_*` and the scratch
   folder goes, the repo comes back as a fresh clone of `main`. So push work in progress to a branch as you go, and expect
   to remake fixtures: `tmp_cut/`, `tmp_dogclip.webm`, `tmp_noisy.wav`, voices (ffmpeg, flite), `tmp_room.png` and

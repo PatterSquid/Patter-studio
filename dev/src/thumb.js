@@ -129,8 +129,16 @@ const Thumb = (() => {
   const hexRgb = h => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim()); const n = m ? parseInt(m[1], 16) : 0xffffff; return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
   const fontStr = (L, size) => (L.italic ? 'italic ' : '') + (L.weight || weightOf(L.font)) + ' ' + Math.max(1, size) + 'px "' + (L.font || 'Oswald') + '", "Arial Black", Impact, sans-serif';
   // Lines of a text layer with their sizes and widths; fit stretches each line across the box width
+  /* The lines of a piece of text are measured once for each wording, font and size and kept (and again when its font arrives):
+     every redraw measured every line three times, and dragging anything redraws on every move. */
+  const laid = new Map();
   function textLayout(g, L) {
     want(L);
+    let lk = null; try { lk = [L.text, L.upper ? 1 : 0, L.ls || 0, L.size, L.fit ? 1 : 0, L.w, L.box && L.box.on ? +L.box.pad || 0 : -1, L.lh, fontStr(L, 100), typeof E !== 'undefined' ? E.fontVersion || 0 : 0, typeof document !== 'undefined' && document.fonts && document.fonts.check ? document.fonts.check(fontStr(L, 40)) : 0].join('\u0001'); } catch (e) { lk = null; }
+    if (lk != null) { const hit = laid.get(lk); if (hit) return hit; }
+    const res = textLayout0(g, L); if (lk != null) { if (laid.size > 400) laid.clear(); laid.set(lk, res); } return res;
+  }
+  function textLayout0(g, L) {
     const lines = String(L.text == null ? '' : L.text).split('\n').map(s => L.upper ? s.toUpperCase() : s), out = []; let y = 0;
     g.letterSpacing = (L.ls || 0) + 'px';
     for (const s of lines) { let size = +L.size || 100; g.font = fontStr(L, size); let w = g.measureText(s || ' ').width;

@@ -103,12 +103,12 @@
     while (bakePx > BAKE_BUDGET && bakeList.length > 2) { let j = -1, u = Infinity; for (let i = 0; i < bakeList.length; i++) if (bakeList[i].B !== B && bakeList[i].B.used < u) { u = bakeList[i].B.used; j = i; } if (j < 0) break; const o = bakeList.splice(j, 1)[0]; bakePx -= o.B.px; if (o.m[o.id] === o.B) delete o.m[o.id]; try { o.B.c.width = o.B.c.height = 1; } catch (e) { } }
     return B;
   }
-  /* In the preview a size is only baked once it has been asked for a moment running; until then the scenery is drawn as it
-     is. Dragging a zoom or the Whole board slider asked for a new size on every step, and each one was drawn into its own
-     picture, measured and kept: a fifth of a second a step. Exports always bake. */
+  /* Paused in the editor, a size is only baked once it has been asked for a moment running; until then the scenery is drawn
+     as it is. Dragging a zoom or the Whole board slider asked for a new size on every step, and each one was drawn into its
+     own picture, measured and kept: a fifth of a second a step. Playing and exports always bake. */
   function bakedSoon(set, which, k, look) {
     const m = bakeCache.get(set), id = which + k.toFixed(3) + BOARD + SETA + (EDGE ? 'e' : '');
-    if ((m && m[id]) || !(look && look.preview) || typeof performance === 'undefined') return baked(set, which, k);
+    if ((m && m[id]) || !(look && look.preview && look.paused) || typeof performance === 'undefined') return baked(set, which, k);   // only while paused in the editor: playing through a zoom bakes each size at once, as before (drawn live for a moment then baked showed as a faint flicker)
     const w = set._bk || (set._bk = {}), now = performance.now(); if (w[which] !== id) { w[which] = id; w[which + 't'] = now; return null; }
     return now - w[which + 't'] < 140 ? null : baked(set, which, k);
   }

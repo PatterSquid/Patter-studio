@@ -199,7 +199,7 @@
          second, so they are only a gain when the live drawing cannot hold 30 a second itself (the player gives slower tabs an even
          beat now). At 12 ms they started for clips that play at 60 or an even 30 live: two helpers each loading the whole app and
          drawing the clip after every change, for a softer picture. */
-      if (player.drawMs < 24) { clear(); return; }
+      if (player.drawMs < 24 && !(player.beat >= 3)) { clear(); return; }   // (a tab the player has had to slow below 30 counts as heavy too)
       // Clips with his puppet hand every helper a big copy of it: do that only once he presses Play, not after every change
       if (!playing) { const m0 = mod(); if (m0.mainThread && m0.mainThread(cfg())) { clear(); waitPlay = true; return; } }
       const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;

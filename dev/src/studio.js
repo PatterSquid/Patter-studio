@@ -151,9 +151,14 @@ const Studio = (() => {
   // Soft cloud shapes that tile side to side, made once
   function cloudTex(seed, dark) { const k = 'cl' + seed + dark; if (SPR[k]) return SPR[k]; const W = 512, Hh = 192, c = mk(W, Hh), g = c.getContext('2d'), id = g.createImageData(W, Hh), d = id.data, r = rng(seed);
     const lat = []; for (let o = 0; o < 5; o++) { const nx = 4 << o, ny = Math.max(2, Math.round((4 << o) * Hh / W * 1.6)), L2 = []; for (let i = 0; i < nx * ny; i++) L2.push(r()); lat.push({ nx, ny, L2 }); }
-    const vn = (o, x, y) => { const { nx, ny, L2 } = lat[o], fx = x * nx, fy = y * ny, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, at = (i, j) => L2[((j % ny + ny) % ny) * nx + ((i % nx + nx) % nx)], sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
-      return lerp(lerp(at(ix, iy), at(ix + 1, iy), sx), lerp(at(ix, iy + 1), at(ix + 1, iy + 1), sx), sy); };
-    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let n = 0, a = 0.55, tot = 0; for (let o = 0; o < 5; o++) { n += vn(o, x / W, y / Hh) * a; tot += a; a *= 0.5; } n /= tot;
+    // the five layers of smooth noise are summed a row at a time (the same sums as before, without half a million small function calls: it was 70 ms the first time his studio was drawn)
+    const acc = new Float64Array(W * Hh), IX = new Int32Array(W), IX1 = new Int32Array(W), SX = new Float64Array(W); let a = 0.55, tot = 0;
+    for (let o = 0; o < 5; o++) { const { nx, ny, L2 } = lat[o];
+      for (let x = 0; x < W; x++) { const fx = x / W * nx, ix = Math.floor(fx), tx = fx - ix; IX[x] = (ix % nx + nx) % nx; IX1[x] = ((ix + 1) % nx + nx) % nx; SX[x] = tx * tx * (3 - 2 * tx); }
+      for (let y = 0; y < Hh; y++) { const fy = y / Hh * ny, iy = Math.floor(fy), ty = fy - iy, sy = ty * ty * (3 - 2 * ty), r0 = ((iy % ny + ny) % ny) * nx, r1 = (((iy + 1) % ny + ny) % ny) * nx, row = y * W;
+        for (let x = 0; x < W; x++) { const sx = SX[x]; acc[row + x] += lerp(lerp(L2[r0 + IX[x]], L2[r0 + IX1[x]], sx), lerp(L2[r1 + IX[x]], L2[r1 + IX1[x]], sx), sy) * a; } }
+      tot += a; a *= 0.5; }
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { const n = acc[y * W + x] / tot;
       const m = sm((n - (dark ? 0.5 : 0.56)) / 0.22), q = (y * W + x) * 4; if (dark) { d[q] = 34; d[q + 1] = 40; d[q + 2] = 62; } else { d[q] = 176; d[q + 1] = 186; d[q + 2] = 212; } d[q + 3] = Math.round(255 * m * (dark ? 0.9 : 0.75)); }
     g.putImageData(id, 0, 0); return (SPR[k] = c); }
   // Clouds drifting slowly across the sky; each layer moves a whole tile per loop so the loop is seamless

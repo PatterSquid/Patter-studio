@@ -45,6 +45,7 @@ async def main():
     if kind == 'open':
         if tab == 'video': await pg.click('#tabs button[data-group=gfx]'); await pg.wait_for_timeout(1200); await cdp.send('Profiler.stop'); await cdp.send('Profiler.start')
         await openTab(); await pg.wait_for_timeout(900)
+    elif kind == 'idle': await pg.mouse.move(700, 300); await pg.wait_for_timeout(4000); await cdp.send('Profiler.stop'); await cdp.send('Profiler.start'); await pg.wait_for_timeout(5000)
     elif kind == 'play': await pg.evaluate("()=>document.querySelector('#playBtn').click()"); await pg.wait_for_timeout(1500)
     elif kind in ('slider', 'type'):
         sel = 'aside input[type=range]' if kind == 'slider' else 'aside input[type=text], aside textarea'
