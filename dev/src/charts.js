@@ -1,5 +1,8 @@
 /* Charts module: bar and line charts in the cartoon style. */
 const Charts = (() => {
+  /* Number formats are made once and kept: toLocaleString builds a new one on every call, and every label on every frame asked
+     for one (a sixth of a chart frame's script time). The text is the same. */
+  const NF = {}, numFmt = (lo, hi) => { hi = Math.max(lo, Math.min(20, hi)); const k = lo + '|' + hi; return NF[k] || (NF[k] = new Intl.NumberFormat('en-GB', { minimumFractionDigits: lo, maximumFractionDigits: hi })); };
   const { cl, lerp, ease, spring, rng, fd, fl } = E;
   const SPEED = { slow: 6.6, normal: 4.8, fast: 3.2 };
   const END_DUR = { none: 0, explode: 2.0, fly: 1.8 };
@@ -31,8 +34,8 @@ const Charts = (() => {
     const raw = (hi - lo) / (tall ? 5 : 4), mag = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw * 0.999);
     lo = Math.floor(lo / st + 1e-9) * st; hi = Math.ceil(hi / st - 1e-9) * st;
     const ticks = []; for (let v = lo; v <= hi + st * 1e-6; v += st) ticks.push(+v.toFixed(6));
-    const fmt = v => cfg.prefix + Number(v).toLocaleString('en-GB', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + cfg.suffix;
-    const tfmt = v => cfg.prefix + Number(v).toLocaleString('en-GB', { maximumFractionDigits: Math.max(dec, st < 1 ? 1 : 0) }) + cfg.suffix;
+    const fmt = v => cfg.prefix + numFmt(dec, dec).format(Number(v)) + cfg.suffix;
+    const tfmt = v => cfg.prefix + numFmt(0, Math.max(dec, st < 1 ? 1 : 0)).format(Number(v)) + cfg.suffix;
 
     // Layout
     const titleY = H * (tall ? 0.075 : 0.085), P = { x0: W * (tall ? 0.06 : 0.05), x1: W * (tall ? 0.94 : 0.95), y0: H * (tall ? 0.13 : 0.175), y1: H * (tall ? 0.88 : 0.93) };

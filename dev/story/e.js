@@ -95,10 +95,27 @@
   const bakeCache = new Map();
   // Zoomed scenes are drawn at a higher resolution so the chalk stays crisp
   const bakeK = (o, k) => { const zm = o && o.sc.zoom; return k * (zm && zm.z > 1.001 ? Math.min(2.5, Math.round(zm.z * 4) / 4) : 1); };
+  /* Baked scenery is kept by how recently it was used, up to a budget of pixels: every size ever shown used to stay for the
+     whole session (each step of a zoom slider, each window size, each export size: several megabytes a time, never let go). */
+  let bakeUse = 0, bakePx = 0; const bakeList = [], BAKE_BUDGET = 3.6e7;
+  function keepBake(m, id, B) {
+    B.used = ++bakeUse; B.px = B.c.width * B.c.height; bakePx += B.px; bakeList.push({ m, id, B });
+    while (bakePx > BAKE_BUDGET && bakeList.length > 2) { let j = -1, u = Infinity; for (let i = 0; i < bakeList.length; i++) if (bakeList[i].B !== B && bakeList[i].B.used < u) { u = bakeList[i].B.used; j = i; } if (j < 0) break; const o = bakeList.splice(j, 1)[0]; bakePx -= o.B.px; if (o.m[o.id] === o.B) delete o.m[o.id]; try { o.B.c.width = o.B.c.height = 1; } catch (e) { } }
+    return B;
+  }
+  /* In the preview a size is only baked once it has been asked for a moment running; until then the scenery is drawn as it
+     is. Dragging a zoom or the Whole board slider asked for a new size on every step, and each one was drawn into its own
+     picture, measured and kept: a fifth of a second a step. Exports always bake. */
+  function bakedSoon(set, which, k, look) {
+    const m = bakeCache.get(set), id = which + k.toFixed(3) + BOARD + SETA + (EDGE ? 'e' : '');
+    if ((m && m[id]) || !(look && look.preview) || typeof performance === 'undefined') return baked(set, which, k);
+    const w = set._bk || (set._bk = {}), now = performance.now(); if (w[which] !== id) { w[which] = id; w[which + 't'] = now; return null; }
+    return now - w[which + 't'] < 140 ? null : baked(set, which, k);
+  }
   function baked(set, which, k) {
-    const key = set; let m = bakeCache.get(key); if (!m) { m = {}; bakeCache.set(key, m); } const id = which + k.toFixed(3) + BOARD + SETA + (EDGE ? 'e' : ''); if (m[id]) return m[id];
+    const key = set; let m = bakeCache.get(key); if (!m) { m = {}; bakeCache.set(key, m); } const id = which + k.toFixed(3) + BOARD + SETA + (EDGE ? 'e' : ''); if (m[id]) { m[id].used = ++bakeUse; return m[id]; }
     const c = mkC(WW * k, WH * k), g = c.getContext('2d'); g.scale(k, k); const arr = which === 'back' ? set.back : set.front;
-    arr.forEach(s => { if (s.fill) fillPoly(g, s.p, BOARD, 1); g.globalAlpha = SETA; line(g, s.p, s.col, s.w); g.globalAlpha = 1; }); g.globalAlpha = SETA; if (which === 'back') set.texts.forEach(tx => text(g, tx.s, tx.x, tx.y, tx.size, tx.col, tx.al)); g.globalAlpha = 1; return (m[id] = trimBake(c, k));
+    arr.forEach(s => { if (s.fill) fillPoly(g, s.p, BOARD, 1); g.globalAlpha = SETA; line(g, s.p, s.col, s.w); g.globalAlpha = 1; }); g.globalAlpha = SETA; if (which === 'back') set.texts.forEach(tx => text(g, tx.s, tx.x, tx.y, tx.size, tx.col, tx.al)); g.globalAlpha = 1; return (m[id] = keepBake(m, id, trimBake(c, k)));
   }
   /* Kept as only the part with drawing in it: under a moving camera the whole layer is resampled every frame, and most of a
      place is empty board (two full frame layers were two thirds of a Story frame while the camera moved). The crop keeps
@@ -118,7 +135,9 @@
   const drawBaked = (g, B) => { if (!B.empty) g.drawImage(B.c, B.x, B.y, B.w, B.h); };
   // In the editor, bake the next pictures while the browser is idle so playback never stutters at a scene change
   const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : null; let idleBusy = false;
-  function prebake(set, k) { if (!idle || idleBusy || !set) return; const m = bakeCache.get(set), b = BOARD, sa = SETA; if (m && m['back' + k.toFixed(3) + b + sa] && m['front' + k.toFixed(3) + b + sa]) return; idleBusy = true;
+  function prebake(set, k) { if (!idle || idleBusy || !set) return; const m = bakeCache.get(set), b = BOARD, sa = SETA; if (m && m['back' + k.toFixed(3) + b + sa] && m['front' + k.toFixed(3) + b + sa]) return;
+    { const now = typeof performance !== 'undefined' ? performance.now() : 0, id = k.toFixed(3) + b + sa; if (set._pb !== id) { set._pb = id; set._pbt = now; return; } if (now - set._pbt < 300) return; }   // only a size that has stayed asked for (not every step of a slider being dragged)
+    idleBusy = true;
     idle(() => { const keep = BOARD, ks = SETA; BOARD = b; SETA = sa; try { baked(set, 'back', k); baked(set, 'front', k); } finally { BOARD = keep; SETA = ks; idleBusy = false; } }, { timeout: 400 }); }
   function drawSetLive(g, set, rev, which) {
     const all = set.back.concat(set.front), tot = set._tot || (set._tot = all.reduce((a, s) => a + plen(s.p), 0)); let used = tot * rev;

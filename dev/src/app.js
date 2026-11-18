@@ -195,8 +195,11 @@
     let waitPlay = false;
     async function start(playing) {
       waitPlay = false; if (held || !on() || state.look.transparent || typeof Render === 'undefined' || !Render.buildPreview || cutLive()) return;
-      // Only when this clip is too heavy to play smoothly as it is drawn: otherwise the helpers would keep the computer busy for nothing
-      if (player.drawMs < 12) { clear(); return; }
+      /* Only when this clip is too heavy to play as it is drawn. The helpers' pictures are smaller than the live ones and come 30 a
+         second, so they are only a gain when the live drawing cannot hold 30 a second itself (the player gives slower tabs an even
+         beat now). At 12 ms they started for clips that play at 60 or an even 30 live: two helpers each loading the whole app and
+         drawing the clip after every change, for a softer picture. */
+      if (player.drawMs < 24) { clear(); return; }
       // Clips with his puppet hand every helper a big copy of it: do that only once he presses Play, not after every change
       if (!playing) { const m0 = mod(); if (m0.mainThread && m0.mainThread(cfg())) { clear(); waitPlay = true; return; } }
       const k = keyNow(); if (k === key && (have >= total && total)) return; clear(); key = k; ctrl = new AbortController(); const c = ctrl;

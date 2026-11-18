@@ -15,11 +15,14 @@ const Story = (() => {
   /* ---------- Chalk kit ---------- */
   // A dusty speckle pattern per colour, kept per drawing surface (patterns belong to the context that made them)
   const patStore = new WeakMap();
+  const patTile = {};
   function pat(g, col) {
     let m = patStore.get(g); if (!m) { m = {}; patStore.set(g, m); } if (m[col]) return m[col];
-    const c = mkC(128, 128), x = c.getContext('2d'), im = x.createImageData(128, 128), r = rng(11), n = parseInt(col.slice(1), 16);
-    for (let i = 0; i < im.data.length; i += 4) { im.data[i] = n >> 16; im.data[i + 1] = (n >> 8) & 255; im.data[i + 2] = n & 255; im.data[i + 3] = r() < 0.8 ? 170 + r() * 85 : r() * 70; }
-    x.putImageData(im, 0, 0); return (m[col] = g.createPattern(c, 'repeat'));
+    // the speckled tile is made once for each colour (every new drawing surface used to make its own: 30 thousand random numbers a colour, on every scene baked)
+    let c = patTile[col]; if (!c) { c = patTile[col] = mkC(128, 128); const x = c.getContext('2d'), im = x.createImageData(128, 128), r = rng(11), n = parseInt(col.slice(1), 16);
+      for (let i = 0; i < im.data.length; i += 4) { im.data[i] = n >> 16; im.data[i + 1] = (n >> 8) & 255; im.data[i + 2] = n & 255; im.data[i + 3] = r() < 0.8 ? 170 + r() * 85 : r() * 70; }
+      x.putImageData(im, 0, 0); }
+    return (m[col] = g.createPattern(c, 'repeat'));
   }
   const plen = p => { let s = 0; for (let i = 1; i < p.length; i++) s += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return s; };
   function partial(p, f) { if (f >= 1) return p; if (f <= 0 || p.length < 2) return []; const goal = plen(p) * f, o = [p[0]]; let s = 0; for (let i = 1; i < p.length; i++) { const d = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); if (s + d >= goal) { const q = (goal - s) / (d || 1); o.push([lerp(p[i - 1][0], p[i][0], q), lerp(p[i - 1][1], p[i][1], q)]); return o; } s += d; o.push(p[i]); } return o; }
