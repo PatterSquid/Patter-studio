@@ -404,7 +404,47 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   coat). Arms: the sleeve swings from the shoulder and stretches to the wrist, the hand turns at the cuff (`pose.arms`).
 * `LipSync`: script to visemes by spelling rules plus a word list (Glaswegian too), audio features with the background
   noise taken off, forced alignment (Viterbi, each sound between a least and most length, banded); word times, tags and
-  a level curve. `fromText` times a script with no recording. About 50 ms average word error on flite tests.
+  a level curve. `fromText` times a script with no recording. See "Every word pinned" below for how it is kept in step.
+* **Every word pinned to where it is heard** (November 2026; he asked for the mouth and the movements "lined up perfectly"
+  to imported audio). Measured on his own minute of talking (`dev/tmp_me.wav`, gitignored, his recording of 12 November)
+  against a PocketSphinx forced alignment (pip `pocketsphinx`, a measuring stick only, never in the app): the old search put
+  two words in five more than 100 ms out and whole words in the wrong phrase (median 165 ms, worst 4 s), because loud,
+  hissy and voiced cannot tell one word from another in fast natural speech. Now:
+  * `Listen` reads when each word was said from the decoder's own cross attention (`withAttention` adds three inner
+    results of the same `dec.onnx` to its outputs as it loads, by appending to the protobuf: no new download; `HEADS` are
+    Whisper's timing heads for base.en; `wordTimes` is OpenAI's timing.py: normalise, median 7, mean, DTW). The table
+    `{ words: [[text, t0, t1]], text }` is kept per recording (`Listen.heard(id)`, IndexedDB key `heard:` + id,
+    `keepHeard`, which calls `LipSync.forget`). Spans are loose: a pause is heard as part of the word after it (or the word
+    before, when that ends a clause), and it moves on early from long words.
+  * `LipSync.pinWords` matches the script's words to the heard words in order (so words he corrects, adds or cuts still
+    find their place), gives each word its span with room either side (`PIN_*`; a word may run into the next word's span),
+    moves a span past a pause inside it or back from a pause it ends in (`quiet`: 0.2 s or more under `PIN_QUIET`), and
+    `align(ft, words, win)` searches only inside. Under 30 in a hundred words matched means the script is not this
+    recording: no pinning, and the panel says so.
+  * `learn`: two more passes with the voice's own sounds (a Gaussian per kind of sound on twelve cepstra, from the frames
+    the pass before gave it). Helps without the listener too (flite test 133 to 30 ms).
+  * Times are the middle of each frame's window (`MID`), the mouth leads by `LEAD` (40 ms), `tidy` thins shapes by what
+    the eye needs (`RANK`: lips shut and teeth on lip always kept and given two frames, vowels next, tongue sounds first to
+    go), `toSound` shuts the mouth where a placed word cannot be heard and reads shapes from the sound where there is
+    speech with no word.
+  * `Character.ensureHeard` listens to a recording by itself, in the background, the first time it is used once the helper
+    is downloaded (the script is never changed by it), `prepare` waits for it so exports use it, and the Voice card says
+    which it is ("Every word is lined up…", "Roughly lined up", "does not match") with a "Get exact lip sync" button when
+    the helper is not there. The helper lets go of its models 90 s after the last listen.
+  * Results: his recording, word starts against the reference: median 165 to about 20 ms, mean 547 to about 60, worst
+    4 s to 0.5 s. Speech with known word times (`dev/tmp_gt1.wav`, `tmp_gt2.wav`: flite word by word, joined with known
+    gaps): mean 133 and 40 ms to 20 and 18. Without the listener real speech still slips by seconds in places.
+  * Nods and hand beats reach their low point about 10 ms before the loudest moment of the stressed word (they were 30 ms
+    after); the bake already takes the springs' lag off. The preview's voice follows the picture's clock by playing a
+    shade faster or slower (`tickSound`, the freshest of the last 15 clock readings; it used to allow 120 ms either way).
+  * Tests: `tests/char_sync.py` (the whole flow in the panel with his recording, then the voice against the picture),
+    `tests/char_timing.js` (runjs: nods and beats against the stresses), `tests/lipsync_heard.py` (listen then line up,
+    saves both), `tests/lipsync_pin.py` (line up inside saved heard words, `PIN=before,after,quiet,next,own` to try
+    settings), `tests/lipsync_dump.py` (no listener), `tests/listen_run.py`, `tests/char_clip.py` (frames for a preview
+    clip from any build). Fixtures: `tmp_me.wav`, `tmp_heard_me.json`, `tmp_gt*.wav`, `tmp_lshome/` (links to `listen/`
+    and `cutout/`), `tmp_hands/sheet.png`.
+  * Not done, needs his go ahead: a phone level aligner (SoundSwallower, MIT, about 10 MB, PocketSphinx for the browser)
+    would tighten the timing inside quick phrases further. Do not run or add it without asking.
 * `Character` (module `char`): blinks, breathing, nods on stressed syllables, phrase tilts, glances, eyebrows; emotion,
   look, gesture, pose and costume tags in the script and as timeline moves. **Hands are drawn lying on the desk**, so
   gestures turn them (values in `GEST`, found by drawing each: `tests/char_hands.py`). He checked them: turned, never mirrored
