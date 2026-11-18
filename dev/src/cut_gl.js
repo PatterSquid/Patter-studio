@@ -73,14 +73,25 @@ void main(){
   if (uMirror > 1.5) { uv = abs(uv - 0.5) * 2.0; uv = vec2(uv.x, uv.y) * 0.5 + 0.25; }
   else if (uMirror > 0.5) { uv.x = uv.x < 0.5 ? uv.x : 1.0 - uv.x; }
   if (uPix > 0.0) { float b = mix(1.0, 60.0, uPix); vec2 cell = b / SR; uv = (floor(uv / cell) + 0.5) * cell; }
-  if (uGlitch > 0.0) { float row = floor(uv.y * 24.0), tt = floor(uTime * 12.0); float r = hash(vec2(row, tt)); if (r < uGlitch * 0.45) uv.x += (hash(vec2(tt, row + 7.0)) - 0.5) * 0.18 * uGlitch; }
-  if (uVhs > 0.0) { uv.x += sin(uv.y * 220.0 + uTime * 9.0) * 0.0018 * uVhs + (hash(vec2(floor(uv.y * 300.0), floor(uTime * 30.0))) - 0.5) * 0.004 * uVhs; }
-  vec2 px = 1.0 / SR; float sh = uShift * 0.012;
+  float gsh = 0.0;
+  /* Glitch: bands of changing height knocked sideways with their colours pulled apart, thin tearing lines, and now and then
+     the whole picture slipping (it was 24 equal rows nudged at random, which read as a venetian blind). */
+  if (uGlitch > 0.0) { float tt = floor(uTime * 14.0), band = floor(uv.y * mix(7.0, 38.0, hash(vec2(tt, 1.0)))), r = hash(vec2(band, tt)), on = step(r, uGlitch * 0.4);
+    uv.x += on * (hash(vec2(tt, band + 7.0)) - 0.5) * 0.2 * uGlitch; float fine = hash(vec2(floor(uv.y * 190.0), tt)); uv.x += step(fine, uGlitch * 0.07) * (fine - 0.035) * 0.8 * uGlitch;
+    if (hash(vec2(tt, 9.0)) < uGlitch * 0.16) uv.y = fract(uv.y + (hash(vec2(tt, 5.0)) - 0.5) * 0.16); gsh = on * 0.02 * uGlitch; }
+  if (uOld > 0.0) uv.y += (hash(vec2(floor(uTime * 24.0), 5.0)) - 0.5) * 0.005 * uOld;   // the film weaving in the gate
+  /* VHS: lines that wander, a tracking band rolling up the picture, the head switching tear along the bottom, colour that
+     bleeds sideways and washes out a little, scan lines and tape noise. */
+  float trk = 0.0;
+  if (uVhs > 0.0) { float ln = floor(uv.y * 300.0), f30 = floor(uTime * 30.0); uv.x += sin(uv.y * 220.0 + uTime * 9.0) * 0.0016 * uVhs + (hash(vec2(ln, f30)) - 0.5) * 0.0035 * uVhs;
+    float tb = fract(uv.y + uTime * 0.13); trk = smoothstep(0.0, 0.02, tb) * smoothstep(0.08, 0.02, tb); uv.x += trk * 0.014 * uVhs * (hash(vec2(ln, f30 + 3.0)) - 0.3);
+    float hs = max(0.0, 0.035 - min(uv.y, 1.0 - uv.y)); if (uv.y < 0.5) hs = 0.0; uv.x += hs * 1.4 * uVhs * (0.4 + hash(vec2(f30, 2.0))); gsh = max(gsh, 0.0045 * uVhs); }
+  vec2 px = 1.0 / SR; float sh = uShift * 0.012 + gsh;
   vec4 c0 = tap(uv);
   vec3 c = c0.rgb; float a = c0.a;
   if (sh > 0.0) { c.r = tap(uv + vec2(sh, 0.0)).r; c.b = tap(uv - vec2(sh, 0.0)).b; }
   if (uSharp > 0.0) { vec3 n = (tap(uv + vec2(px.x, 0.0)).rgb + tap(uv - vec2(px.x, 0.0)).rgb + tap(uv + vec2(0.0, px.y)).rgb + tap(uv - vec2(0.0, px.y)).rgb) * 0.25; c += (c - n) * uSharp * 2.0; }
-  if (uGlow > 0.0) { vec3 g = vec3(0.0); for (int i = 0; i < 8; i++) { float ang = float(i) * 0.785398; g += tap(uv + vec2(cos(ang), sin(ang)) * px * 6.0).rgb; } g /= 8.0; c = 1.0 - (1.0 - c) * (1.0 - max(g - 0.45, 0.0) * uGlow * 1.6); }
+  if (uGlow > 0.0) { vec3 g = vec3(0.0); float gs = SR.y / 540.0;   /* two rings of light gathered from round about, sized to the picture (one small ring barely showed) */ for (int i = 0; i < 8; i++) { float ang = float(i) * 0.785398; vec2 d = vec2(cos(ang), sin(ang)) * px * gs; g += tap(uv + d * 5.0).rgb * 0.6 + tap(uv + vec2(d.y, -d.x) * 0.38 * 12.0 + d * 11.0).rgb * 0.4; } g /= 8.0; vec3 bl = max(g - 0.5, 0.0) * 1.2; c = 1.0 - (1.0 - c) * (1.0 - bl * uGlow * 1.1); c += bl * bl * uGlow * 0.1; }
   // Chroma key: how far the pixel's colour is from the key colour, ignoring brightness
   if (uKeyOn > 0.5) {
     vec2 kc = vec2(dot(uKey, vec3(-0.169, -0.331, 0.5)), dot(uKey, vec3(0.5, -0.419, -0.081)));
@@ -112,10 +123,15 @@ void main(){
   c = mix(c, sep, uSepia);
   if (uPost > 1.5) c = floor(c * uPost + 0.5) / uPost;
   c = mix(c, 1.0 - c, uInv);
-  if (uVhs > 0.0) { c *= 1.0 - uVhs * 0.16 * (0.5 + 0.5 * sin(gl_FragCoord.y * 1.6)); c += (hash(uv * R + uTime) - 0.5) * 0.08 * uVhs; }
-  if (uOld > 0.0) { float sc = step(0.995 - uOld * 0.004, hash(vec2(floor(uv.x * 400.0), floor(uTime * 24.0)))); c = mix(c, vec3(0.9), sc * 0.6); c *= 1.0 - uOld * 0.12 * hash(vec2(floor(uTime * 24.0), 3.0)); }
+  if (uVhs > 0.0) { c = mix(c, vec3(dot(c, vec3(0.299, 0.587, 0.114))), 0.2 * uVhs); c = mix(c, c * vec3(1.04, 1.0, 0.94) + vec3(0.02, 0.0, 0.03), uVhs); c *= 1.0 - uVhs * 0.14 * (0.5 + 0.5 * sin(gl_FragCoord.y * 1.6)); c += (hash(uv * R + uTime) - 0.5) * 0.08 * uVhs; c += trk * uVhs * (0.06 + 0.3 * step(0.86, hash(vec2(floor(uv.x * 160.0), floor(uv.y * 300.0) + floor(uTime * 30.0))))); }
+  /* Old film: a scratch or two that lasts half a second and drifts (not a new full height line every frame), specks of
+     dust, the lamp flickering. */
+  if (uOld > 0.0) { float f24 = floor(uTime * 24.0);
+    for (int i = 0; i < 2; i++) { float fi = float(i), life = floor(uTime * 2.0 + fi * 0.5), sx = hash(vec2(life, fi + 11.0)) + 0.004 * sin(uTime * 9.0 + fi), on = step(0.5, hash(vec2(life, fi + 3.0))); float d = abs(uv.x - sx) * R.x; c = mix(c, vec3(0.86), on * uOld * 0.5 * smoothstep(1.3, 0.0, d) * step(0.25, hash(vec2(floor(uv.y * 9.0), f24 + fi)))); }
+    vec2 cell = floor(uv * vec2(28.0, 16.0)); float dh = hash(cell + f24 * 1.7); if (dh > 1.0 - 0.014 * uOld) { vec2 cp = (cell + 0.5 + (vec2(hash(cell + 2.0), hash(cell + 5.0)) - 0.5) * 0.6) / vec2(28.0, 16.0); float dd = length((uv - cp) * vec2(R.x / R.y, 1.0)) * R.y; c = mix(c, vec3(hash(cell + 1.0) > 0.5 ? 0.9 : 0.05), smoothstep(2.5 + 4.0 * hash(cell + 9.0), 0.5, dd) * 0.8); }
+    c *= 1.0 - uOld * 0.14 * hash(vec2(f24, 3.0)); }
   if (uGrain > 0.0) c += (hash(uv * R + fract(uTime * 7.31)) - 0.5) * uGrain * 0.22;
-  if (uLeak > 0.0) { float lk = smoothstep(0.9, 0.0, distance(uv, vec2(0.85 + 0.1 * sin(uTime * 0.7), 0.15))); c = 1.0 - (1.0 - c) * (1.0 - vec3(1.0, 0.55, 0.2) * lk * uLeak * 0.9); }
+  if (uLeak > 0.0) { float lk = smoothstep(0.9, 0.0, distance(uv, vec2(0.85 + 0.1 * sin(uTime * 0.7), 0.15))), l2 = smoothstep(0.7, 0.0, distance(uv, vec2(0.1 + 0.25 * sin(uTime * 0.43 + 1.0), 0.8 + 0.1 * sin(uTime * 0.9)))) * (0.6 + 0.4 * sin(uTime * 1.3)), st = smoothstep(0.06, 0.0, abs(uv.y - 0.32 - 0.05 * sin(uTime * 0.5))) * 0.25;   /* two warm lights drifting and breathing, and a streak across */ c = 1.0 - (1.0 - c) * (1.0 - (vec3(1.0, 0.55, 0.2) * lk + vec3(1.0, 0.3, 0.15) * l2 * 0.7 + vec3(1.0, 0.8, 0.55) * st) * uLeak * 0.9); }
   if (uVig != 0.0) { float d = distance(v, vec2(0.5)); float w = smoothstep(0.25, 0.85, d); c = uVig > 0.0 ? c * (1.0 - uVig * w * 0.9) : mix(c, vec3(1.0), -uVig * w * 0.8); }
   c = mix(c, vec3(1.0), uFlash);
   o = vec4(clamp(c, 0.0, 1.0), a);

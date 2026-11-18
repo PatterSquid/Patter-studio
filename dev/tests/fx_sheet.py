@@ -28,7 +28,7 @@ async def main():
       for i0 in range(0, len(fx), 6):
         part = fx[i0:i0 + 6]
         d = await pg.evaluate("""(kinds)=>{ const W=window.__W,H=window.__H, N=4, tw=320, th=180, c=document.createElement('canvas'); c.width=tw*N+150; c.height=th*kinds.length; const g=c.getContext('2d'); g.fillStyle='#10141f'; g.fillRect(0,0,c.width,c.height);
-          kinds.forEach((k,r)=>{ for(let i=0;i<N;i++){ const t=[0.1,0.37,0.81,1.52][i]; const P=CutGL.params({fx:[{k,amt:60}]},t); let o=null; try{ o=CutGL.process(window.__A,W,H,W,H,P); }catch(e){} g.drawImage(o||window.__A,150+i*tw,r*th,tw,th); }
+          kinds.forEach((k,r)=>{ for(let i=0;i<N;i++){ const t=[0.1,0.37,0.81,1.52][i]; const P=CutGL.params({fx:[{k,amt:60}]},t); let o=null; try{ o=CutGL.process(window.__B,W,H,W,H,P); }catch(e){ window.__fxerr=String(e); } g.drawImage(o||window.__B,150+i*tw,r*th,tw,th); }
             g.fillStyle='#fff'; g.font='bold 17px sans-serif'; g.fillText(k,8,r*th+26); g.font='13px sans-serif'; g.fillStyle='#9aa'; g.fillText(CutGL.EFFECTS[k].label,8,r*th+46); });
           return c.toDataURL('image/jpeg',0.86).split(',')[1]; }""", part)
         open(f"{OUT}/fx_{i0 // 6:02d}.jpg", 'wb').write(base64.b64decode(d))

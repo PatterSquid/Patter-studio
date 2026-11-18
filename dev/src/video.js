@@ -170,7 +170,7 @@ const Video = (() => {
     if (pl.op <= 0.001) return [pl.x - dw / 2, pl.y - dh / 2, pl.x + dw / 2, pl.y + dh / 2];
     // Effects that move the picture
     let shake = [0, 0], zoom = 1; (it.fx || []).forEach(f => { if (f.off) return; const a = cl(f.amt == null ? 60 : +f.amt, 0, 100) / 100, tt = env && env.t != null ? env.t : local;
-      if (f.k === 'shake') { shake = [(Math.sin(tt * 37) + Math.sin(tt * 23.3)) * W * 0.008 * a, (Math.sin(tt * 31) + Math.sin(tt * 19.7)) * H * 0.008 * a]; } if (f.k === 'pulse') zoom *= 1 + 0.06 * a * Math.max(0, Math.sin(tt * Math.PI * 2)); });
+      if (f.k === 'shake') { /* a hand held camera: slow sway with quick jolts on top, pushed in a touch so the picture's edge never shows */ const jx = Math.sin(tt * 37) + Math.sin(tt * 23.3) + 0.7 * Math.sin(tt * 61.7 + 1.3) * Math.sin(tt * 3.1), jy = Math.sin(tt * 31) + Math.sin(tt * 19.7) + 0.7 * Math.sin(tt * 53.3 + 0.4) * Math.sin(tt * 2.3); shake = [jx * W * 0.007 * a, jy * H * 0.007 * a]; zoom *= 1 + 0.035 * a; } if (f.k === 'pulse') zoom *= 1 + 0.06 * a * Math.max(0, Math.sin(tt * Math.PI * 2)); });
     const k = env && env.k || 1;
     g.save();
     g.globalAlpha *= pl.op; if (it.blend && it.blend !== 'normal') g.globalCompositeOperation = it.blend;
