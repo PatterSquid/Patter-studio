@@ -104,6 +104,18 @@ const Character = (() => {
   /* ---------- the voice and the timing ---------- */
   const last = {}, textMemo = new Map(), waiting = {}, hearing = {}; let heardNote = '';
   if (typeof Listen !== 'undefined' && typeof indexedDB !== 'undefined') Listen.check().then(() => { tick++; }, () => { });
+  /* Exact timing needs to know what was said when (LipSync.pinWords). Once the listening helper is on this computer every
+     recording is listened to by itself the first time it is used, in the background (kept, so once per recording), and the
+     lip sync and the performance are lined up again inside what was heard. The script is his: this never changes it. */
+  const pinning = {}; let panelRedraw = null;
+  function pinNote(id) { if (typeof document === 'undefined') return; const el = document.getElementById('chPin'); if (el && el.dataset.id === id) { const st = pinning[id]; el.textContent = st && !st.done ? ' Listening to line every word up exactly… ' + Math.round((st.q || 0) * 100) + '%' : ''; } }
+  function ensureHeard(id) {
+    if (!id || typeof Listen === 'undefined' || typeof window === 'undefined' || typeof CutMedia === 'undefined' || Listen.state !== 'ready' || !Listen.heardNow) return null;
+    if (Listen.heardNow(id)) return null; const cur = pinning[id]; if (cur) return cur.p || null;
+    const st = pinning[id] = { q: 0, p: null, done: false };
+    st.p = (async () => { try { if (!(await Listen.heard(id))) await Listen.forMedia(id, { onProgress: q => { st.q = q; pinNote(id); } }); } catch (e) { st.err = (e && e.message) || String(e); } st.p = null; st.done = true; tick++; pinNote(id); if (panelRedraw) panelRedraw(); })();
+    return st.p;
+  }
   /* A PatterScript file (the phone app's Send file) to what he says: the sections' words in order, the shot and edit
      cues (upper case tags, [beat], [pause]) taken out, his own lower case tags kept. */
   function fromPatterScript(text) {
@@ -122,6 +134,7 @@ const Character = (() => {
   function syncOf(cfg) {
     const script = String(cfg.script || ''), eng = engineOf(cfg);
     if (cfg.voice && typeof CutMedia !== 'undefined') {
+      ensureHeard(cfg.voice);
       const r = LipSync.peek(cfg.voice, script, eng); if (r) { last[cfg.voice] = r; return r; }
       const k = cfg.voice + '|' + script + '|' + eng; if (!waiting[k]) { waiting[k] = setTimeout(() => { LipSync.forMedia(cfg.voice, script, id => CutMedia.blobOf(id), eng).then(() => { tick++; }, e => console.warn('lip sync', e)).finally(() => { setTimeout(() => delete waiting[k], 50); }); }, 350); }
       return last[cfg.voice] || null;
@@ -132,7 +145,8 @@ const Character = (() => {
   async function prepare(cfg) {
     if (cfg.puppet) await Puppet.load(cfg.puppet);
     if (cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined') await Rhubarb.ready();
-    if (cfg.voice && typeof CutMedia !== 'undefined') await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id), engineOf(cfg)).catch(() => null);
+    if (cfg.voice && typeof CutMedia !== 'undefined') { const p = ensureHeard(cfg.voice); if (p) await p;   // an export waits for the exact timing
+      await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id), engineOf(cfg)).catch(() => null); }
   }
 
   /* ---------- the performance: everything decided once per voice, script and moves ----------
@@ -542,6 +556,7 @@ const Character = (() => {
   function form(root, cfg, changed) {
     const { H, field, card, btn, sel, num, area } = UI; root.innerHTML = '';
     const redo = () => { changed(); form(root, cfg, changed); }, rig = cfg.puppet ? Puppet.get(cfg.puppet) : null;
+    panelRedraw = () => { if (typeof document === 'undefined' || !document.contains(root)) return; const ae = document.activeElement; if (ae && root.contains(ae) && /TEXTAREA|INPUT|SELECT/.test(ae.tagName)) return; form(root, cfg, changed); };   // what was heard has arrived: show it, unless he is typing
     if (cfg.puppet && !rig) Puppet.load(cfg.puppet).then(r => { if (r && root.isConnected) form(root, cfg, changed); });
     const seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
     // the puppet
@@ -575,13 +590,16 @@ const Character = (() => {
     const spick = H('input', { type: 'file', accept: '.txt,.md,text/plain' }); spick.style.display = 'none';
     spick.addEventListener('change', async () => { const f = spick.files && spick.files[0]; if (!f) return; const t = fromPatterScript(await f.text()); if (t) { cfg.script = t; heardNote = ''; redo(); } else { heardNote = 'No script found in that file.'; redo(); } });
     const vinfo = cfg.voice && typeof CutMedia !== 'undefined' ? CutMedia.info(cfg.voice) : null, sounds = typeof CutMedia !== 'undefined' ? CutMedia.list().filter(m => (m.kind === 'audio' || (m.kind === 'video' && m.hasAudio !== false)) && !m.builtin) : [];
-    const A = syncOf(cfg);
+    const A = syncOf(cfg), pinBusy = !!(cfg.voice && pinning[cfg.voice] && !pinning[cfg.voice].done), heardHere = !!(cfg.voice && typeof Listen !== 'undefined' && Listen.heardNow && Listen.heardNow(cfg.voice));
     root.append(card('Voice',
       field('Recording', sel(cfg.voice || '', [['', 'None (timed from the script)'], ...sounds.map(m => [m.id, m.name || 'Sound'])], v => { cfg.voice = v; const m = sounds.find(q => q.id === v); cfg.voiceName = m ? m.name : ''; redo(); }, 'Voice recording'),
-        vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (A && !A.guessed ? ' Lined up with the script.' : ' Lining up…') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
+        vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (!A || A.guessed ? ' Lining up…' : A.pinned ? ' Every word is lined up with where it is said.' : heardHere && !pinBusy ? ' The script does not match what is said in the recording, so the timing is a rough fit.' : ' Roughly lined up.') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
       H('div', { className: 'btnrow' }, btn('Add a recording', () => vpick.click(), cfg.voice ? '' : 'primary')), vpick, vnote,
+      ...(cfg.voice ? [(() => { const p = H('p', { className: 'hint', id: 'chPin', 'aria-live': 'polite' }); p.dataset.id = cfg.voice; p.textContent = pinBusy ? ' Listening to line every word up exactly… ' + Math.round((pinning[cfg.voice].q || 0) * 100) + '%' : ''; return p; })()] : []),
+      ...(cfg.voice && typeof Listen !== 'undefined' && Listen.state === 'none' ? [H('div', { className: 'btnrow' }, btn('Get exact lip sync (180 MB download, once)', async e => { const b = e.target; b.disabled = true; try { await Listen.download(q => { b.textContent = 'Getting the listening helper… ' + Math.round(q * 100) + '%'; }); tick++; redo(); } catch (err) { vnote.textContent = (err && err.message) || String(err); b.disabled = false; b.textContent = 'Try the download again'; } })),
+        H('p', { className: 'hint' }, 'The listening helper hears where each word is said, so the mouth and the movements land on the right words. It stays on this computer.')] : []),
       ...(cfg.voice ? [field('Lip sync', seg(cfg.sync === 'rhubarb' ? 'rhubarb' : 'patter', [['patter', 'Patter (built in)'], ['rhubarb', 'Rhubarb']], v => { cfg.sync = v; redo(); }),
-        cfg.sync === 'rhubarb' ? (typeof Rhubarb === 'undefined' ? 'Rhubarb is not in this version.' : Rhubarb.state === 'ready' ? (A && A.engine === 'rhubarb' ? 'Mouth shapes from Rhubarb Lip Sync.' : 'Rhubarb is working on it…') : 'Rhubarb needs a one-off download of about 40 MB, then works offline.') : 'Built in and instant. Try Rhubarb if the mouth looks off.'),
+        cfg.sync === 'rhubarb' ? (typeof Rhubarb === 'undefined' ? 'Rhubarb is not in this version.' : Rhubarb.state === 'ready' ? (A && A.engine === 'rhubarb' ? 'Mouth shapes from Rhubarb Lip Sync.' : 'Rhubarb is working on it…') : 'Rhubarb needs a one-off download of about 40 MB, then works offline.') : 'Built in. Mouth shapes from the script, timed to the recording.'),
         ...(cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state !== 'ready' ? [H('div', { className: 'btnrow' }, btn(Rhubarb.state === 'downloading' ? 'Downloading…' : 'Download Rhubarb (40 MB, once)', async e => { const b = e.target, note2 = vnote; b.disabled = true; try { await Rhubarb.download(q => { b.textContent = 'Downloading… ' + Math.round(q * 100) + '%'; }); note2.textContent = 'Rhubarb is ready.'; tick++; redo(); } catch (err) { note2.textContent = err.message || String(err); b.disabled = false; b.textContent = 'Try the download again'; } }, 'primary'))] : []),
         field('Volume (dB)', num(+cfg.vol || 0, v => { cfg.vol = Math.round(v); changed(); }, -30, 12, 1, 'Voice volume'))] : [field('Pace', seg(String(cfg.pace || 1), [['0.8', 'Slower'], ['1', 'Normal'], ['1.25', 'Quicker']], v => { cfg.pace = +v; textMemo.clear(); redo(); }))])));
     // the script

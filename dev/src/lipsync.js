@@ -91,7 +91,12 @@ const LipSync = (() => {
     const voi = new Float32Array(n); for (let f = 0; f < n; f++) { const snr = cl((raw[f] - noiseDb) / 15, 0, 1); voi[f] = cl(1 - (zc[f] - 0.06) / 0.2, 0, 1) * snr + 0.5 * (1 - snr); }
     // level without the ceiling, for finding the stressed syllables
     const top = sorted[n - 1], lev = new Float32Array(n); for (let f = 0; f < n; f++) lev[f] = cl((db[f] - floor) / Math.max(12, top - floor), 0, 1);
-    return { n, en: sm(en), hf: sm(hf), lf: sm(lf), voi: sm(voi), lev: sm(sm(lev)), noiseDb, peakDb: peak };
+    // the shape of the spectrum, frame by frame (twelve cepstra of the band levels, the recording's average taken off): what the voice's own sounds are learned from
+    const NC = 12, cep = new Float32Array(n * NC), lb = new Float32Array(NB), ct = new Float32Array(NC * NB), cm = new Float64Array(NC);
+    for (let k = 0; k < NC; k++) for (let b = 0; b < NB; b++) ct[k * NB + b] = Math.cos(Math.PI * (k + 1) * (b + 0.5) / NB);
+    for (let f = 0; f < n; f++) { for (let b = 0; b < NB; b++) lb[b] = Math.log(P[f * NB + b] + noise[b] + 1e-12); for (let k = 0; k < NC; k++) { let v = 0; for (let b = 0; b < NB; b++) v += lb[b] * ct[k * NB + b]; cep[f * NC + k] = v; cm[k] += v; } }
+    for (let f = 0; f < n; f++) for (let k = 0; k < NC; k++) cep[f * NC + k] -= cm[k] / n;
+    return { n, en: sm(en), hf: sm(hf), lf: sm(lf), voi: sm(voi), lev: sm(sm(lev)), noiseDb, peakDb: peak, cep, NC };
   }
   const COST = {
     sil: (e) => 4 * e + (e < 0.12 ? 0 : 1),
@@ -110,7 +115,7 @@ const LipSync = (() => {
      Every sound is a chain of frames between its least and most length: it must pass its least, may leave from any frame
      after that, and past its most it can only stay at a cost. Between words there may be a silence of any length. The
      search is kept to a band around where the speech so far says we are. */
-  function align(ft, words) {
+  function align(ft, words, win, own) {
     const st = [], units = [], uFirst = [];   // st: { k, unit, j (frame within the sound), M, m, opt }
     const addSil = (word) => { st.push({ k: 'sil', unit: null, word, j: 0, m: 1, M: 1, opt: true }); };
     addSil(-1);
@@ -123,10 +128,15 @@ const LipSync = (() => {
     const cum = new Float32Array(T + 1); for (let t = 0; t < T; t++) cum[t + 1] = cum[t] + (ft.en[t] > 0.15 ? 1 : 0.05);
     const band = Math.min(0.5, Math.max(0.06, 1.6 / Math.sqrt(Math.max(1, nU)))), lo = new Int32Array(T), hi = new Int32Array(T);
     { let a = 0, b = 0; for (let t = 0; t < T; t++) { const c = cum[t + 1] / cum[T]; while (a < S - 1 && frac[a] < c - band) a++; while (b < S - 1 && frac[b + 1] <= c + band) b++; lo[t] = a; hi[t] = Math.max(a, b); } }
+    if (win) {   // each word may only sit inside its own stretch of the recording (pinWords): the states allowed at each frame follow from that
+      const nW = words.length, wA = new Int32Array(nW), wZ = new Int32Array(nW); { let w = -1; for (let q = 0; q < S; q++) { const k = st[q]; if (k.k === 'sil') { if (k.word >= 0) wZ[k.word] = q; } else if (k.word !== w) { w = k.word; wA[w] = q; } } }
+      let a = 0, b = -1; for (let t = 0; t < T; t++) { while (a < nW && win[a * 2 + 1] < t) a++; while (b < nW - 1 && win[(b + 1) * 2] <= t) b++; lo[t] = a < nW ? wA[a] - 1 : S - 1; hi[t] = Math.max(lo[t], b >= 0 ? wZ[b] : 0); }
+    }
     lo[0] = 0; hi[T - 1] = S - 1; for (let t = T - 2; t >= 0; t--) if (hi[t] < hi[t + 1] - 2 * (DUR.V[2] + 4)) hi[t] = Math.max(hi[t], 0);
     let Wd = 1; for (let t = 0; t < T; t++) Wd = Math.max(Wd, hi[t] - lo[t] + 1);
     const back = new Int32Array(T * Wd).fill(-1), INF = 1e18; let prev = new Float64Array(Wd).fill(INF), cur = new Float64Array(Wd);
-    const emit = (s, t) => { const q = st[s], e = ft.en[t], h = ft.hf[t], l = ft.lf[t], v = ft.voi[t]; return q.k === 'sil' ? COST.sil(e) : COST[q.k](e, h, l, v); };
+    const ownOf = own ? st.map(q => own.cost[q.k === 'sil' ? 'sil' : units[q.unit].v + '/' + q.k] || null) : null;
+    const emit = (s, t) => { const q = st[s], e = ft.en[t], h = ft.hf[t], l = ft.lf[t], v = ft.voi[t]; return (q.k === 'sil' ? COST.sil(e) : COST[q.k](e, h, l, v)) + (ownOf && ownOf[s] ? ownOf[s][t] : 0); };
     const canExit = q => q.k === 'sil' || q.j >= q.m - 1;
     const OVER = 0.35, SILSTAY = 0;
     const get = (t, s) => (s >= lo[t] && s <= hi[t]) ? prev[s - lo[t]] : INF;   // prev holds frame t (the one before the one being filled)
@@ -150,9 +160,83 @@ const LipSync = (() => {
     }
     // finish in the last silence, or any frame of the last sound that may end
     let s = -1, bc = INF; const tl = T - 1; for (let r = S - 1; r >= 0 && (r === S - 1 || st[r].unit === nU - 1); r--) { if (!canExit(st[r])) continue; const c = (r >= lo[tl] && r <= hi[tl]) ? prev[r - lo[tl]] : INF; if (c < bc) { bc = c; s = r; } }
-    if (s < 0) s = S - 1;
+    if (s < 0 || bc >= INF) { if (win) return null; s = S - 1; }
     const path = new Int32Array(T); for (let t = T - 1; t >= 0; t--) { path[t] = s; if (t > 0) { const f = (s >= lo[t] && s <= hi[t]) ? back[t * Wd + (s - lo[t])] : -1; s = f >= 0 ? f : s; } }
     return { path, st, units };
+  }
+
+  /* ---------- every word pinned to where it was heard ----------
+     The sounds above cannot tell one word from another well enough to keep a whole recording in step by themselves: in fast,
+     natural speech words slid into the wrong phrase (on his own minute of talking, two words in five started more than a
+     tenth of a second out, some by seconds). The listener (Listen) knows which words were said when, to a fifth of a second
+     or so, and the search above is exact to a hundredth where it has little to choose from. So: the script's words are
+     matched to the heard words in order (a best matching of the two lists, so words he has corrected, added or cut still
+     find their place between their neighbours), each word gets the stretch of the recording it was heard in with room either
+     side, and the search runs inside those stretches. */
+  let PIN_BEFORE = 0.16, PIN_AFTER = 0.22, PIN_QUIET = 0.2, PIN_NEXT = 0.1;
+  const near = (a, b) => { if (a === b) return 2; if (a.length < 3 || b.length < 3) return -1; if (a[0] !== b[0]) return -1; const n = Math.min(a.length, b.length); let same = 0; for (let i = 0; i < n; i++) if (a[i] === b[i]) same++; return same >= Math.max(2, Math.ceil(Math.max(a.length, b.length) * 0.6)) ? 1 : -1; };
+  function pinWords(P, heard, T, ft) {
+    if (!heard || !heard.words || !heard.words.length || !P.words.length) return null;
+    const H = []; heard.words.forEach(([txt, a, b]) => { const ws = parse(txt).words, stop = /[.,!?;:]$/.test(String(txt).trim()); ws.forEach((w, i) => H.push([w.w.replace(/'/g, ''), a, b, stop && i === ws.length - 1])); });
+    const W = P.words.map(w => w.w.replace(/'/g, '')), n = W.length, m = H.length; if (!m) return null;
+    if (n * m > 4e7) return null;
+    // best matching of the two lists (2 for the same word, 1 for nearly, gaps and swaps cost 1)
+    const C = m + 1, sc = new Int32Array((n + 1) * C), tr = new Uint8Array((n + 1) * C);
+    for (let i = 1; i <= n; i++) { sc[i * C] = -i; tr[i * C] = 1; } for (let j = 1; j <= m; j++) { sc[j] = -j; tr[j] = 2; }
+    for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) { const d = sc[(i - 1) * C + j - 1] + near(W[i - 1], H[j - 1][0]), u = sc[(i - 1) * C + j] - 1, l = sc[i * C + j - 1] - 1; if (d >= u && d >= l) { sc[i * C + j] = d; tr[i * C + j] = 0; } else if (u >= l) { sc[i * C + j] = u; tr[i * C + j] = 1; } else { sc[i * C + j] = l; tr[i * C + j] = 2; } }
+    const at = new Int32Array(n).fill(-1); let hit = 0; { let i = n, j = m; while (i > 0 || j > 0) { const t = tr[i * C + j]; if (t === 0) { if (near(W[i - 1], H[j - 1][0]) > 0) { at[i - 1] = j - 1; hit++; } i--; j--; } else if (t === 1) i--; else j--; } }
+    if (hit < Math.max(2, n * 0.3)) return null;   // not the words of this recording
+    /* A pause is heard as part of a word: nearly always the word after it (the listener moves on to the next word as the
+       pause starts), or the word before it when that word ends a sentence or clause (the full stop is heard in the pause). On
+       his recording: 36 pauses of a fifth of a second or more, 35 that way round. Either way the word itself is the last
+       stretch of talking inside its span, so a pause inside the span moves the span's start past it, a pause the span ends in
+       pulls its end back, and the word before may run up to the pause. */
+    const quiet = []; if (ft) { const qm = new Uint8Array(T); for (let t = 0; t < T; t++) qm[t] = ft.en[t] < PIN_QUIET ? 1 : 0;
+      for (let t = 0; t < T;) { let e = t; while (e < T && qm[e] === qm[t]) e++; if (!qm[t] && e - t < 8 && t > 0 && e < T) for (let k = t; k < e; k++) qm[k] = 1; t = e; }   // a breath or a click in a pause is still the pause
+      let q0 = -1; for (let t = 0; t <= T; t++) { const qt = t < T && qm[t]; if (qt && q0 < 0) q0 = t; else if (!qt && q0 >= 0) { if (t - q0 >= 20) quiet.push([q0, t]); q0 = -1; } } }
+    const win = new Int32Array(n * 2), dur = T / FPS, reach = new Int32Array(n).fill(-1); let qi = 0;
+    for (let i = 0; i < n; i++) {
+      let a, b; if (at[i] >= 0) { a = H[at[i]][1]; b = H[at[i]][2]; }
+      else { let p = i - 1; while (p >= 0 && at[p] < 0) p--; let q = i + 1; while (q < n && at[q] < 0) q++; a = p >= 0 ? H[at[p]][1] : 0; b = q < n ? H[at[q]][2] : dur; }
+      // the listener tends to move on to the next word early (most of all in long, slow words), so a word may run on into the next word's span
+      let nx = b; if (at[i] >= 0 && PIN_NEXT) { let q = i + 1; while (q < n && at[q] < 0) q++; if (q < n) nx = Math.max(b, H[at[q]][2] - PIN_AFTER + PIN_NEXT); }
+      let lo = Math.floor((a - PIN_BEFORE) * FPS), hi = Math.ceil((Math.max(b, nx) + PIN_AFTER) * FPS);
+      if (at[i] >= 0 && quiet.length) { const A = Math.round(a * FPS), B = Math.round(b * FPS), stop = H[at[i]][3]; let end = B;
+        while (qi > 0 && quiet[qi - 1][1] > A - 5) qi--; while (qi < quiet.length && quiet[qi][1] <= A - 5) qi++;
+        if (stop) { for (let k = qi; k < quiet.length && quiet[k][0] < B; k++) { if (quiet[k][0] <= A + 2) { lo = Math.max(lo, quiet[k][1] - 8); reach[i] = quiet[k][0] + 8; continue; } hi = Math.min(hi, quiet[k][0] + 8); break; } }   // the end of a clause: the word, then its pause (whatever else is heard in the pause)
+        else {
+          for (let k = qi; k < quiet.length && quiet[k][0] < B; k++) if (quiet[k][1] >= B - 2 && quiet[k][0] > A + 2) { end = quiet[k][0]; hi = Math.min(hi, quiet[k][0] + 8); break; }   // the span ends in a pause: the word ends before it
+          for (let k = qi; k < quiet.length && quiet[k][1] <= end - 3; k++) { lo = Math.max(lo, quiet[k][1] - 8); reach[i] = quiet[k][0] + 8; }   // a pause inside the span: the word comes after it
+        }
+      }
+      win[i * 2] = Math.max(0, lo); win[i * 2 + 1] = Math.min(T - 1, Math.max(lo, hi));
+    }
+    for (let i = 1; i < n; i++) if (reach[i] > win[(i - 1) * 2 + 1]) win[(i - 1) * 2 + 1] = Math.min(T - 1, reach[i]);
+    for (let i = 1; i < n; i++) if (win[i * 2] < win[(i - 1) * 2]) win[i * 2] = win[(i - 1) * 2];
+    for (let i = n - 2; i >= 0; i--) if (win[i * 2 + 1] > win[(i + 1) * 2 + 1]) win[i * 2 + 1] = win[(i + 1) * 2 + 1];
+    for (let i = 0; i < n; i++) if (win[i * 2 + 1] < win[i * 2]) win[i * 2 + 1] = win[i * 2];
+    return { win, hit };
+  }
+
+  /* ---------- his own sounds ----------
+     The costs above know only loud, hissy, voiced. Once the words are roughly placed the recording itself says more: every
+     frame given to an "ee", an "s", an "m" shows what that sound looks like in this voice, this room, this microphone. Each
+     kind of sound gets the average shape of its spectrum and how much it varies (one Gaussian), and the search runs again
+     with how well each frame fits added in, twice over: the way speech aligners are trained on the very recordings they
+     align (Viterbi training; McAuliffe and others 2017 for the idea at full size). Kinds heard too little are left as
+     they were. */
+  let OWN_W = 1;
+  function learn(ft, al) {
+    const NC = ft.NC, T = ft.n, sum = {}, cls = new Array(T), g = { n: 0, s: new Float64Array(NC), q: new Float64Array(NC) };
+    for (let t = 0; t < T; t++) { const q = al.st[al.path[t]], c = q.k === 'sil' ? 'sil' : al.units[q.unit].v + '/' + q.k; cls[t] = c; const a = sum[c] || (sum[c] = { n: 0, s: new Float64Array(NC), q: new Float64Array(NC) });
+      a.n++; g.n++; for (let k = 0; k < NC; k++) { const v = ft.cep[t * NC + k]; a.s[k] += v; a.q[k] += v * v; g.s[k] += v; g.q[k] += v * v; } }
+    const gm = new Float64Array(NC), gv = new Float64Array(NC); for (let k = 0; k < NC; k++) { gm[k] = g.s[k] / g.n; gv[k] = Math.max(1e-6, g.q[k] / g.n - gm[k] * gm[k]); }
+    const cost = {}; let any = false;
+    Object.keys(sum).forEach(c => { const a = sum[c]; if (a.n < 20) return; const m = new Float64Array(NC), iv = new Float64Array(NC); let lg = 0, lg0 = 0;
+      for (let k = 0; k < NC; k++) { m[k] = a.s[k] / a.n; const v = Math.max(gv[k] * 0.15, a.q[k] / a.n - m[k] * m[k]); iv[k] = 1 / v; lg += Math.log(v); lg0 += Math.log(gv[k]); }
+      const out = new Float32Array(T); for (let t = 0; t < T; t++) { let d = 0, d0 = 0; for (let k = 0; k < NC; k++) { const x = ft.cep[t * NC + k], e = x - m[k], e0 = x - gm[k]; d += e * e * iv[k]; d0 += e0 * e0 / gv[k]; } out[t] = OWN_W * cl(0.5 * (d + lg - d0 - lg0) / NC * 4, -3, 6); }
+      cost[c] = out; any = true; });
+    return any ? { cost } : null;
   }
 
   // frames to segments: [t0, t1, unitIndex or -1 for silence]
@@ -181,11 +265,13 @@ const LipSync = (() => {
     return s;
   }
 
-  function analyse(x, script) { const r = analyse0(x, script); if (typeof Prosody !== 'undefined') Prosody.annotate(r, Prosody.pitch(x)); return r; }
-  function analyse0(x, script) {
+  function analyse(x, script, heard) { const r = analyse0(x, script, heard); if (typeof Prosody !== 'undefined') Prosody.annotate(r, Prosody.pitch(x)); return r; }
+  function analyse0(x, script, heard) {
     const ft = features(x), dur = x.length / SR, P = parse(script), env = ft.en, lev = ft.lev;
     if (!P.words.length) return { visemes: tidy(guess(ft), 0.03), words: [], tags: [], env, lev, fps: FPS, dur, script: false };
-    const al = align(ft, P.words), seg = segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
+    const pin = pinWords(P, heard, ft.n, ft); let al = pin ? align(ft, P.words, pin.win) : null; const pinned = al ? pin.hit : 0; if (!al) al = align(ft, P.words);
+    if (OWN_W > 0 && P.words.length >= 12) for (let pass = 0; pass < 2; pass++) { const own = learn(ft, al); if (!own) break; const a2 = align(ft, P.words, pinned ? pin.win : null, own); if (!a2) break; al = a2; }
+    const seg = segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
     seg.forEach(([a, b, k]) => {
       if (k < 0) { vis.push([a, 'Neutral']); return; }
       const U = al.units[k]; let v = U.v;
@@ -195,7 +281,7 @@ const LipSync = (() => {
     const words = P.words.map((W, i) => [wt[i][0], wt[i][1], W.text || W.w, i, W.w]).filter(w => isFinite(w[0]));
     const at = i => { const w = wt[i]; if (w && isFinite(w[0])) return w[0]; const p = wt[i - 1]; return p && isFinite(p[1]) ? p[1] : 0; };
     const tags = P.tags.map(g => ({ tag: g.tag, word: g.word, t: g.word >= P.words.length ? (wt.length ? Math.max(0, ...wt.map(w => isFinite(w[1]) ? w[1] : 0)) : dur) : at(g.word) }));
-    return { visemes: tidy(vis, 0.035), words, tags, env, lev, fps: FPS, dur, script: true };
+    return { visemes: tidy(vis, 0.035), words, tags, env, lev, fps: FPS, dur, script: true, pinned };
   }
   // No recording yet: time the script at a steady talking pace, so he can be seen saying it (the timing is a guess)
   function fromText(script, rate) {
@@ -218,13 +304,14 @@ const LipSync = (() => {
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
   const key = (id, script, engine) => id + '|' + hash(String(script || '')) + '|' + String(script || '').length + '|' + (engine || 'patter');
   function peek(id, script, engine) { return cache.get(key(id, script, engine)) || null; }
-  function seed(id, script, engine, r) { if (r) cache.set(key(id, script, engine), r); }   // the export helpers get the timing worked out on the page
+  function seed(id, script, engine, r) { if (r) cache.set(key(id, script, engine), r); }
+  function forget(id) { for (const k of Array.from(cache.keys())) if (k.startsWith(id + '|')) cache.delete(k); }   // what was heard has changed: time it again   // the export helpers get the timing worked out on the page
   // engine 'rhubarb': the mouth shapes come from Rhubarb (when it is downloaded); words, tags and level still from here
   async function forMedia(id, script, getBlob, engine) {
     const k = key(id, script, engine); if (cache.has(k)) return cache.get(k); if (pending.has(k)) return pending.get(k);
-    const p = (async () => { const b = await getBlob(id); if (!b) return null; const x = await decode(b), r = analyse(x, script);
+    const p = (async () => { const b = await getBlob(id); if (!b) return null; let heard = null; try { heard = typeof Listen !== 'undefined' && Listen.heard ? await Listen.heard(id) : null; } catch (e) { heard = null; } const x = await decode(b), r = analyse(x, script, heard);
       if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.02); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
-  return { seed, analyse, fromText, decode, parse, spell, features, forMedia, peek, FPS, _numWords: numWords };
+  return { _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
 })();
