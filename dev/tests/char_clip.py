@@ -22,5 +22,9 @@ async def main():
       fr = await pg.evaluate("""async([i0,i1,fps])=>{ const out=[]; const cv=window.__cv||(window.__cv=document.createElement('canvas')); cv.width=960; cv.height=540; const g=cv.getContext('2d');
         for(let i=i0;i<i1;i++){ g.setTransform(0.5,0,0,0.5,0,0); g.clearRect(0,0,1920,1080); Character.draw(g,i/fps,window.__c,{format:'16:9'},1920,1080); out.push(cv.toDataURL('image/jpeg',0.9).split(',')[1]); } return out; }""", [i0, min(n, i0 + 20), FPS])
       for k, d in enumerate(fr): open(f'{OUT}/f{i0 + k:05d}.jpg', 'wb').write(base64.b64decode(d))
+    # what the hands were doing in these frames (the plan changes with every import: the dice are thrown from the recording's id)
+    tr = await pg.evaluate("""async(fps)=>{ const c=window.__c, rig=Puppet.get(c.puppet), A=Character.syncOf(c), d=Character.duration(c), p=Character.perfOf(c,A,rig,d), hh=rig.pivot.headH, out={ fps, L:[], R:[], moves:p.moves.filter(m=>m.kind==='gesture').map(m=>[m.k,+m.start.toFixed(2),+m.end.toFixed(2),m.side]) };
+      for(let i=0;i<Math.floor(d*fps);i++){ const P=Character.poseAt(c,A,rig,p,i/fps); ['L','R'].forEach(sd=>{ const a=P.arms[sd]; out[sd].push([+(a.dx/hh).toFixed(3),+(a.dy/hh).toFixed(3),+a.rot.toFixed(3),a.art||'']); }); } return out; }""", FPS)
+    json.dump(tr, open(OUT + '/hands.json', 'w'))
     print('frames', n); await b.close()
 asyncio.run(main())
