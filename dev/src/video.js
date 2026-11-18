@@ -251,77 +251,117 @@ const Video = (() => {
   const expo = x => x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2;
   const quint = x => x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2, inQ = x => x * x * x, outQ = x => 1 - Math.pow(1 - x, 3);
   const outBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
-  // One clip's picture drawn with motion blur: at(u) gives [dx, dy, scale, turn] for moments u across the shutter (-0.5..0.5)
-  let trHQ = false;
+  /* Motion blur without steps (November 2026: he asked for CapCut's quality; the old way laid up to 14 copies of the picture
+     along the move, and on a fast whoosh they showed as echoes of the lettering).
+     strip: the two pictures side by side (or one above the other) seen through a window sliding along them. The blur along
+     the slide is exact and cheap: the strip is squeezed along that way by the blur's length (the browser averages the pixels
+     it merges) and stretched back, which is a true smear of that length, the same at any speed. The seam blurs like the rest.
+     mblur: for zooms and turns. The copies go into a smaller picture the bigger the move is (the blur hides the detail
+     anyway), so neighbours sit about two of its pixels apart, however far it travels in a frame. */
+  let trHQ = false; const cl01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+  function strip(g, A, B, W, H, horiz, off, blur, zoom, rot, sx) {
+    const k0 = Math.min(1, A.width / W), f = Math.max(1, blur * k0 / 1.6), hv = horiz ? 'h' : 'v', axis = c => horiz ? c.width : c.height;
+    // the strip at full size, then halved along the slide until the blur's length is about a pixel and a half: each halving
+    // averages neighbours exactly (one big squeeze skipped pixels, which showed as blocks), and the last step takes up the rest
+    let c = scratch('strip' + hv, horiz ? 2 * Math.ceil(W * k0) : Math.ceil(W * k0), horiz ? Math.ceil(H * k0) : 2 * Math.ceil(H * k0)), x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; x.clearRect(0, 0, c.width, c.height);
+    if (horiz) { x.drawImage(A, 0, 0, c.width / 2, c.height); x.drawImage(B, c.width / 2, 0, c.width / 2, c.height); } else { x.drawImage(A, 0, 0, c.width, c.height / 2); x.drawImage(B, 0, c.height / 2, c.width, c.height / 2); }
+    const target = Math.max(8, axis(c) / f); let i = 0;
+    while (axis(c) > target * 1.02 && i < 9) { const to = Math.max(target, axis(c) / 2), nx = scratch('strip' + hv + i, horiz ? Math.ceil(to) : c.width, horiz ? c.height : Math.ceil(to)), ng = nx.getContext('2d'); ng.imageSmoothingEnabled = true; ng.imageSmoothingQuality = 'high'; ng.clearRect(0, 0, nx.width, nx.height); ng.drawImage(c, 0, 0, nx.width, nx.height); c = nx; i++; }
+    const cw = c.width, ch = c.height;
+    const o = cl01(off); g.save(); g.translate(W / 2, H / 2); if (rot) g.rotate(rot); g.scale((zoom || 1) * (horiz ? sx || 1 : 1), (zoom || 1) * (horiz ? 1 : sx || 1)); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    if (horiz) g.drawImage(c, o * cw / 2, 0, cw / 2, ch, -W / 2, -H / 2, W, H); else g.drawImage(c, 0, o * ch / 2, cw, ch / 2, -W / 2, -H / 2, W, H);
+    g.restore();
+  }
   function mblur(g, src, W, H, at, n, key) {
-    const c = scratch(key, src.width, src.height), x = c.getContext('2d'), k = src.width / W;
-    // enough samples that neighbouring copies sit a few pixels apart (fewer showed as stepped ghosts), and a light blur on
-    // each to melt what steps are left
-    const a0 = at(-0.5), a1 = at(0.5), move = (Math.hypot(a1[0] - a0[0], a1[1] - a0[1]) + Math.abs(a1[2] - a0[2]) * W * 0.6 + Math.abs(a1[3] - a0[3]) * W * 0.6) * k;
-    n = Math.max(1, Math.min(trHQ ? 48 : 14, Math.ceil(move / 3)));   /* exports up to 48 copies, the live preview 14 (its blur hides the rest) */ const step = n > 1 ? move / (n - 1) : 0; if (step > 1.5) x.filter = `blur(${Math.min(12, step * 0.6).toFixed(1)}px)`;
-    for (let i = 0; i < n; i++) { const u = n === 1 ? 0 : i / (n - 1) - 0.5, [tx, ty, sc, r] = at(u); x.globalAlpha = 1 / (i + 1); x.setTransform(k, 0, 0, k, 0, 0); x.translate(W / 2 + tx, H / 2 + ty); if (r) x.rotate(r); if (sc !== 1) x.scale(sc, sc); x.drawImage(src, -W / 2, -H / 2, W, H); }
-    x.globalAlpha = 1; x.filter = 'none'; x.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(c, 0, 0, W, H); }
+    const a0 = at(-0.5), a1 = at(0.5), k0 = Math.min(1, src.width / W), move = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]) + Math.abs(a1[2] - a0[2]) * W * 0.6 + Math.abs(a1[3] - a0[3]) * W * 0.6;
+    if (move < 1.5) { const [tx, ty, sc, r] = at(0); g.save(); g.translate(W / 2 + tx, H / 2 + ty); if (r) g.rotate(r); if (sc !== 1) g.scale(sc, sc); g.drawImage(src, -W / 2, -H / 2, W, H); g.restore(); return; }
+    const cap = trHQ ? 72 : 24, k = Math.min(k0, Math.max(0.3, Math.min(1, (cap - 1) * 2.2 / move))); n = Math.max(2, Math.min(cap, Math.ceil(move * k / 2.2) + 1));
+    const c = scratch(key, Math.ceil(W * k), Math.ceil(H * k)), x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.filter = 'none'; x.clearRect(0, 0, c.width, c.height);
+    const step = move * k / (n - 1); if (step > 2.4) x.filter = `blur(${Math.min(8, step * 0.5).toFixed(1)}px)`;
+    for (let i = 0; i < n; i++) { const w = i / (n - 1), tx = a0[0] + (a1[0] - a0[0]) * w, ty = a0[1] + (a1[1] - a0[1]) * w, sc = a0[2] + (a1[2] - a0[2]) * w, r = a0[3] + (a1[3] - a0[3]) * w;   /* evenly from the shutter's opening to its close: an even smear (following the easing inside one frame bunched the copies into an echo) */ x.globalAlpha = 1 / (i + 1); x.setTransform(k, 0, 0, k, 0, 0); x.translate(W / 2 + tx, H / 2 + ty); if (r) x.rotate(r); if (sc !== 1) x.scale(sc, sc); x.drawImage(src, -W / 2, -H / 2, W, H); }
+    x.globalAlpha = 1; x.filter = 'none'; x.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W, H); }
+  // The film burn's grain: smooth noise that is lowest round the edges, so the burn eats in from the sides in ragged tongues
+  let burnTex = null;
+  function burnNoise() { if (burnTex) return burnTex; const w = 192, h = 108, d = new Float32Array(w * h);
+    const vn = (x, y, s) => { const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy), a = hash(ix + s * 17, iy), b = hash(ix + 1 + s * 17, iy), c = hash(ix + s * 17, iy + 1), e = hash(ix + 1 + s * 17, iy + 1); return a + (b - a) * ux + (c - a) * uy + (a - b - c + e) * ux * uy; };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let n = 0, a = 0.5, fq = 3; for (let o = 0; o < 4; o++) { n += vn(x / w * fq * 1.78, y / h * fq, o) * a; a *= 0.5; fq *= 2; } const edge = Math.min(1, Math.min(Math.min(x, w - 1 - x) / w * 1.78, Math.min(y, h - 1 - y) / h) * 3.2); d[y * w + x] = n / 0.9375 * 0.62 + edge * 0.38; }
+    return (burnTex = { w, h, d }); }
+  // a picture seen through a soft mask (fn paints the mask: opaque where the picture shows)
+  function masked(g, src, W, H, key, fn) { const c = scratch(key, src.width, src.height), x = c.getContext('2d'), k = src.width / W; x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, c.width, c.height); x.drawImage(src, 0, 0); x.globalCompositeOperation = 'destination-in'; x.setTransform(k, 0, 0, k, 0, 0); fn(x); x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; g.drawImage(c, 0, 0, W, H); }
   // A colour channel of a picture, for the glitch's red and blue split
   function channel(src, col, key) { const c = scratch(key, src.width, src.height), x = c.getContext('2d'); x.drawImage(src, 0, 0); x.globalCompositeOperation = 'multiply'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = 'destination-in'; x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-over'; return c; }
   const hash = (a, b) => { const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return v - Math.floor(v); };
   function transition(g, A, B, kind, p, W, H, o2) {
     const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2, img = (c, a = 1) => { g.globalAlpha = a; g.drawImage(c, 0, 0, W, H); g.globalAlpha = 1; };
-    trHQ = !!(o2 && o2.hq); const dur = (o2 && o2.dur) || 0.5, n = o2 && o2.hq ? 12 : 7, sh = Math.min(0.3, 0.5 / 30 / Math.max(0.05, dur));   // half a frame of shutter, as a share of the transition
+    trHQ = !!(o2 && o2.hq); const e2 = quint(cl01(p)), dur = (o2 && o2.dur) || 0.5, n = o2 && o2.hq ? 12 : 7, sh = Math.min(0.3, 0.5 / 30 / Math.max(0.05, dur));   // half a frame of shutter, as a share of the transition
     g.save();
     switch (kind) {
-      case 'swL': case 'swR': case 'swU': case 'swD': { const d = { swL: [-1, 0], swR: [1, 0], swU: [0, -1], swD: [0, 1] }[kind], L = d[0] ? W : H, s0 = q => 1 - 0.05 * Math.sin(Math.PI * Math.max(0, Math.min(1, q)));
-        mblur(g, B, W, H, u => { const q = p + u * sh, o = (1 - expo(q)) * L; return [-d[0] * o, -d[1] * o, s0(q), 0]; }, n, 'mbB');
-        mblur(g, A, W, H, u => { const q = p + u * sh, o = expo(q) * L; return [d[0] * o, d[1] * o, s0(q), 0]; }, n, 'mbA'); break; }
-      case 'whip2': { const s2 = sh * 2.6, f = q => quint(Math.max(0, Math.min(1, q)));
-        mblur(g, B, W, H, u => [(1 - f(p + u * s2)) * W * 1.05, 0, 1, 0], n + 4, 'mbB'); mblur(g, A, W, H, u => [-f(p + u * s2) * W * 1.05, 0, 1, 0], n + 4, 'mbA');
-        g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.05 * Math.sin(Math.PI * p); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); break; }
+      case 'swL': case 'swR': case 'swU': case 'swD': { const hz = kind === 'swL' || kind === 'swR', fwd = kind === 'swL' || kind === 'swU', L = hz ? W : H, x = expo(p), v = Math.abs(expo(Math.min(1, p + sh / 2)) - expo(Math.max(0, p - sh / 2))) * L;
+        const bl = Math.max(v, L * 0.07 * Math.pow(Math.sin(Math.PI * p), 2)), z = 1 + 0.05 * Math.sin(Math.PI * p);   // the pair held together and pushed in a touch: no gap between them, no bare edge
+        if (fwd) strip(g, A, B, W, H, hz, x, bl, z); else strip(g, B, A, W, H, hz, 1 - x, bl, z); break; }
+      case 'whip2': { const f = q => quint(cl01(q)), x = f(p), v = Math.abs(f(p + sh * 1.3) - f(p - sh * 1.3)) * W, s1 = Math.sin(Math.PI * p);
+        strip(g, A, B, W, H, true, x, Math.max(v, W * 0.16 * s1 * s1), 1 + 0.08 * s1, 0.022 * Math.sin(Math.PI * 2 * p) * s1);   // a camera whipped round: long smear, a slight tilt, a breath of light
+        g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.07 * s1; g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); break; }
       case 'punch': case 'punchOut': { const s2 = sh * 1.8;   // punches in on the old clip, lands on the new one zoomed in and springs back to size
         if (p < 0.5) { const sA = q => 1 + 2.2 * inQ(Math.max(0, Math.min(1, q * 2))); mblur(g, A, W, H, u => [0, 0, sA(p + u * s2), 0], n, 'mbA'); }
         else { const sB = q => { const x = Math.max(0, Math.min(1, (q - 0.5) * 2)); return 1 + 0.9 * Math.pow(1 - x, 3) - 0.04 * Math.sin(Math.PI * x) * (1 - x); }; mblur(g, B, W, H, u => [0, 0, sB(p + u * s2), 0], n, 'mbB'); }
         g.fillStyle = '#fff'; g.globalAlpha = 0.22 * Math.pow(Math.max(0, 1 - Math.abs(p - 0.5) * 8), 2); g.fillRect(0, 0, W, H); break; }
-      case 'spinB': { const s2 = sh * 2;
-        if (p < 0.5) mblur(g, A, W, H, u => { const x = inQ(Math.max(0, Math.min(1, (p + u * s2) * 2))); return [0, 0, 1 + 0.5 * x, x * Math.PI * 0.6]; }, n + 2, 'mbA');
-        else mblur(g, B, W, H, u => { const x = outQ(Math.max(0, Math.min(1, (p + u * s2 - 0.5) * 2))); return [0, 0, 1.5 - 0.5 * x, -(1 - x) * Math.PI * 0.6]; }, n + 2, 'mbB'); break; }
-      case 'smash': { if (p < 0.5) { const z = 1 + 0.06 * inQ(p * 2); g.translate(W / 2, H / 2); g.scale(z, z); g.drawImage(A, -W / 2, -H / 2, W, H); }
-        else { const q = (p - 0.5) * 2, amp = Math.pow(1 - q, 2), sx = Math.sin(q * 70) * W * 0.025 * amp, sy = Math.cos(q * 53) * H * 0.02 * amp, z = 1 + 0.1 * amp; g.translate(W / 2 + sx, H / 2 + sy); g.scale(z, z); g.drawImage(B, -W / 2, -H / 2, W, H); g.setTransform(g.getTransform()); }
+      case 'spinB': { const s2 = sh * 2, cov = r => Math.abs(Math.cos(r)) + (W / H) * Math.abs(Math.sin(r)) + 0.03 * Math.min(1, Math.abs(r) * 6);   // big enough that the turned picture always fills the frame
+        if (p < 0.5) mblur(g, A, W, H, u => { const x = inQ(cl01((p + u * s2) * 2)), r = x * Math.PI * 0.6; return [0, 0, Math.max(1 + 0.5 * x, cov(r)), r]; }, n + 2, 'mbA');
+        else mblur(g, B, W, H, u => { const x = outQ(cl01((p + u * s2 - 0.5) * 2)), r = -(1 - x) * Math.PI * 0.6; return [0, 0, Math.max(1.5 - 0.5 * x, cov(r)), r]; }, n + 2, 'mbB');
+        g.fillStyle = '#fff'; g.globalAlpha = 0.16 * Math.pow(Math.max(0, 1 - Math.abs(p - 0.5) * 7), 2); g.fillRect(0, 0, W, H); break; }
+      case 'smash': { if (p < 0.5) { const z = 1 + 0.07 * inQ(p * 2); g.translate(W / 2, H / 2); g.scale(z, z); g.drawImage(A, -W / 2, -H / 2, W, H); }
+        else { const q = (p - 0.5) * 2, land = u => { const qq = cl01(q + u * sh * 3), a2 = Math.pow(1 - qq, 2.6); return [Math.sin(qq * 58) * W * 0.03 * a2, Math.cos(qq * 43) * H * 0.028 * a2, 1 + 0.2 * a2, 0.014 * Math.sin(qq * 37) * a2]; };   // lands big and rattles down to size
+          mblur(g, B, W, H, land, n, 'mbB'); }
         g.restore(); g.save(); const fl = p < 0.5 ? 0 : Math.max(0, 1 - (p - 0.5) * 6); if (fl > 0) { g.fillStyle = '#fff'; g.globalAlpha = fl * 0.85; g.fillRect(0, 0, W, H); } break; }
-      case 'glitch2': { const base = p < 0.5 ? A : B, other = p < 0.5 ? B : A, amt = Math.pow(Math.sin(Math.PI * p), 0.6), fr = Math.floor(p * 26), off = W * 0.018 * amt * (0.5 + hash(fr, 3));
+      case 'glitch2': { const base = p < 0.5 ? A : B, other = p < 0.5 ? B : A, amt = Math.pow(Math.sin(Math.PI * p), 0.7), fr = Math.floor(p * dur * 30 + 0.001), near = Math.max(0, 1 - Math.abs(p - 0.5) * 5);
+        const roll = near > 0.4 && hash(fr, 71) < 0.5 ? (hash(fr, 72) - 0.5) * H * 0.1 : 0, off = W * (0.003 + 0.02 * amt * hash(fr, 3));   // the colours pulled apart, the picture slipping a line now and then
         g.fillStyle = '#000'; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'lighter';
-        g.drawImage(channel(base, '#ff0000', 'chR'), -off, 0, W, H); g.drawImage(channel(base, '#00ff00', 'chG'), 0, 0, W, H); g.drawImage(channel(base, '#0000ff', 'chB'), off, 0, W, H); g.globalCompositeOperation = 'source-over';
-        const bands = 9; for (let i = 0; i < bands; i++) { const r = hash(i, fr); if (r > amt * 0.9) continue; const y = Math.floor(hash(i + 7, fr) * H), h = H * (0.02 + 0.08 * hash(i, fr + 3)), dx = (hash(i + 3, fr) - 0.5) * W * 0.22 * amt, src = hash(i + 11, fr) < 0.35 ? other : base;
+        [['#ff0000', 'chR', -off], ['#00ff00', 'chG', 0], ['#0000ff', 'chB', off]].forEach(([col, key, dx]) => { const ch = channel(base, col, key); g.drawImage(ch, dx, roll, W, H); if (roll) g.drawImage(ch, dx, roll + (roll > 0 ? -H : H), W, H); }); g.globalCompositeOperation = 'source-over';   // (a slipped picture wraps round: no bare band)
+        for (let i = 0; i < 7; i++) { if (hash(i, fr) > amt * 0.85) continue; const y = Math.floor(hash(i + 7, fr) * H), h = H * (0.015 + 0.07 * hash(i, fr + 3)), dx = (hash(i + 3, fr) - 0.5) * W * 0.16 * amt, src = near > 0.3 && hash(i + 11, fr) < 0.45 ? other : base;   // slices knocked sideways; only round the cut do they come from the other clip
           g.drawImage(src, 0, y / H * src.height, src.width, h / H * src.height, dx, y, W, h); }
-        for (let i = 0; i < 6; i++) { if (hash(i + 40, fr) > amt * 0.7) continue; g.fillStyle = hash(i, fr + 9) < 0.5 ? 'rgba(0,255,220,0.35)' : 'rgba(255,0,140,0.35)'; g.fillRect(hash(i + 1, fr) * W, hash(i + 2, fr) * H, W * 0.15 * hash(i + 5, fr), H * 0.03); } break; }
-      case 'stretch': { const s2 = sh * 1.8;
-        mblur(g, A, W, H, u => { const q = Math.max(0, Math.min(1, (p + u * s2) * 1.6)), x = inQ(q); return [-x * W * 1.2, 0, 1, 0]; }, n, 'mbA');
-        g.save(); const qB = Math.max(0, Math.min(1, (p - 0.25) / 0.75)), xB = outBack(qB), st = 1 + 0.35 * Math.sin(Math.PI * Math.min(1, qB * 1.3)) * (1 - qB); g.translate(W / 2 + (1 - xB) * W * 1.15, H / 2); g.scale(st, 1 / Math.sqrt(st)); if (qB > 0) g.drawImage(B, -W / 2, -H / 2, W, H); g.restore(); break; }
+        g.globalCompositeOperation = 'screen'; for (let i = 0; i < 5; i++) { if (hash(i + 40, fr) > amt) continue; g.fillStyle = `rgba(255,255,255,${(0.1 + 0.25 * hash(i, fr + 9)).toFixed(2)})`; g.fillRect(0, hash(i + 2, fr) * H, W, Math.max(1, H * 0.003)); }
+        g.globalCompositeOperation = 'source-over'; if (amt > 0.05) { g.globalAlpha = 0.12 * amt; g.fillStyle = '#000'; const st = Math.max(2, Math.round(H / 240)); for (let y = (fr % 2) * st; y < H; y += st * 2) g.fillRect(0, y, W, Math.max(1, st / 2)); g.globalAlpha = 1; }
+        if (near > 0.75) { g.fillStyle = '#fff'; g.globalAlpha = 0.12; g.fillRect(0, 0, W, H); } break; }
+      case 'stretch': { const x = expo(p), s1 = Math.sin(Math.PI * p), v = Math.abs(expo(Math.min(1, p + sh)) - expo(Math.max(0, p - sh))) * W, q = cl01((p - 0.62) / 0.38), settle = 1 + 0.035 * Math.sin(q * Math.PI * 2.2) * (1 - q) * (p > 0.62 ? 1 : 0);
+        strip(g, A, B, W, H, true, x, Math.max(v * 1.6, W * 0.22 * s1 * s1), 1, 0, (1 + 0.3 * s1 * s1) * settle); break; }   // the picture pulled long as it goes, the new one arriving long and springing back to shape
       case 'cover': { const x = expo(p); g.save(); g.translate(W / 2, H / 2); const z = 1 - 0.08 * x; g.scale(z, z); g.drawImage(A, -W / 2, -H / 2, W, H); g.restore(); g.fillStyle = 'rgba(0,0,0,' + (0.55 * x) + ')'; g.fillRect(0, 0, W, H);
         const bx = (1 - x) * W, sg = g.createLinearGradient(bx - W * 0.06, 0, bx, 0); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(0,0,0,0.6)'); g.fillStyle = sg; g.fillRect(bx - W * 0.06, 0, W * 0.06, H);
         mblur(g, B, W, H, u => [(1 - expo(p + u * sh)) * W, 0, 1, 0], n, 'mbB'); break; }
       case 'leak': { img(A); img(B, e); const a = Math.sin(Math.PI * p); g.globalCompositeOperation = 'screen';
-        [[-0.3 + 1.6 * p, 0.35, '255,120,30', 0.75], [-0.6 + 1.9 * p, 0.75, '255,70,40', 0.4], [1.2 - 1.4 * p, 0.2, '255,200,110', 0.55]].forEach(([cx, cy, col, k]) => { const R = Math.max(W, H) * 0.5, gr = g.createRadialGradient(cx * W, cy * H, 0, cx * W, cy * H, R); gr.addColorStop(0, `rgba(${col},${(k * a).toFixed(3)})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(0, 0, W, H); });
-        g.fillStyle = `rgba(255,225,190,${(0.12 * a * a).toFixed(3)})`; g.fillRect(0, 0, W, H); break; }
-      case 'burn': { img(p < 0.55 ? A : B); const a = Math.sin(Math.PI * p); g.globalCompositeOperation = 'lighter';
-        for (let i = 0; i < 4; i++) { const cx = (0.15 + 0.7 * hash(i, 1)) * W, cy = (0.2 + 0.6 * hash(i, 2)) * H, R = Math.max(W, H) * (0.15 + 1.1 * Math.pow(p, 1.3)) * (0.6 + 0.6 * hash(i, 3)), gr = g.createRadialGradient(cx, cy, 0, cx, cy, R);
-          gr.addColorStop(0, `rgba(255,255,230,${(a * 0.95).toFixed(3)})`); gr.addColorStop(0.35, `rgba(255,190,60,${(a * 0.8).toFixed(3)})`); gr.addColorStop(0.7, `rgba(220,60,10,${(a * 0.5).toFixed(3)})`); gr.addColorStop(1, 'rgba(120,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H); } break; }
+        [[-0.3 + 1.6 * p, 0.35, '255,120,30', 0.95], [-0.6 + 1.9 * p, 0.75, '255,60,40', 0.6], [1.2 - 1.4 * p, 0.2, '255,200,110', 0.75], [0.5 + 0.3 * Math.sin(p * 5), 0.5, '255,170,80', 0.35]].forEach(([cx, cy, col, k]) => { const R = Math.max(W, H) * 0.5, gr = g.createRadialGradient(cx * W, cy * H, 0, cx * W, cy * H, R); gr.addColorStop(0, `rgba(${col},${(k * a).toFixed(3)})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(0, 0, W, H); });
+        { const sx = (-0.2 + 1.4 * p) * W, sg = g.createLinearGradient(sx - W * 0.5, 0, sx + W * 0.5, 0); sg.addColorStop(0, 'rgba(255,190,120,0)'); sg.addColorStop(0.5, `rgba(255,215,160,${(0.5 * a).toFixed(3)})`); sg.addColorStop(1, 'rgba(255,190,120,0)'); g.fillStyle = sg; g.fillRect(0, H * 0.42, W, H * 0.08); }   // a streak across, like light down a lens
+        g.globalCompositeOperation = 'soft-light'; g.fillStyle = `rgba(255,150,60,${(0.5 * a).toFixed(3)})`; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'screen'; g.fillStyle = `rgba(255,225,190,${(0.16 * a * a).toFixed(3)})`; g.fillRect(0, 0, W, H); break; }
+      case 'burn': { const T = burnNoise(), th = -0.1 + 1.2 * e, mk = (key) => { const c = scratch(key, T.w, T.h); return [c, c.getContext('2d')]; };   // the film catching: scorched brown, a bright ragged edge, the new picture through the holes
+        const [mc, mx] = mk('burnM'), [gc, gx] = mk('burnG'), [dc, dx] = mk('burnD'), M = mx.createImageData(T.w, T.h), G = gx.createImageData(T.w, T.h), D = dx.createImageData(T.w, T.h);
+        for (let i = 0, j = 0; i < T.d.length; i++, j += 4) { const v = T.d[i] - th, hot = Math.exp(-(v * v) / 0.0011), halo = v > 0 ? Math.exp(-(v * v) / 0.011) : Math.exp(-(v * v) / 0.003) * 0.6, sc = v > 0 ? Math.exp(-(v * v) / 0.03) : 0;
+          M.data[j + 3] = v < -0.012 ? 255 : v > 0.012 ? 0 : Math.round(255 * (0.012 - v) / 0.024);
+          G.data[j] = 255; G.data[j + 1] = Math.min(255, Math.round(255 * (hot * 0.95 + halo * 0.5))); G.data[j + 2] = Math.min(255, Math.round(255 * (hot * 0.75 + halo * 0.06))); G.data[j + 3] = Math.min(255, Math.round(255 * (hot + halo * 0.85)));
+          D.data[j] = 46; D.data[j + 1] = 14; D.data[j + 2] = 4; D.data[j + 3] = Math.round(190 * sc); }
+        mx.putImageData(M, 0, 0); gx.putImageData(G, 0, 0); dx.putImageData(D, 0, 0); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+        img(A); g.drawImage(dc, 0, 0, W, H); masked(g, B, W, H, 'burnB', x => { x.imageSmoothingQuality = 'high'; x.drawImage(mc, 0, 0, W, H); });
+        g.globalCompositeOperation = 'screen'; g.drawImage(gc, 0, 0, W, H); g.globalAlpha = 0.55; g.drawImage(gc, 0, 0, W, H); g.globalAlpha = 1; break; }
       case 'ink': { const INK = '#0b0a12';
         if (p < 0.55) { img(A); const c = inQ(Math.min(1, p / 0.55)), R = Math.hypot(W, H) * 0.62 * c; g.fillStyle = INK; g.beginPath(); g.ellipse(W * 0.5, H * 0.45, R * 1.15, R, 0, 0, Math.PI * 2);
           for (let i = 0; i < 26; i++) { const an = hash(i, 5) * Math.PI * 2, L2 = R * (1 + 0.5 * hash(i, 6)), rr = R * (0.08 + 0.14 * hash(i, 7)); g.moveTo(W * 0.5 + Math.cos(an) * L2 * 1.15 + rr, H * 0.45 + Math.sin(an) * L2); g.arc(W * 0.5 + Math.cos(an) * L2 * 1.15, H * 0.45 + Math.sin(an) * L2, rr, 0, Math.PI * 2); } g.fill(); }
-        else { img(B); const q = outQ((p - 0.55) / 0.45), y = q * H * 1.25; g.fillStyle = INK; g.beginPath(); g.moveTo(0, H); g.lineTo(0, y); for (let x = 0; x <= W; x += W / 40) { const drip = Math.pow(hash(Math.round(x / (W / 40)), 9), 3) * H * 0.25 * (1 - q * 0.3); g.lineTo(x, y + drip); } g.lineTo(W, H); g.closePath(); g.fill(); } break; }
+        else { img(B); const q = inQ(cl01((p - 0.55) / 0.45)) * 0.6 + cl01((p - 0.55) / 0.45) * 0.4, y = q * H * 1.5 - H * 0.12, NP = 13, edge = xx => { const fx = xx / W * NP, i = Math.floor(fx), t = fx - i, u = (1 - Math.cos(Math.PI * t)) / 2, a = hash(i, 9), b = hash(i + 1, 9), nse = a + (b - a) * u; return y - Math.pow(nse, 2.4) * H * 0.42 * (0.35 + 0.65 * q) - Math.sin(xx / W * 37) * H * 0.006; };   // it runs off the bottom, the slow parts hanging back as long rounded drips
+          g.fillStyle = INK; g.beginPath(); g.moveTo(0, H + 2); for (let xx = 0; xx <= W; xx += W / 160) g.lineTo(xx, Math.min(H + 2, edge(xx))); g.lineTo(W, H + 2); g.closePath(); g.fill(); } break; }
       case 'black': case 'white': { if (p < 0.5) img(A); else img(B); g.fillStyle = kind === 'black' ? '#000' : '#fff'; g.globalAlpha = 1 - Math.abs(p - 0.5) * 2; g.fillRect(0, 0, W, H); break; }
       case 'flash': { img(p < 0.5 ? A : B); g.fillStyle = '#fff'; g.globalAlpha = Math.pow(1 - Math.abs(p - 0.5) * 2, 2); g.fillRect(0, 0, W, H); break; }
-      case 'wipeL': case 'wipeR': case 'wipeU': case 'wipeD': { img(A); g.beginPath(); if (kind === 'wipeL') g.rect(W * (1 - e), 0, W * e + 1, H); else if (kind === 'wipeR') g.rect(0, 0, W * e, H); else if (kind === 'wipeU') g.rect(0, H * (1 - e), W, H * e + 1); else g.rect(0, 0, W, H * e); g.clip(); img(B); break; }
-      case 'slideL': case 'slideR': { img(A); const dx = (kind === 'slideL' ? 1 : -1) * W * (1 - e); g.drawImage(B, dx, 0, W, H); break; }
-      case 'pushL': case 'pushR': case 'pushU': case 'pushD': { const s = kind === 'pushL' || kind === 'pushU' ? -1 : 1, hz = kind === 'pushL' || kind === 'pushR'; const o = e * (hz ? W : H) * s;
-        if (hz) { g.drawImage(A, o, 0, W, H); g.drawImage(B, o - s * W, 0, W, H); } else { g.drawImage(A, 0, o, W, H); g.drawImage(B, 0, o - s * H, W, H); } break; }
-      case 'zoomIn': { const s = 1 + e * 0.6; g.save(); g.translate(W / 2, H / 2); g.scale(s, s); g.globalAlpha = 1 - e; g.drawImage(A, -W / 2, -H / 2, W, H); g.restore(); const s2 = 0.7 + 0.3 * e; g.save(); g.translate(W / 2, H / 2); g.scale(s2, s2); g.globalAlpha = e; g.drawImage(B, -W / 2, -H / 2, W, H); g.restore(); break; }
-      case 'zoomOut': { const s = 1 - e * 0.35; img(B, 1); g.save(); g.translate(W / 2, H / 2); g.scale(s, s); g.globalAlpha = 1 - e; g.drawImage(A, -W / 2, -H / 2, W, H); g.restore(); break; }
-      case 'spin': { const r = e * Math.PI * 2, s = 1 - Math.sin(e * Math.PI) * 0.4; g.translate(W / 2, H / 2); g.rotate(r); g.scale(s, s); g.globalAlpha = 1; g.drawImage(p < 0.5 ? A : B, -W / 2, -H / 2, W, H); break; }
-      case 'circle': { img(A); g.beginPath(); g.arc(W / 2, H / 2, Math.hypot(W, H) / 2 * e, 0, Math.PI * 2); g.clip(); img(B); break; }
-      case 'clock': { img(A); g.beginPath(); g.moveTo(W / 2, H / 2); g.arc(W / 2, H / 2, Math.hypot(W, H), -Math.PI / 2, -Math.PI / 2 + e * Math.PI * 2); g.closePath(); g.clip(); img(B); break; }
-      case 'split': { img(B); const o = e * W / 2; g.save(); g.beginPath(); g.rect(0, 0, W / 2, H); g.clip(); g.drawImage(A, -o, 0, W, H); g.restore(); g.beginPath(); g.rect(W / 2, 0, W / 2, H); g.clip(); g.drawImage(A, o, 0, W, H); break; }
+      case 'wipeL': case 'wipeR': case 'wipeU': case 'wipeD': { img(A); const hz = kind === 'wipeL' || kind === 'wipeR', L = hz ? W : H, fw = L * 0.09, back = kind === 'wipeL' || kind === 'wipeU', b = back ? (L + fw) * (1 - e2) - fw / 2 : (L + fw) * e2 - fw / 2;   // a soft edge, eased
+        masked(g, B, W, H, 'wipe', x => { const a = back ? b - fw / 2 : b + fw / 2, z = back ? b + fw / 2 : b - fw / 2, gr = hz ? x.createLinearGradient(a, 0, z, 0) : x.createLinearGradient(0, a, 0, z); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, '#000'); x.fillStyle = gr; x.fillRect(0, 0, W, H); }); break; }
+      case 'slideL': case 'slideR': { img(A); const sg = kind === 'slideL' ? 1 : -1; g.fillStyle = 'rgba(0,0,0,' + (0.35 * e2).toFixed(3) + ')'; g.fillRect(0, 0, W, H); mblur(g, B, W, H, u => [sg * W * (1 - quint(cl01(p + u * sh))), 0, 1, 0], n, 'mbB'); break; }
+      case 'pushL': case 'pushR': case 'pushU': case 'pushD': { const hz = kind === 'pushL' || kind === 'pushR', fwd = kind === 'pushL' || kind === 'pushU', L = hz ? W : H, v = Math.abs(quint(cl01(p + sh / 2)) - quint(cl01(p - sh / 2))) * L;
+        if (fwd) strip(g, A, B, W, H, hz, e2, v, 1); else strip(g, B, A, W, H, hz, 1 - e2, v, 1); break; }
+      case 'zoomIn': { const e = e2, s = 1 + e * 0.6; g.save(); g.translate(W / 2, H / 2); g.scale(s, s); g.globalAlpha = 1 - e; g.drawImage(A, -W / 2, -H / 2, W, H); g.restore(); const s2 = 0.7 + 0.3 * e; g.save(); g.translate(W / 2, H / 2); g.scale(s2, s2); g.globalAlpha = e; g.drawImage(B, -W / 2, -H / 2, W, H); g.restore(); break; }
+      case 'zoomOut': { const e = e2, s = 1 - e * 0.35; img(B, 1); g.save(); g.translate(W / 2, H / 2); g.scale(s, s); g.globalAlpha = 1 - e; g.drawImage(A, -W / 2, -H / 2, W, H); g.restore(); break; }
+      case 'spin': { const rr = q => quint(cl01(q)) * Math.PI * 2, cov = r => Math.abs(Math.cos(r)) + (W / H) * Math.abs(Math.sin(r)); mblur(g, p < 0.5 ? A : B, W, H, u => { const r = rr(p + u * sh); return [0, 0, cov(r) + 0.02 * Math.min(1, Math.abs(Math.sin(r)) * 8), r]; }, n, 'mbA'); break; }
+      case 'circle': { img(A); const R = Math.hypot(W, H) / 2, fw = R * 0.1, r = e2 * (R + fw); masked(g, B, W, H, 'wipe', x => { const gr = x.createRadialGradient(W / 2, H / 2, Math.max(0, r - fw), W / 2, H / 2, Math.max(0.01, r)); gr.addColorStop(0, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = gr; x.fillRect(0, 0, W, H); }); break; }
+      case 'clock': { const e = e2; img(A); g.beginPath(); g.moveTo(W / 2, H / 2); g.arc(W / 2, H / 2, Math.hypot(W, H), -Math.PI / 2, -Math.PI / 2 + e * Math.PI * 2); g.closePath(); g.clip(); img(B); break; }
+      case 'split': { const e = e2; img(B); const o = e * W / 2; g.save(); g.beginPath(); g.rect(0, 0, W / 2, H); g.clip(); g.drawImage(A, -o, 0, W, H); g.restore(); g.beginPath(); g.rect(W / 2, 0, W / 2, H); g.clip(); g.drawImage(A, o, 0, W, H); break; }
       case 'squeeze': { if (p < 0.5) { const s = 1 - e * 2; g.drawImage(A, W * (1 - Math.max(0.001, s)) / 2, 0, W * Math.max(0.001, s), H); } else { const s = (e - 0.5) * 2; g.drawImage(B, W * (1 - Math.max(0.001, s)) / 2, 0, W * Math.max(0.001, s), H); } break; }
       case 'blur': { const b = Math.sin(p * Math.PI) * 28; g.filter = `blur(${b.toFixed(1)}px)`; img(A, 1 - e); img(B, e); break; }
-      case 'whip': { const b = Math.sin(p * Math.PI) * 40, o = e * W; g.filter = `blur(${b.toFixed(1)}px)`; g.drawImage(A, -o, 0, W, H); g.drawImage(B, W - o, 0, W, H); break; }
+      case 'whip': { const s1 = Math.sin(Math.PI * p); strip(g, A, B, W, H, true, e2, W * 0.14 * s1 * s1 + 2, 1 + 0.04 * s1); break; }
       case 'glitch': { img(p < 0.5 ? A : B); const n = 14, src = p < 0.5 ? B : A, amt = Math.sin(p * Math.PI); for (let i = 0; i < n; i++) { const r = Math.sin(i * 91.7 + Math.floor(p * 20) * 13.1) * 0.5 + 0.5; if (r > amt) continue; const y = i / n * H, h = H / n, dx = (r - 0.5) * W * 0.25 * amt; g.drawImage(src, 0, y / H * src.height, src.width, h / H * src.height, dx, y, W, h); } break; }
       case 'dissolve': { img(A); const n = 24, cw = W / n, ch = H / Math.round(n * H / W) || H / n, rows = Math.ceil(H / ch); g.beginPath(); for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) { const r = (Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1; if (Math.abs(r) < e) g.rect(i * cw, j * ch, cw + 0.5, ch + 0.5); } g.clip(); img(B); break; }
       default: img(A); img(B, e);
