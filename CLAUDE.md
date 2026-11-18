@@ -554,6 +554,35 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   follows its drawing and drawings shorter than 0.2 s are skipped (`p.bk.art`): his relaxed and open hands swapping in
   mid air read as a glitch. The open (back of hand) drawing is not used automatically. Thumbs down was dropped (a mirrored
   hand). Missing shapes he could draw: side on (chop) and pinch.
+* **Both hands** (fourth version, November 2026: he found the left hand working while the right lay still "very robotic" and
+  "very fake", and asked for a natural use of one hand and both). What `planHands` does now, all from its own dice (`R2`, so
+  the head and eyes keep theirs):
+  * Every thought (unit) picks its hands: the left on its own most often, both for about a third (more for questions, size,
+    amounts, contrasts, anything said with force), now and then the right on its own; never three two handed thoughts
+    running, and a hand that has not been up for 8 s gets the next turn (`upT`, and `since` for the leftover lines).
+  * Two hands are never one hand twice (`unit.r`): the second comes up a moment behind, or only joins in for the strongest
+    word, or goes back down after it; it is smaller, a little late on each beat, misses some small ones, and has its own
+    place and turn. His right hand keeps lower, towards the middle and turned away from the microphone, or it is lost
+    behind it.
+  * The hands beat on their own list of stresses (`p.hbeats`, every word that stands out from its neighbours: about twice
+    as many as the nods), with a small lift before each; after each beat a raised hand lands somewhere a little different
+    and holds (`stations`, `unit.st`, `stR`); every thought has its own height, place and turn (`amp`, `ox`, `or`); the
+    wrist travels in an arc. `stress` (inside a raised thought) lifts ahead of the word and comes down on it.
+  * Lines left over get a quick low hand (`beat`) when the line has something in it, when no hand has been up for 1.3 s
+    either side, or when a hand is due; the rest work on the desk (`desk`). A thought starting within 0.6 s of the last
+    keeps the hand in the air (and `mu + md` in the blend: one gesture going out and one coming in on the same hand do not
+    dip to the desk between them). Natural has a hand picture up for about six tenths of the talking, Animated about
+    three quarters; Calm stays mostly on the desk.
+  * A hand at rest is alive: it gives with the other hand's stronger beats, sits a little readier while the other is up,
+    shifts and settles every eight seconds or so, and drifts. Keep it small: a fidgeting hand reads as nervous.
+  * Checks: `tests/char_hands_use.js` (runjs, his recording, several throws of the dice: shares for left, right, both,
+    neither; longest the right hand lies flat; most talking in a row with both hands flat; shortest drawing; jumps; `bad`
+    lists anything outside the natural range), `tests/char_hands_trace.py PORT OUT.json` then `plot OUT.json OUT.png t0 t1`
+    (both hands' height, place and turn against the words: look at this before judging a change), `tests/char_clip.py`
+    now also writes `hands.json` for its frames (the plan changes with every import: the dice come from the recording's
+    id). Hand beats land about 10 ms before the stress (left), the second hand about 20 ms after.
+  * He said new hand pictures could be made if needed; none were. Drawings that would add most if he draws them: a
+    second way of resting (hands together), side on (chop) and pinch.
 * **Listen** (`dev/src/listen.js`, `listen/`, about 180 MB, IndexedDB `patter-listen`): Whisper base English int8 ONNX in a
   helper writes the words from his recording, so a voiceover alone drives the character ("Write the words from the
   recording"). Tests serve `dev/tmp_lshome/{listen,cutout}` through `window.PATTER_LISTEN`. A PatterScript file can be
