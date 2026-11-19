@@ -306,7 +306,7 @@ const ChartKit = (() => {
     // the list
     const L = p.list; rows.forEach((r, i) => { const s = ease.out3((t - p.st[i] + 0.1) / 0.45); if (s <= 0) return; const y = L.y + (i + 0.5) * L.rh, col = colOf(r, i), fs = Math.min(34 * u, L.rh * 0.42), share = r.v[0] / p.sum; al(ctx, s * (1 - out)); const x = L.x + (1 - s) * 30 * u;
       ctx.fillStyle = col; rr(ctx, x, y - fs * 0.42, fs * 0.84, fs * 0.84, th.comic ? 0 : fs * 0.22); ctx.fill(); if (th.comic) { ctx.lineWidth = 3 * u; ctx.strokeStyle = th.edge; ctx.stroke(); }
-      const right = mode === 'value' ? p.fmt(r.v[0]) : nf(0, share < 0.1 && share > 0 ? 1 : 0).format(share * 100 * ease.out3((t - p.st[i]) / 0.6)) + '%'; ctx.font = fd(fs * 1.15); const rw = ctx.measureText(mode === 'value' ? right : '100%').width; label(ctx, right, L.x + L.w, y + 2 * u, fd(fs * 1.15), r.hl ? col : th.text, 'right');
+      const right = mode === 'value' ? p.fmt(r.v[0]) : nf(0, share < 0.01 && share > 0 ? 1 : 0).format(share * 100 * ease.out3((t - p.st[i]) / 0.6)) + '%'; ctx.font = fd(fs * 1.15); const rw = ctx.measureText(mode === 'value' ? right : '100%').width; label(ctx, right, L.x + L.w, y + 2 * u, fd(fs * 1.15), r.hl ? col : th.text, 'right');
       ctx.font = fl(fs, r.hl ? 800 : 600); label(ctx, clip(ctx, r.l, L.w - fs * 1.4 - rw - 24 * u), x + fs * 1.4, y + 1 * u, fl(fs, r.hl ? 800 : 600), r.hl ? th.text : (th.comic ? th.text : th.dim), 'left');
       al(ctx, 1); });
     p.ms.forEach((c, k) => { const mid = (p.arc[c.row][0] + p.arc[c.row][1]) / 2, rr2 = R + 26 * u; drawCallout(ctx, t, p, th, C, u, c, p.cx + Math.cos(mid) * rr2, p.cy + Math.sin(mid) * rr2, k, [Math.cos(mid), Math.sin(mid)]); });   // out along the slice
