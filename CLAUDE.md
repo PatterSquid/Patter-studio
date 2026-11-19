@@ -176,13 +176,14 @@ the same frame; keep it that way:
 * Nothing scrolls the page at 1366 by 768; only the panels scroll. Tests click tabs and rail buttons with JS
   (`button[data-mod=...]`) and add things through `.tl-add` then `.tl-addmenu button`.
 
-## The motion pass on the Graphics tabs (branch `motion-pass`, November 2026, NOT PUBLISHED YET)
+## The motion pass on the Graphics tabs (November 2026, published as 2026.11.19.2)
 
 After the Charts he asked for the quality of the animation in the other Graphics tabs to be raised ("the newspaper etc",
 "not the actual animator", "remembering to make it efficient for export"). Scope: Newspaper, Timeline, Pictogram, World
 map, Flights, Flyover. Story, B roll, Studio and Character are left alone unless he says otherwise. He saw the Newspaper
-first as a before and after and said "Go" for the other five; each was sent as its own before and after. Publish only
-when he says.
+first as a before and after and said "Go" for the other five; each was sent as its own before and after, and he
+said "Publish" the same evening. He has not yet said what he thinks of them in use: if he comes back on one, change that
+tab only and keep the rules below.
 * **The rules of the pass.** Every clip keeps its exact length and the moment each thing lands (`duration()` and the
   plan's times do not change: his videos are cut to them). No frame gets slower to export (measure with `tests/prof.py`
   and, for one stretch at 1080p, a frame timer; software drawing here, so compare builds, not absolute numbers). Change
