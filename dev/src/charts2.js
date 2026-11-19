@@ -181,7 +181,8 @@ const ChartKit = (() => {
   function drawCard(ctx, p, th, C, u) {
     const c = p.card, w = c.x1 - c.x0, h = c.y1 - c.y0;
     if (th.comic) { E.panel(ctx, c.x0, c.y0, w, h, C, u, { grain: true }); return; }
-    for (let k = 5; k >= 1; k--) { al(ctx, 0.055); ctx.fillStyle = '#000814'; rr(ctx, c.x0 - k * 5 * u, c.y0 - k * 3 * u + 20 * u, w + k * 10 * u, h + k * 8 * u, th.r * u + k * 5 * u); ctx.fill(); }
+    { /* the soft shadow: five see-through boxes, each with the middle left out once the card is solid (it covers it), so only the rim is painted */ const ins = Math.max(12 * u, th.r * u * 0.34);
+      for (let k = 5; k >= 1; k--) { al(ctx, 0.055); ctx.fillStyle = '#000814'; rr(ctx, c.x0 - k * 5 * u, c.y0 - k * 3 * u + 20 * u, w + k * 10 * u, h + k * 8 * u, th.r * u + k * 5 * u); if (GA >= 1 && w > ins * 4 && h > ins * 6) ctx.rect(c.x0 + ins, c.y0 + 20 * u + ins, w - ins * 2, h - 20 * u - ins * 2); ctx.fill('evenodd'); } }
     al(ctx, 1); const gr = ctx.createLinearGradient(0, c.y0, 0, c.y1); gr.addColorStop(0, th.card); gr.addColorStop(1, th.card2); ctx.fillStyle = gr; rr(ctx, c.x0, c.y0, w, h, th.r * u); ctx.fill(); ctx.lineWidth = 2 * u; ctx.strokeStyle = th.edge; ctx.stroke();
   }
   /* The title as a small picture, made once. The browser sets words on whole pixels up and down, so under the slow camera a

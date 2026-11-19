@@ -44,10 +44,10 @@ const Charts = (() => {
     const key = JSON.stringify(cfg) + look.format + W + 'x' + H + (E.fontVersion || 0);
     if (key === cacheKey) return cache;
     const u = Math.min(W, H) / 1080, tall = H > W;
-    const rows = cfg.rows.map(r => [String(r[0]).trim(), parseFloat(String(r[1]).replace(/[^0-9.\-]/g, ''))]).filter(r => r[0] !== '' && isFinite(r[1]));
+    const rows = (Array.isArray(cfg.rows) ? cfg.rows : []).filter(r => Array.isArray(r)).map(r => [String(r[0]).trim(), parseFloat(String(r[1]).replace(/[^0-9.\-]/g, ''))]).filter(r => r[0] !== '' && isFinite(r[1]));
     if (rows.length < 2) rows.push(...[['A', 1], ['B', 2]].slice(rows.length));
     const L = rows.map(r => r[0]), V = rows.map(r => r[1]), n = V.length, bar = cfg.type === 'bar';
-    const dec = cfg.decimals === 'auto' ? Math.min(2, Math.max(0, ...cfg.rows.map(r => ((String(r && r[1]).split('.')[1]) || '').replace(/[^0-9]/g, '').length))) : Math.round(cl(+cfg.decimals || 0, 0, 6));
+    const dec = cfg.decimals === 'auto' ? Math.min(2, Math.max(0, ...(Array.isArray(cfg.rows) ? cfg.rows : []).map(r => ((String(r && r[1]).split('.')[1]) || '').replace(/[^0-9]/g, '').length)) || 0) : Math.round(cl(+cfg.decimals || 0, 0, 6));
     let mn = Math.min(...V), mx = Math.max(...V);
     if (bar || cfg.zeroBase) { mn = Math.min(0, mn); mx = Math.max(0, mx); }
     const pad = (mx - mn) * 0.1 || Math.abs(mx) * 0.1 || 1;
@@ -268,7 +268,7 @@ const Charts = (() => {
 
   // Inputs form for a classic chart (as it was), with the way out to the kit on top
   function formClassic(root, cfg, changed) {
-    root.innerHTML = '';
+    root.innerHTML = ''; if (!Array.isArray(cfg.rows)) cfg.rows = [['', ''], ['', '']]; if (cfg.rows.some(r => !Array.isArray(r))) cfg.rows = cfg.rows.map(r => Array.isArray(r) ? r : ['', '']);   /* only ever true of a damaged chart that was never mended */
     const H = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); Object.entries(attrs).forEach(([k, v]) => { if (k === 'on') Object.entries(v).forEach(([ev, fn]) => e.addEventListener(ev, fn)); else if (k in e && k !== 'list') e[k] = v; else e.setAttribute(k, v); }); kids.flat().forEach(k => e.append(k)); return e; };
     const field = (label, ctrl, hint) => H('label', { className: 'field' }, H('span', { className: 'lab' }, label), ctrl, hint ? H('span', { className: 'hint' }, hint) : '');
     const sel = (val, opts, fn) => H('select', { on: { change: e => fn(e.target.value) } }, ...opts.map(([v, l]) => H('option', { value: v, selected: String(v) === String(val), textContent: l })));

@@ -176,6 +176,46 @@ the same frame; keep it that way:
 * Nothing scrolls the page at 1366 by 768; only the panels scroll. Tests click tabs and rail buttons with JS
   (`button[data-mod=...]`) and add things through `.tl-add` then `.tl-addmenu button`.
 
+## Charts (dev/src/charts2.js `ChartKit`, dev/src/charts.js `Charts`, module `charts`)
+
+He called the Charts tab amateur (November 2026) and asked for more kinds of chart, professional and smooth animation, and
+a panel that is easy and says plainly what can be typed in. The chart kit is the answer; the old two charts are kept only
+so charts he already made stay exactly as they were.
+* **One table for every kind.** `rows` is `[[label, v1, v2, ...]]`, `series` is `[{ name, colour }]` (a column each),
+  `rowHl` (1 for a highlighted row) and `rowCol` (a row's own colour, '' for none) run alongside the rows; keep those two
+  dense lists of plain values (Repair drops empty slots). `type`: bar, hbar, grouped, stacked, line, area, pie, donut, race
+  (columns are moments in time), number (big counting numbers, a second column is the change), percent (`outOf`).
+  `ChartKit.TYPES` says what each kind takes (`many` columns, `time`, `what`: the words shown over the table) and
+  `EXAMPLES` has a ready table for each ("Fill with an example"; an untouched example follows the kind he picks).
+* **Three looks** (`style`): `sleek` (dark card, the default), `light`, `comic` (thick outlines, slams in, banner title).
+  `theme(cfg, C)` holds every colour and radius; draw through `block`, `label`, `strong`, `drawCard`, `drawHeader`,
+  `drawGrid`, `drawRefs`, `drawCallout` so a new kind gets all three looks.
+* Everything is a pure function of time from `plan(cfg, look, W, H)` (kept by the settings, size and `E.fontVersion`).
+  `timing.intro` and `timing.draw` are the Title and build bars on the timeline (`tracks`); `speed`, `order` (rows, big,
+  small, together), `hold`, `ending` ('out'), `camera` (a slow push, a lean onto each callout, pulls back; the card is never
+  cut by the frame; the background is not scaled, only the card), `milestones` (up to three callouts `{ on, idx, caption }`),
+  `avg`, `ref` with `refValue` and `refLabel`, `counter`, `labels`, `legend`, `sort`, `top` (race), `centre` (donut).
+* **Old charts are untouched**: a chart with no `style` and no `series` is classic and is drawn by the old code in
+  charts.js. `Charts.legacy(cfg, depth)` (called by `Repair.clip` before it fills defaults) returns the new keys to leave
+  out, so charts inside his videos and projects keep their settings, pixels and lengths (`tests/chart_old_same.py`
+  against the published build on 8766: must say "all the same"). The Charts tab's own chart, when it is still the old
+  untouched example, becomes the new example. The classic panel has "Bring it up to date" (`upgrade`, look comic).
+* The panel (`form`): kind tiles (`.ck-types`), look (`.ck-seg`), title lines, the table (`.ck-table`: cells with `data-r`
+  and `data-c`, a colour dot and remove under each column name, a colour dot, star and remove on each row; paste from Excel
+  or Sheets straight into a cell or into the paste box: `readGrid`, `cleanNum`, `putGrid`), Numbers, Extras, Callouts,
+  Animation. The form is in the page twice (the aside and a hidden scene panel): tests use `:visible`.
+* A paused chart rests on its finished picture (`park`, `E.Player.toEnd()`, `begin()` in app.js), so he sees the chart he
+  is typing, not an empty card; Play starts from the beginning.
+* **Words tick, shapes glide.** The browser sets canvas text on whole pixels up and down (whatever the transform), so under a
+  slow camera a big title drawn as words steps a pixel at a time. The title is made once as a picture (`titlePic`, a
+  little bigger than it is shown) and laid on. Do the same for any other big words that ride a slow move.
+* No `shadowBlur` (soft shadows are stacked see-through rounded boxes). Tests load Anton and Archivo Narrow from
+  `dev/tmp_fonts/` (the fontsource copies; the command is in `tests/chart_sheet.py`) because headless cannot reach Google
+  Fonts. Checks: `tests/chart_sheet.py OUT [port] [names]` (contact sheets: `STYLE`, `AT`, `N`, `COLS`, `W`, `FMT`,
+  `CASES`), `tests/chart_ui.py` (27 real steps in the panel), `tests/chart_damaged.js` (runjs: every kind and the classic
+  ones with damaged settings, mended or not), `tests/chart_old_same.py`, `tests/popdet.js '{"mods":["charts"],"all":true}'`
+  (every kind frame by frame: none may list a pop).
+
 ## The Audio tab (dev/src/audio_fx.js `AudioFX`, dev/src/audio_ui.js `AudioTab`, module `audio`)
 
 Voice clean up and editing, its own top tab. `body.aud` gives `#audioWs` the whole of main; the module's `form()` draws the
