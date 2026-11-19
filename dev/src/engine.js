@@ -337,5 +337,42 @@ const E = (() => {
   // Clock readouts shared by every timeline and the play bar: minutes, seconds and frames, and the short labels on a ruler
   const tc = (s, fps = 30) => { s = Math.max(0, +s || 0); const m = Math.floor(s / 60), sec = Math.floor(s % 60), f = Math.min(fps - 1, Math.floor((s - Math.floor(s)) * fps + 1e-6)); return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0') + ':' + String(f).padStart(2, '0'); };
   const rulerLabel = (s, step) => { s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60; if (step >= 1) return m + ':' + String(Math.round(r)).padStart(2, '0'); const d = step < 0.1 ? 2 : 1, v = r.toFixed(d); return m + ':' + (r < 10 ? '0' : '') + v; };
-  return { tc, rulerLabel, previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
+  /* The motion kit (quality pass on the Graphics tabs, November 2026).
+     smear: a thing drawn with a true smear along the way it is travelling, for the few frames it moves fast (a clipping
+     thrown in, a card whipping across). fn(g) draws it; box = [x0, y0, x1, y1] covers everything it draws, in the
+     coordinates ctx is in; vx, vy is its speed in those units a second. Slow things are drawn straight, at no cost. It
+     works along the surface's sides only (up, down, across), which is how things fly in here; under a turned camera it
+     draws straight. fn must not size anything by the scale along the travel (it is drawn squeezed that way).
+     How: the thing is drawn once into a scratch picture, full size across its travel and squeezed along it, and halved
+     along it (each halving an exact average) until one row is about seven pixels of travel. The smear's whole length is
+     then K such rows: K copies of that small picture a row apart are added up, and the sum is stretched back onto the
+     surface in one go. (One big squeeze with no adding up keeps too few rows: a thin thing lying across the travel, a
+     shadow under a tilted edge, came out as a staircase. Adding up full size copies was right but cost three frames'
+     worth of time.) About 5 ms a frame at 1080p here for a clipping, for the half second it flies.
+     wob: a wobble that dies away (0 before d = 0): what a thing does after it lands. */
+  const SHUTTER = 1 / 100, scr = {};
+  const scratch = (key, w, h) => { let c = scr[key]; if (!c) c = scr[key] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); if (c.width < w || c.height < h) { c.width = Math.max(c.width, w); c.height = Math.max(c.height, h); } return c; };
+  function smear(ctx, fn, box, vx, vy, key = 'sm') {
+    const m = ctx.getTransform(), cv = ctx.canvas, horiz = Math.abs(vx * m.a) >= Math.abs(vy * m.d), len = Math.abs(horiz ? vx * m.a : vy * m.d) * SHUTTER;
+    if (!(len > 1.6) || Math.abs(m.b) > 1e-4 || Math.abs(m.c) > 1e-4 || !cv) { fn(ctx); return; }
+    const K = Math.max(1, Math.min(12, Math.round(len / 7))), each = K > 1 ? len / K : len / 1.6, pre = each >= 4 ? 2 : 1;   // each: pixels of travel in one row of the small picture
+    const pad = Math.ceil(len + each) + 2, px = horiz ? pad : 2, py = horiz ? 2 : pad;
+    const x0 = Math.floor(Math.max(-px, Math.min(box[0] * m.a, box[2] * m.a) + m.e - px)), x1 = Math.ceil(Math.min(cv.width + px, Math.max(box[0] * m.a, box[2] * m.a) + m.e + px));
+    const y0 = Math.floor(Math.max(-py, Math.min(box[1] * m.d, box[3] * m.d) + m.f - py)), y1 = Math.ceil(Math.min(cv.height + py, Math.max(box[1] * m.d, box[3] * m.d) + m.f + py));
+    const bw = x1 - x0, bh = y1 - y0; if (bw < 2 || bh < 2) return; if (bw * bh > 16e6) { fn(ctx); return; }
+    const use = (c, w, h, smooth = true) => { const g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = smooth; g.imageSmoothingQuality = 'low';   /* the plain filter: halving with it is an exact average of each pair, and the finer ones cost several times more */ g.clearRect(0, 0, w + 1, h + 1); return g; };
+    let cw = horiz ? Math.ceil(bw / pre) : bw, ch = horiz ? bh : Math.ceil(bh / pre), c = scratch(key, cw + 1, ch + 1), g = use(c, cw, ch);
+    g.save(); g.setTransform(m.a * cw / bw, 0, 0, m.d * ch / bh, (m.e - x0) * cw / bw, (m.f - y0) * ch / bh); fn(g); g.restore();
+    const target = Math.max(3, (horiz ? bw : bh) / each);
+    for (let i = 0; i < 9 && (horiz ? cw : ch) > target * 1.02; i++) {
+      const to = Math.max(target, (horiz ? cw : ch) / 2), nw = horiz ? Math.ceil(to) : cw, nh = horiz ? ch : Math.ceil(to), n = scratch(key + i, nw + 1, nh + 1); use(n, nw, nh).drawImage(c, 0, 0, cw, ch, 0, 0, nw, nh); c = n; cw = nw; ch = nh;
+    }
+    let off = 0;
+    if (K > 1) { const a = scratch(key + 'a', cw + 1, ch + 1), ag = use(a, cw, ch, false); ag.globalCompositeOperation = 'lighter'; ag.globalAlpha = 1 / K;
+      for (let i = 0; i < K; i++) { const o = i - (K >> 1); ag.drawImage(c, 0, 0, cw, ch, horiz ? o : 0, horiz ? 0 : o, cw, ch); }
+      ag.globalAlpha = 1; ag.globalCompositeOperation = 'source-over'; c = a; off = K % 2 ? 0 : 0.5 * (horiz ? bw / cw : bh / ch); }   // an even count sits half a row to one side: put it back
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low'; ctx.drawImage(c, 0, 0, cw, ch, x0 + (horiz ? off : 0), y0 + (horiz ? 0 : off), bw, bh); ctx.restore();
+  }
+  const wob = (d, amp, decay = 9, freq = 26) => d <= 0 ? 0 : amp * Math.exp(-decay * d) * Math.sin(freq * d);
+  return { smear, wob, tc, rulerLabel, previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
 })();

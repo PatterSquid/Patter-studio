@@ -73,10 +73,13 @@ const News = (() => {
     cards.forEach((c, i) => { const a = arts[i]; c.i = i; c.f = fit * Math.max(0.3, Math.min(3, +a.s || 1)); c.x = CX + c.lx * fit + (+a.dx || 0); c.y = CY + c.ly * fit + (+a.dy || 0); });
     const L2W = (c, lx, ly) => { const r = c.rot * Math.PI / 180, dx = (lx - c.AW / 2) * c.f, dy = (ly - c.AH / 2) * c.f; return [c.x + dx * Math.cos(r) - dy * Math.sin(r), c.y + dx * Math.sin(r) + dy * Math.cos(r)]; };
     const zoomHead = c => Math.max(1, Math.min(W * 0.9 / (c.IW * c.f), H * 0.62 / (c.hl.length * c.hLH * c.f)));
-    const headShot = c => { const p = L2W(c, c.AW / 2 - 20, c.yHead + c.hl.length * c.hLH * 0.5); return [p[0], p[1], zoomHead(c) * 0.95]; };
-    const standShot = c => { const p = L2W(c, c.AW / 2, c.yStand + c.sl.length * 18); return [p[0], p[1], Math.max(1, Math.min(W * 0.9 / (c.IW * c.f), 2.4)) * 0.9]; };
-    const bothShot = c => { if (!c.ulSpans.length) { const h = headShot(c); return [h[0], h[1], h[2] * 0.92]; } const p = L2W(c, c.AW / 2 - 10, (c.yHead + c.yStand + c.sl.length * 37) / 2); return [p[0], p[1], Math.max(1, Math.min(W * 0.9 / (c.IW * c.f), H * 0.8 / ((c.yStand + c.sl.length * 37 - c.yHead) * c.f)))]; };
-    const wide = [W / 2, H / 2, 1], punch = cfg.camera === 'punch', keys = [[0, ...wide]];
+    /* close shots turn a little towards the clipping's own tilt (the fifth number, radians), so a push in is a move with a
+       slight roll in it, not a plain enlargement; wide shots and the pull back are level */
+    const roll = c => c.rot * Math.PI / 180 * 0.42;
+    const headShot = c => { const p = L2W(c, c.AW / 2 - 20, c.yHead + c.hl.length * c.hLH * 0.5); return [p[0], p[1], zoomHead(c) * 0.95, roll(c)]; };
+    const standShot = c => { const p = L2W(c, c.AW / 2, c.yStand + c.sl.length * 18); return [p[0], p[1], Math.max(1, Math.min(W * 0.9 / (c.IW * c.f), 2.4)) * 0.9, roll(c)]; };
+    const bothShot = c => { if (!c.ulSpans.length) { const h = headShot(c); return [h[0], h[1], h[2] * 0.92, 0]; } const p = L2W(c, c.AW / 2 - 10, (c.yHead + c.yStand + c.sl.length * 37) / 2); return [p[0], p[1], Math.max(1, Math.min(W * 0.9 / (c.IW * c.f), H * 0.8 / ((c.yStand + c.sl.length * 37 - c.yHead) * c.f)))]; };
+    const wide = [W / 2, H / 2, 1, 0], punch = cfg.camera === 'punch', keys = [[0, ...wide]];
     const key2 = (t, s) => { if (t > keys[keys.length - 1][0] + 0.05) keys.push([t, ...s]); };
     let t = 0.25; const atOf = (i, tt) => { const v = arts[i].at; return v !== undefined && v !== '' && v !== null && isFinite(+v) ? Math.max(0, +v) : tt; };
     if (cfg.pacing === 'pile') {
@@ -101,12 +104,12 @@ const News = (() => {
     }
     const lastC = cards[N - 1];
     if (punch) key2(t + 1.3, cfg.ending === 'whole' ? wide : bothShot(lastC)); else key2(t + 1.3, [W / 2, H / 2, 1.06]);
-    const end = t + 1.3 + Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.3, lk = keys[keys.length - 1]; keys.push([end + 1, lk[1], lk[2], lk[3] * 1.03]);
+    const end = t + 1.3 + Math.max(0, Math.min(10, +cfg.hold || 0)) + 0.3, lk = keys[keys.length - 1]; keys.push([end + 1, lk[1], lk[2], lk[3] * 1.03, lk[4] || 0]);
     cp = { u, tall, cards, keys, fit, dur: end, holdStart: t + 1.3 };
     ck = key; return cp;
   }
   const duration = (cfg, look) => { const { W, H } = E.dims(look.format); return plan(cfg, look, W, H).dur; };
-  function camAt(p, t) { const k = p.keys; for (let i = 1; i < k.length; i++) if (t <= k[i][0]) { const a = k[i - 1], b = k[i], q = (i >= k.length - 1 ? ease.sine : ease.io4)((t - a[0]) / Math.max(0.01, b[0] - a[0])); const z = Math.exp(lerp(Math.log(a[3]), Math.log(b[3]), q)); return [lerp(a[1], b[1], q), lerp(a[2], b[2], q), z]; } const l = k[k.length - 1]; return [l[1], l[2], l[3]]; }
+  function camAt(p, t) { const k = p.keys; for (let i = 1; i < k.length; i++) if (t <= k[i][0]) { const a = k[i - 1], b = k[i], q = (i >= k.length - 1 ? ease.sine : ease.io4)((t - a[0]) / Math.max(0.01, b[0] - a[0])); const z = Math.exp(lerp(Math.log(a[3]), Math.log(b[3]), q)); return [lerp(a[1], b[1], q), lerp(a[2], b[2], q), z, lerp(a[4] || 0, b[4] || 0, q)]; } const l = k[k.length - 1]; return [l[1], l[2], l[3], l[4] || 0]; }
   // Soft landing shake: one smooth decaying wobble rather than a jitter.
   function softShake(t, t0, amp) { const d = t - t0; if (d < 0 || d > 0.7) return [0, 0]; const a = Math.exp(-d * 7) * amp * Math.sin(Math.min(1, d / 0.04) * Math.PI / 2); return [Math.sin(d * 34) * a, Math.sin(d * 27 + 1.3) * a * 0.6]; }
   // Smooth impact lines: tapered wedges that ease outwards from the card edges and fade.
@@ -123,44 +126,88 @@ const News = (() => {
     ctx.restore();
   }
   /* The card is painted at up to four times its size so zooms stay sharp; shrinking all of it every frame was most of a
-     Newspaper preview frame and made small print shimmer. The preview draws from a halved copy no smaller than it shows. */
+     Newspaper frame and made small print shimmer. It is drawn from a halved copy no smaller than it shows (exports too
+     since the quality pass: the halved copies are made with the browser's best filter, so small print is steadier and an
+     export frame at 1080p went from about 25 ms to under half that here). */
   function cardMip(c, ctx) {
-    const m = ctx.getTransform(), k = Math.hypot(m.a, m.b) * c.AW / c.card.width; let lv = 0; while (k * Math.pow(2, lv + 1) <= 1 && lv < 4) lv++;
+    const m = ctx.getTransform(), k = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)) * c.AW / c.card.width;   /* the bigger way, when it is drawn squeezed for a smear */ let lv = 0; while (k * Math.pow(2, lv + 1) <= 1 && lv < 4) lv++;
     if (!lv) return c.card; const ms = c.mips || (c.mips = [c.card]);
     for (let i = ms.length; i <= lv; i++) { const p = ms[i - 1], q = document.createElement('canvas'); q.width = Math.max(1, Math.ceil(p.width / 2)); q.height = Math.max(1, Math.ceil(p.height / 2)); const g = q.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(p, 0, 0, q.width, q.height); ms.push(q); }
     return ms[lv];
   }
+  /* How a clipping arrives (quality pass, November 2026). It used to fly to its place on a spring and bounce there, with the
+     thud coming after it had stopped. Now it glides in over the board held a little off it (bigger, its shadow thrown
+     further), turning level, and is pressed flat exactly at its landing time, which is when the shake and the squash
+     happen. The fast part is smeared along its travel (E.smear). Lengths and landing times are what they always were. */
+  const DIRS = { drop: [0, -1, -0.2, 1.15], 'slide-left': [-1, 0, -0.22, 1.1], 'slide-right': [1, 0, 0.22, 1.1], 'slide-up': [0, 1, 0.18, 1.1] };
+  function pose(c, t, W, H) {
+    const T = c.T, e = t - T.entry, L = Math.max(0.2, T.land - T.entry); let ox = 0, oy = 0, rot = 0, sc = 1, alpha = 1, lift = 0;
+    if (c.entry === 'zoom') { const x = cl(e / L, 0, 1), q = x * x * (1.5 - 0.5 * x); sc = lerp(2.6, 1, q); alpha = cl(e / 0.18, 0, 1); lift = 1 - q; }
+    else if (c.entry === 'spin') { const q = ease.out3(e / L); sc = lerp(0.05, 1, q); rot = (1 - q) * Math.PI * 4; }
+    else { const D = DIRS[c.entry] || DIRS.drop, far = Math.pow(1 - cl(e / (L * 0.72), 0, 1), 3), up = 1 - Math.pow(cl((e - L * 0.58) / (L * 0.42), 0, 1), 2.2), back = Math.sin(cl((e - L * 0.4) / (L * 0.6), 0, 1) * Math.PI);
+      ox = D[0] * far * W * 1.1; oy = D[1] * far * H * D[3]; rot = D[2] * (far - 0.1 * back); lift = up; sc = 1 + 0.07 * up; }
+    return { ox, oy, rot, sc, alpha, lift };
+  }
+  // Where a clipping is and how it sits at a moment: its way in, the wobble and squash after it lands, the knocks it takes
+  function where(c, t, p, cfg, W, H) {
+    const li = t - c.T.land, P = pose(c, t, W, H), hit = cfg.impact === 'none' ? 0 : cfg.impact === 'burst' ? 1.8 : 1, side = c.i % 2 ? -1 : 1;
+    let rot = c.rot * Math.PI / 180 + P.rot + E.wob(li, 0.0055 * hit * side, 9, 26), ox = P.ox, oy = P.oy;
+    // a clipping already down is knocked a touch by each one that lands on the pile after it
+    p.cards.forEach(o => { if (o.i > c.i && hit) { const d = t - o.T.land; if (d > 0 && d < 0.8) { rot += E.wob(d, 0.006 * hit * (o.i % 2 ? 1 : -1), 8, 22); oy += E.wob(d, 2.5 * p.u * hit, 9, 24); } } });
+    return { li, P, rot, ox, oy, sq: 1 - E.wob(li, 0.011 * hit, 11, 30) };
+  }
   function drawCard(ctx, t, c, p, C, cfg, look, W, H) {
-    const T = c.T, s = c.f, e = t - T.entry; if (e < 0) return;
-    const li = t - T.land; let ox = 0, oy = 0, rot = c.rot * Math.PI / 180, sc = 1, alpha = 1;
-    switch (c.entry) {
-      case 'slide-left': case 'slide-right': { const dir = c.entry === 'slide-left' ? -1 : 1, q = spring(e * 1.4, 6.5, 7); ox = dir * (1 - q) * W * 1.1; rot += dir * (1 - q) * 0.22; break; }
-      case 'slide-up': { const q = spring(e * 1.4, 6.5, 7); oy = (1 - q) * H * 1.1; rot += (1 - q) * 0.18; break; }
-      case 'zoom': { const q = ease.out3(e / 0.6); sc = lerp(2.6, 1, q); alpha = cl(e / 0.25, 0, 1); break; }
-      case 'spin': { const q = ease.out3(e / 1.0); sc = lerp(0.05, 1, q); rot += (1 - q) * Math.PI * 4; break; }
-      default: { const q = spring(e * 1.15, 6.5, 7.5); oy = (1 - q) * -H * 1.15; rot += -(1 - q) * 0.2; }
-    }
-    // Lifted cards cast a bigger, softer shadow that settles as they land.
-    const lift = cl(1 - li / 0.35, 0, 1), sh = 20 + lift * 26, sq = cfg.impact === 'burst' && li > 0 && li < 0.3 ? 1 - Math.sin(li / 0.3 * Math.PI) * 0.018 : 1;
-    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(c.x + ox, c.y + oy); ctx.rotate(rot); ctx.scale(s * sc / sq, s * sc * sq);
-    const AW = c.AW, AH = c.AH;
-    ctx.fillStyle = C.shadow; ctx.fillRect(-AW / 2 + sh, -AH / 2 + sh, AW, AH); ctx.drawImage(look.preview ? cardMip(c, ctx) : c.card, -AW / 2, -AH / 2, AW, AH); ctx.lineWidth = 7; ctx.strokeStyle = C.ink; ctx.strokeRect(-AW / 2, -AH / 2, AW, AH);
-    if (cfg.tape) [[-AW / 2 + 64, -AH / 2 - 4, -0.42], [AW / 2 - 64, -AH / 2 - 4, 0.38]].forEach(([tx, ty, tr]) => { ctx.save(); ctx.translate(tx, ty); ctx.rotate(tr); ctx.fillStyle = 'rgba(248,244,226,0.84)'; ctx.beginPath(); ctx.moveTo(-68, -20); ctx.lineTo(68, -20); for (let k = 0; k < 6; k++) ctx.lineTo(68 - (k % 2) * 5, -20 + (k + 1) * 6.7); ctx.lineTo(-68, 20); for (let k = 0; k < 6; k++) ctx.lineTo(-68 + (k % 2) * 5, 20 - (k + 1) * 6.7); ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(13,20,32,0.45)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); });
-    ctx.translate(-AW / 2, -AH / 2);
-    if (c.hlSpans.length) { const hp = ease.io4((t - T.hl) / 0.75), n = c.hlSpans.length, r = E.rng(41);
-      c.hlSpans.forEach((sp, k) => { const q = cl(hp * n - k, 0, 1); if (q <= 0) return; const base = c.yHead + c.hs * 0.86 + sp.li * c.hLH, top = base - c.hs * 0.8, hh = c.hs * 0.88, x0 = c.P - 2 + sp.x0 - 10, ww = (sp.w + 20) * q;
-        ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = E.COLOURS[cfg.hlColour] || '#f5821f'; ctx.beginPath(); ctx.moveTo(x0, top + r() * 4); for (let i = 1; i <= 12; i++) ctx.lineTo(x0 + ww * i / 12, top + (r() - 0.5) * 5); ctx.lineTo(x0 + ww + 3, top + hh * 0.5); for (let i = 12; i >= 0; i--) ctx.lineTo(x0 + ww * i / 12, top + hh + (r() - 0.5) * 5); ctx.closePath(); ctx.fill(); ctx.restore(); }); }
-    if (c.ulSpans.length) { const up = ease.io4((t - T.ul) / 0.65), n = c.ulSpans.length; ctx.save(); ctx.strokeStyle = E.COLOURS[cfg.ulColour] || '#e3302c'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      c.ulSpans.forEach((sp, k) => { const q = cl(up * n - k, 0, 1); if (q <= 0) return; const y = c.yStand + 26 + sp.li * 37 + 9, x0 = c.P + sp.x0 - 6, w = sp.w + 12;
-        const pass = (off, ph, amp, qq) => { ctx.beginPath(); const m = Math.floor(60 * qq); for (let i = 0; i <= m; i++) { const v = i / 60; const xx = x0 + w * v, yy = y + off + Math.sin(v * Math.PI * 5 + ph) * amp + v * 2; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.stroke(); };
-        pass(0, 0, 2.4, Math.min(1, q / 0.62)); if (q > 0.62) pass(9, 1.1, 2, (q - 0.62) / 0.38); }); ctx.restore(); }
-    ctx.restore();
+    const T = c.T, s = c.f; if (t < T.entry) return;
+    const { li, P, rot, ox, oy, sq } = where(c, t, p, cfg, W, H), sh = 20 + P.lift * 34, AW = c.AW, AH = c.AH, hlCol = E.COLOURS[cfg.hlColour] || '#f5821f', ulCol = E.COLOURS[cfg.ulColour] || '#e3302c';
+    const paint = g => {
+      g.save(); g.globalAlpha *= P.alpha; g.translate(c.x + ox, c.y + oy); g.rotate(rot); g.scale(s * P.sc / sq, s * P.sc * sq);
+      g.save(); g.globalAlpha *= 1 - 0.3 * P.lift; g.fillStyle = C.shadow; g.fillRect(-AW / 2 + sh, -AH / 2 + sh, AW, AH); g.restore();
+      g.drawImage(cardMip(c, g), -AW / 2, -AH / 2, AW, AH); g.lineWidth = 7; g.strokeStyle = C.ink; g.strokeRect(-AW / 2, -AH / 2, AW, AH);
+      // the tape goes on once it is down: one strip, then the other, each pressed on
+      if (cfg.tape) [[-AW / 2 + 64, -AH / 2 - 4, -0.42], [AW / 2 - 64, -AH / 2 - 4, 0.38]].forEach(([tx, ty, tr], k) => { const q = cl((li - 0.08 - k * 0.13) / 0.1, 0, 1); if (q <= 0) return; const e = ease.out3(q), ts = 1 + 0.45 * (1 - e);
+        g.save(); g.translate(tx, ty); g.rotate(tr + (1 - e) * (k ? 0.12 : -0.12)); g.scale(ts, ts); g.globalAlpha *= Math.min(1, q * 2.5); g.fillStyle = 'rgba(248,244,226,0.84)'; g.beginPath(); g.moveTo(-68, -20); g.lineTo(68, -20); for (let j = 0; j < 6; j++) g.lineTo(68 - (j % 2) * 5, -20 + (j + 1) * 6.7); g.lineTo(-68, 20); for (let j = 0; j < 6; j++) g.lineTo(-68 + (j % 2) * 5, 20 - (j + 1) * 6.7); g.closePath(); g.fill(); g.strokeStyle = 'rgba(13,20,32,0.45)'; g.lineWidth = 2; g.stroke(); g.restore(); });
+      g.translate(-AW / 2, -AH / 2);
+      /* The highlighter: one stroke a line, each taking its share of the time by its length, quick off the mark and slowing
+         to its end like a hand does. The nib is a chisel (both ends lean), the ink sits a shade heavier along two streaks,
+         where the pen went down and, while it is moving, just behind the nib. */
+      if (c.hlSpans.length && t > T.hl) { const tot = c.hlSpans.reduce((a, sp) => a + sp.w, 0) || 1, r = E.rng(41); let acc = 0;
+        c.hlSpans.forEach(sp => { const jt = []; for (let i = 0; i < 27; i++) jt.push(r()); const share = sp.w / tot, x = (t - T.hl - acc * 0.75) / Math.max(0.1, share * 0.75 * (c.hlSpans.length > 1 ? 0.92 : 1)); acc += share; if (x <= 0) return;
+          const q = 1 - Math.pow(1 - cl(x, 0, 1), 2.3), base = c.yHead + c.hs * 0.86 + sp.li * c.hLH, top = base - c.hs * 0.8, hh = c.hs * 0.88, x0 = c.P - 2 + sp.x0 - 10, ww = (sp.w + 20) * q, lean = hh * 0.07;
+          g.save(); g.globalCompositeOperation = 'multiply'; g.fillStyle = hlCol; g.beginPath(); g.moveTo(x0 + lean, top + jt[0] * 4); for (let i = 1; i <= 12; i++) g.lineTo(x0 + lean + ww * i / 12, top + (jt[i] - 0.5) * 5);
+          g.lineTo(x0 + ww + lean + 3, top + hh * 0.2); g.lineTo(x0 + ww + 2, top + hh * 0.62); for (let i = 12; i >= 0; i--) g.lineTo(x0 - lean + ww * i / 12, top + hh + (jt[13 + i] - 0.5) * 5); g.closePath(); g.fill();
+          g.clip(); g.globalAlpha *= 0.13; g.fillRect(x0 - lean, top + hh * 0.26, ww + lean * 2 + 4, hh * 0.05); g.fillRect(x0 - lean, top + hh * 0.7, ww + lean * 2 + 4, hh * 0.045); g.fillRect(x0 - lean, top - 4, Math.min(ww, 12), hh + 8);
+          if (q < 1) { g.globalAlpha *= 1.4 * (1 - q); g.fillRect(x0 + ww - 30, top - 4, 40, hh + 8); }
+          g.restore(); }); }
+      /* The underline: a pen line, not a stroke of even width. It swells in the middle of each pass and thins where the pen
+         lands and lifts, goes quick then slows, and the second pass comes back under the first after the pen is lifted. */
+      if (c.ulSpans.length && t > T.ul) { const n = c.ulSpans.length, xa = (t - T.ul) / 0.65; g.save(); g.fillStyle = ulCol;
+        c.ulSpans.forEach((sp, k) => { const xs = cl(xa * n - k, 0, 1); if (xs <= 0) return; const y = c.yStand + 26 + sp.li * 37 + 9, x0 = c.P + sp.x0 - 6, w = sp.w + 12, eo = v => 1 - Math.pow(1 - cl(v, 0, 1), 2);
+          const pass = (off, ph, amp, qq, wd) => { if (qq <= 0) return; const m = Math.max(2, Math.ceil(54 * qq)), up = [], dn = [];
+            for (let i = 0; i <= m; i++) { const v = qq * i / m, xx = x0 + w * v, yy = y + off + Math.sin(v * Math.PI * 5 + ph) * amp + v * 2, hw = wd * (0.42 + 0.58 * Math.sqrt(Math.sin(Math.PI * (0.04 + v * 0.92)))) * (1 + 0.1 * Math.sin(v * 23 + ph)) * Math.min(1, 0.4 + (qq - v) / 0.05); up.push([xx, yy - hw]); dn.push([xx, yy + hw]); }
+            g.beginPath(); up.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); const e = up[m]; g.arc(e[0], (e[1] + dn[m][1]) / 2, (dn[m][1] - e[1]) / 2, -Math.PI / 2, Math.PI / 2); for (let i = m; i >= 0; i--) g.lineTo(dn[i][0], dn[i][1]); g.arc(up[0][0], (up[0][1] + dn[0][1]) / 2, (dn[0][1] - up[0][1]) / 2, Math.PI / 2, Math.PI * 1.5); g.closePath(); g.fill(); };
+          pass(0, 0, 2.4, eo(xs / 0.6), 3.5); pass(9, 1.1, 2, eo((xs - 0.66) / 0.34), 3.1); }); g.restore(); }
+      g.restore();
+    };
+    // its speed, for the smear: only worth working out while it is on its way in
+    if (li < 0) { const h = 1 / 240, a = pose(c, t - h, W, H), b = pose(c, t + h, W, H), r = Math.abs(rot), ext = ((AW * Math.cos(r) + AH * Math.abs(Math.sin(r))) / 2 + sh + 30) * s * P.sc, exy = ((AH * Math.cos(r) + AW * Math.abs(Math.sin(r))) / 2 + sh + 40) * s * P.sc;
+      E.smear(ctx, paint, [c.x + ox - ext, c.y + oy - exy, c.x + ox + ext, c.y + oy + exy], (b.ox - a.ox) / (2 * h), (b.oy - a.oy) / (2 * h), 'news' + c.i); }
+    else paint(ctx);
   }
   function draw(ctx, t, cfg, look, W, H) {
     const p = plan(cfg, look, W, H), C = E.palette(look), u = p.u;
-    let [fx, fy, z] = look.noCam ? [W / 2, H / 2, 1] : camAt(p, t), shx = 0, shy = 0;
+    let [fx, fy, z, cr] = look.noCam ? [W / 2, H / 2, 1, 0] : camAt(p, t), shx = 0, shy = 0;
     if (cfg.impact !== 'none') p.cards.forEach(c => { const [a, b] = softShake(t, c.T.land, (cfg.impact === 'burst' ? 11 : 5) * u); shx += a; shy += b; });
-    ctx.save(); E.camera(ctx, W, H, fx, fy, z, t, u, shx, shy); E.drawBg(ctx, C, look, W, H, (fx - W / 2) * -0.15, (fy - H / 2) * -0.15);
+    ctx.save(); const at = E.camera(ctx, W, H, fx, fy, z, t, u, shx, shy);
+    /* The board is not painted where a clipping that is down covers it. Close in, the clipping fills the frame and the
+       board under it was a third of the frame's time for nothing. (Where two overlap the board is painted and covered
+       again: harmless.) A clipping still on its way in hides nothing. */
+    const down = p.cards.filter(c => t > c.T.land + 0.02);
+    if (down.length) { ctx.save(); ctx.beginPath(); ctx.rect(-W, -H, W * 3, H * 3); const cs = Math.cos(-cr), sn = Math.sin(-cr);
+      down.forEach(c => { const w = where(c, t, p, cfg, W, H), hw = (c.AW / 2 - 12) * c.f * w.P.sc / w.sq, hh = (c.AH / 2 - 12) * c.f * w.P.sc * w.sq, co = Math.cos(w.rot), si = Math.sin(w.rot);
+        [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].forEach(([x, y], i) => { const X = c.x + w.ox + x * co - y * si - at[0], Y = c.y + w.oy + x * si + y * co - at[1], qx = at[0] + X * cs - Y * sn, qy = at[1] + X * sn + Y * cs; i ? ctx.lineTo(qx, qy) : ctx.moveTo(qx, qy); }); ctx.closePath(); });
+      ctx.clip('evenodd'); E.drawBg(ctx, C, look, W, H, (fx - W / 2) * -0.15, (fy - H / 2) * -0.15); ctx.restore(); }
+    else E.drawBg(ctx, C, look, W, H, (fx - W / 2) * -0.15, (fy - H / 2) * -0.15);
+    if (cr) { ctx.translate(at[0], at[1]); ctx.rotate(-cr); ctx.translate(-at[0], -at[1]); }   /* the background stays level, so it always covers */
     p.cards.forEach(c => {
       if (cfg.impact === 'burst') impactLines(ctx, c, c.f, (t - c.T.land + 0.03) / 0.6, C, u);
       drawCard(ctx, t, c, p, C, cfg, look, W, H);
