@@ -156,19 +156,27 @@ const AudioFX = (() => {
      Audacity style one (used when the AI is off). keep: also hand back the sound just before and after the noise removal,
      so he can hear exactly what is being taken out. */
   async function chain(x, sr, c = {}, onProgress, keep) {
-    let y = x; const step = (p, s) => onProgress && onProgress(p, s); let nrIn = null, nrOut = null;
+    let y = x; const step = (p, s) => onProgress && onProgress(p, s), V = typeof VoiceFX !== 'undefined' ? VoiceFX : null, info = {}; let nrIn = null, nrOut = null, G = null;
+    if (V && c.declip) { step(0.01, 'Mending clipped peaks'); y = V.declip(y, sr, info); await yieldNow(); }
     if (c.declick) { step(0.02, 'Fixing clicks'); y = declick(y, sr); await yieldNow(); }
     if (c.rumble !== false) { y = rumble(y, sr, +c.rumbleHz || 80); }
     if (c.hum) { y = hum(y, sr, +c.humHz || 50); }
+    if (V && c.buzz) { step(0.03, 'Looking for buzz and whine'); info.tones = await V.tones(y, sr); y = V.detone(y, sr, info.tones); await yieldNow(); }
+    if (V && c.room > 0) { step(0.04, 'Taking the room out'); nrIn = y; y = await V.dry(y, sr, +c.room, info); nrOut = y; }
     if (c.ai && c.ai.on) { if (typeof DeepFilter === 'undefined' || (await DeepFilter.check()) !== 'ready') throw new Error('The AI voice cleaner is not downloaded yet: press Get the AI voice cleaner in Background noise.');
-      step(0.05, 'AI voice cleaning'); nrIn = y; y = await DeepFilter.process(y, { atten: c.ai.atten == null ? 20 : +c.ai.atten, onProgress: q => step(0.05 + 0.7 * q, 'AI voice cleaning') }); nrOut = y; }
-    else if (c.nr && c.nr.on && c.nr.profile) { step(0.05, 'Taking out the noise'); nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.05 + 0.7 * q, 'Taking out the noise')); nrOut = y; }
+      step(0.12, 'AI voice cleaning'); if (!nrIn) nrIn = y; y = await DeepFilter.process(y, { atten: c.ai.atten == null ? 20 : +c.ai.atten, onProgress: q => step(0.12 + 0.55 * q, 'AI voice cleaning') }); nrOut = y; }
+    else if (c.nr && c.nr.on && c.nr.profile) { step(0.12, 'Taking out the noise'); if (!nrIn) nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.12 + 0.55 * q, 'Taking out the noise')); nrOut = y; }
+    if (V && c.pops > 0) { step(0.74, 'Softening pops'); y = V.pops(y, sr, +c.pops, info); await yieldNow(); }
+    if (V && c.gate && c.gate.on) { G = V.gate(y, sr, c.gate); info.breaths = G.breaths; }   // worked out on the clean voice here, laid on after the compressor
+    if (V && c.tone && c.tone.on) { step(0.76, 'Matching the tone'); y = await V.match(y, sr, c.tone.amt == null ? 0.7 : +c.tone.amt, info); }
     if (c.eq && c.eq.on) { step(0.8, 'Voice EQ'); y = eq(y, sr, c.eq); await yieldNow(); }
     if (c.deess > 0) { step(0.84, 'Softening S sounds'); y = deess(y, sr, +c.deess); await yieldNow(); }
+    if (V && c.ride > 0) { step(0.86, 'Riding the level'); y = V.ride(y, sr, +c.ride); await yieldNow(); }
     if (c.comp > 0) { step(0.88, 'Compressing'); y = compress(y, sr, +c.comp); await yieldNow(); }
     if (c.level > 0) { step(0.91, 'Evening it out'); y = level(y, sr, +c.level); await yieldNow(); }
+    if (G) { step(0.93, 'Quietening the gaps'); y = V.gateApply(y, G); await yieldNow(); }
     if (c.loud != null && c.loud !== false) { step(0.95, 'Setting the loudness'); y = loudness(y, sr, +c.loud); }
-    step(1, 'Done'); return keep ? { y, nrIn, nrOut } : y;
+    step(1, 'Done'); return keep ? { y, nrIn, nrOut, info } : y;
   }
   // Where the sound is quiet for a while (for tightening long pauses): [[start, end], ...] in seconds
   function pauses(x, sr, minLen = 0.7, belowDb = -42) {
@@ -192,6 +200,6 @@ const AudioFX = (() => {
     let o = 44; for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { dv.setInt16(o, Math.round(cl(chans[c][i], -1, 1) * 32767), true); o += 2; }
     return new Blob([buf], { type: 'audio/wav' });
   }
-  return { eq, compress, hasHum, profile, quietest, denoise, rnnoise, rumble, hum, deess, declick, level, lufs, limit, loudness, chain, pauses, peaks, spectrogram, wav, N, HOP };
+  return { biquad, coef, eq, compress, hasHum, profile, quietest, denoise, rnnoise, rumble, hum, deess, declick, level, lufs, limit, loudness, chain, pauses, peaks, spectrogram, wav, N, HOP };
 })();
 if (typeof module !== 'undefined') module.exports = AudioFX;
