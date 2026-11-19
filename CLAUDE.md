@@ -554,6 +554,10 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   follows its drawing and drawings shorter than 0.2 s are skipped (`p.bk.art`): his relaxed and open hands swapping in
   mid air read as a glitch. The open (back of hand) drawing is not used automatically. Thumbs down was dropped (a mirrored
   hand). Missing shapes he could draw: side on (chop) and pinch.
+* **NOT PUBLISHED, he turned it down** (19 November 2026): he watched the before and after clip of the fourth version
+  below and said "I actually prefer the hands before". The published hands (third version, above) stay. This work lives only
+  on the branch `hands-pass`: do not publish it or merge it, and do not rebuild it unless he asks. What follows describes
+  that branch, not the app.
 * **Both hands** (fourth version, November 2026: he found the left hand working while the right lay still "very robotic" and
   "very fake", and asked for a natural use of one hand and both). What `planHands` does now, all from its own dice (`R2`, so
   the head and eyes keep theirs):
