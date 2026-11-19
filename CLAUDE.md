@@ -200,8 +200,8 @@ done. Publish only when he says.
   share of the time by its length, quick then slowing, streaks, heavier where the pen went down and behind the nib); the
   underline is a pen line that swells and thins. Close shots roll a little towards the clipping's tilt (the fifth number
   of a camera key; wide shots are level, the board itself never turns so it always covers). Export frames: the card is
-  drawn from its halved copies in exports too and the board is not painted under a clipping that is down: about 25 ms to
-  15 a frame here at 1080p.
+  drawn from its halved copies in exports too and the board is not painted under a clipping that is down: over a whole
+  clip at 1080p here the frames average 18 ms before and 14 after (three clippings: 37 and 30), the smear included.
 * Tools: `tests/tab_sheet.py OUT [port] [tabs]` (any tab's example as a contact sheet: `N`, `COLS`, `W`, `AT`, `FROM`/`TO`
   for a close look at one move, `CFG` for other settings), `tests/before_after.py OUT.mp4 TAB [settings.json ...]` (old
   build on 8766 beside the new on 8765, then the new at full size; says if the lengths differ; link `dev/tmp_fonts`, now
