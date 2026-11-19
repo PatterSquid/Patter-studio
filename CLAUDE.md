@@ -377,6 +377,24 @@ standard and as easy to use.
   motion blur from sub frame samples spaced a few pixels apart (14 at most live, 48 in exports, `trHQ`) with a light blur
   to melt the steps; `transition(g, A, B, kind, p, W, H, { dur, hq })`. Tiles play on hover (`animIcon`). No sounds on
   transitions: he did not want them.
+* **Transitions and effects, quality pass** (November 2026: "the quality of CapCut"). `tests/fx_sheet.py OUT [port] [kinds]`
+  makes contact sheets of every transition (six moments) and effect between two real pictures (`FX_A=studio` for the dark
+  room; judge on light pictures, gaps hide on dark ones); `tests/fx_clip.py PORT OUT [fx]` makes frames at speed for a
+  before and after clip (serve the old build on 8766). What was wrong and what it is now:
+  * Motion blur was up to 14 copies of the picture laid along the move: echoes of the lettering. `strip` (two pictures side
+    by side seen through a sliding window, halved along the slide until the blur is a pixel and a half, stretched back) is
+    a true smear for anything that slides (whooshes, whip, stretch, pushes); `mblur` (zooms, turns) spaces its copies evenly
+    across the shutter in a picture that shrinks as the move grows. Keep both: do not go back to stacked copies.
+  * Whooshes shrank each picture about its own middle, leaving dark seams: the pair is one strip pushed in a touch. Spin
+    blur showed bare corners: it is scaled to cover at every angle (`cov`). Smash lands big with zoom blur and rattles
+    down. Glitch: colour split, slices knocked sideways (from the other clip only round the cut), tearing lines, scan
+    lines, a slip that wraps. Film burn is a noise map eaten from the edges (`burnNoise`) with scorch, a hot ragged rim and
+    the new picture through the holes (it was a white out). Ink runs off in smooth drips (it was a zigzag). The simple
+    ones: eased (`e2`), wipes and circle soft edged (`masked`), pushes and slides blurred, spin covers its corners.
+  * Shader effects (`cut_gl.js`): glitch in bands of changing height with their colours pulled apart; VHS with a tracking
+    band, head switching tear, colour bleed; old film with scratches that last and drift, dust and gate weave (not a new
+    full height line each frame); glow from two rings sized to the picture; light leak with two drifting lights and a
+    streak. Camera shake has quick jolts on a slow sway and is pushed in so the edge never shows.
 * Transitions on the timeline: drag the diamond to another cut to move it (Ctrl or Alt copies), drag the ends of its
   striped bar along the top of the overlap to change its length, click an empty diamond to add a fade.
 * Timeline drawing: one canvas per track (`.ct-strips`, first in each lane) paints every clip's body, filmstrip and
@@ -576,6 +594,13 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   follows its drawing and drawings shorter than 0.2 s are skipped (`p.bk.art`): his relaxed and open hands swapping in
   mid air read as a glitch. The open (back of hand) drawing is not used automatically. Thumbs down was dropped (a mirrored
   hand). Missing shapes he could draw: side on (chop) and pinch.
+* **A fourth version he turned down** (19 November 2026). He said the right hand lying still was "very robotic", so both
+  hands were made to share the work (left, right, both, the second hand joining in or leaving early, more beats, a resting
+  hand that shifts). He watched the before and after and said "I actually prefer the hands before". The hands above stay
+  as they are. That work is kept on the branch `hands-pass` (with its checks `tests/char_hands_use.js` and
+  `tests/char_hands_trace.py`): do not publish or merge it, and do not rebuild it unless he asks. If the hands come up
+  again, ask what he wants changed before building, and change little. What put him off, in his words: "the unnatural
+  movement and yeah a bit too much".
 * **Listen** (`dev/src/listen.js`, `listen/`, about 180 MB, IndexedDB `patter-listen`): Whisper base English int8 ONNX in a
   helper writes the words from his recording, so a voiceover alone drives the character ("Write the words from the
   recording"). Tests serve `dev/tmp_lshome/{listen,cutout}` through `window.PATTER_LISTEN`. A PatterScript file can be
