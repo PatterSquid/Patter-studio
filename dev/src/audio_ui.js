@@ -6,7 +6,9 @@
 const AudioTab = (() => {
   const SR = 48000, MAXS = 30 * 60;
   const cl = (v, a, b) => v < a ? a : v > b ? b : v, r3 = v => Math.round(v * 1000) / 1000;
-  const CLEAN0 = () => ({ rumble: true, hum: false, humHz: 50, declick: false, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, ai: { on: false, atten: 20 }, eq: { on: false, low: 0, mud: -2, pres: 2, air: 1.5 }, deess: 0, comp: 0, level: 0, loud: null });
+  const CLEAN0 = () => ({ studio: false, rumble: true, hum: false, humHz: 50, declick: false, declip: false, buzz: false, room: 0, pops: 0, nr: { on: false, reduce: 12, sens: 6, smooth: 3, profile: null }, ai: { on: false, atten: 20 }, tone: { on: false, amt: 0.5 }, eq: { on: false, low: 0, mud: -2, pres: 2, air: 1.5 }, deess: 0, ride: 0, comp: 0, level: 0, gate: { on: false, range: 24, under: 30, breath: 9 }, loud: null });
+  // Studio voice: every stage at the strength the before and after clip of November 2026 was made with (the AI cleaner is switched on with it when it has been downloaded)
+  const STUDIO = () => ({ studio: true, rumble: true, hum: false, declick: false, declip: true, buzz: true, room: 0.8, pops: 0.6, tone: { on: true, amt: 0.5 }, deess: 0.3, ride: 0.6, comp: 0.3, level: 0, gate: { on: true, range: 24, under: 30, breath: 9 }, loud: -16 });
   const defaults = () => ({ v: 1, src: '', name: '', clean: CLEAN0(), edits: [] });
   const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), x = s - m * 60; return m + ':' + (x < 10 ? '0' : '') + x.toFixed(2); };
 
@@ -19,15 +21,17 @@ const AudioTab = (() => {
       const n = Math.min(ab.length, MAXS * SR), x = new Float32Array(n); for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < n; i++) x[i] += d[i] / ab.numberOfChannels; } if (raw.id === id) raw.x = x; return x; })().finally(() => { raw.busy = null; }));
   }
   const cleanKey = c => JSON.stringify([c.src, c.clean]);
-  const proc = { key: '', y: null, res: null, job: 0 };
+  const proc = { key: '', y: null, res: null, job: 0, info: null, fkey: '', front: null };
   // what goes into the noise reduction (so the noise is learned from the same sound it will be taken out of)
   function preNR(x, c) { let y = x; if (c.rumble !== false) y = AudioFX.rumble(y, SR, +c.rumbleHz || 80); if (c.hum) y = AudioFX.hum(y, SR, +c.humHz || 50); return y; }
+  // The slow half (repairs, the room, the cleaner) is kept by its own settings, so a tone, level or gap change is ready in a moment
   async function processed(cfg, onProgress) {
-    const k = cleanKey(cfg); if (proc.key === k && proc.y) return proc.y; const job = ++proc.job, x = await loadRaw(cfg.src);
-    const r = await AudioFX.chain(x, SR, cfg.clean || {}, onProgress, true), y = r.y;
-    // what the noise removal took away, to listen to on its own ("Removed")
-    let res = null; if (r.nrIn && r.nrOut) { res = new Float32Array(r.nrIn.length); for (let i = 0; i < res.length; i++) res[i] = r.nrIn[i] - (r.nrOut[i] || 0); }
-    if (job === proc.job) { proc.key = k; proc.y = y; proc.res = res; } return y;
+    const k = cleanKey(cfg); if (proc.key === k && proc.y) return proc.y; const job = ++proc.job, x = await loadRaw(cfg.src), c = cfg.clean || {}, fk = cfg.src + AudioFX.frontKey(c);
+    let F = proc.fkey === fk ? proc.front : null;
+    if (!F) { const f = await AudioFX.front(x, SR, c, onProgress); let res = null; if (f.nrIn && f.nrOut) { res = new Float32Array(f.nrIn.length); for (let i = 0; i < res.length; i++) res[i] = f.nrIn[i] - (f.nrOut[i] || 0); }   // what the noise and room removal took away, to listen to on its own ("Removed")
+      F = { y: f.y, info: f.info, res }; proc.fkey = fk; proc.front = F; }
+    const r = await AudioFX.back(F, SR, c, onProgress), y = r.y;
+    if (job === proc.job) { proc.key = k; proc.y = y; proc.res = F.res; proc.info = r.info; } return y;
   }
   // the edits: the kept stretches of the recording (in its own seconds), then quieted, faded or louder parts
   function segmentsOf(edits, dur) {
@@ -63,11 +67,12 @@ const AudioTab = (() => {
     const cfg = W.cfg; if (!cfg || !cfg.src) { W.out = W.outBefore = null; draw(); return; } const job = ++renderJob;
     try {
       const x = await loadRaw(cfg.src); if (job !== renderJob) return; W.outBefore = render(x, cfg);
+      if (typeof VoiceFX !== 'undefined' && !(W.insp && W.insp.id === cfg.src)) { const id = cfg.src; W.insp = { id, r: null }; VoiceFX.inspect(x, SR).then(r => { if (W.insp && W.insp.id === id) { W.insp.r = r; paintReport(); } }).catch(() => { }); }
       if (!W.out || W.out.key !== cleanKey(cfg) + JSON.stringify(cfg.edits)) {
         setStatus('Working…', 0); const y = await processed(cfg, (q, s) => { if (job === renderJob) setStatus(s || 'Working…', q); }); if (job !== renderJob) return;
         W.out = Object.assign(render(y, cfg), { key: cleanKey(cfg) + JSON.stringify(cfg.edits) }); W.outRes = proc.res && proc.key === cleanKey(cfg) ? render(proc.res, cfg) : null; setStatus('', 1);
       }
-      const d = outDur(); if (!(W.t1 > W.t0) || W.t1 > d + 0.01 || W.t0 >= d) { W.t0 = 0; W.t1 = d; } W.head = Math.min(W.head, d); specCache.key = ''; draw(); panelInfo();
+      const d = outDur(); if (!(W.t1 > W.t0) || W.t1 > d + 0.01 || W.t0 >= d) { W.t0 = 0; W.t1 = d; } W.head = Math.min(W.head, d); specCache.key = ''; draw(); panelInfo(); paintReport();
     } catch (e) { setStatus(e.message || String(e), 0); }
   }
   const later = () => { clearTimeout(renderTimer); renderTimer = setTimeout(rebuild, 250); };
@@ -178,15 +183,39 @@ const AudioTab = (() => {
 
   /* ---------- the recording: open a file, or record from the mic ---------- */
   async function useFile(f) { say('Bringing in ' + f.name + '…'); try { const m = await CutMedia.importFile(f, q => say('Bringing in ' + f.name + '… ' + Math.round(q * 100) + '%')); W.cfg.src = m.id; W.cfg.name = f.name; W.cfg.edits = []; W.sel = null; W.head = 0; W.t0 = W.t1 = 0; W.out = null; W.changed(true); say(''); } catch (e) { say(e.message || String(e)); } }
+  /* Recording takes the samples themselves (a small audio worklet, or the old script node where a worklet cannot be
+     loaded) into a 32 bit WAV: MediaRecorder would squeeze them through Opus first. The browser's own echo, noise and
+     gain processing is off. While it records a meter shows the level coming in and says so when it is too quiet or
+     clipping: the level and the distance to the microphone are the two things no clean up can fully put right. */
+  const REC_WORKLET = 'data:text/javascript,' + encodeURIComponent("class R extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(4800);this.n=0;this.port.onmessage=()=>{this.port.postMessage(this.b.slice(0,this.n));this.n=0;};}process(i){const d=i[0]&&i[0][0];if(d){for(let k=0;k<d.length;k++){this.b[this.n++]=d[k];if(this.n===4800){this.port.postMessage(this.b);this.b=new Float32Array(4800);this.n=0;}}}return true;}}registerProcessor('patter-rec',R);");
+  const micPick = () => { try { return localStorage.getItem('patter-mic') || ''; } catch (e) { return ''; } };
+  async function mics() { try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'communications'); } catch (e) { return []; } }
+  async function paintMics() { const el = W.root && W.root.querySelector('.au-mic'); if (!el) return; const list = await mics(), named = list.filter(d => d.label), cur = micPick(); el.innerHTML = ''; const fld = W.root.querySelector('.au-micf'); if (fld) fld.hidden = named.length < 2; if (named.length < 2) return;
+    named.forEach(d => { const o = document.createElement('option'); o.value = d.deviceId === 'default' ? '' : d.deviceId; o.textContent = d.label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, ''); o.selected = o.value === cur; el.append(o); }); }
   async function record() {
     if (W.rec) { W.rec.stop(); return; }
-    try { const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }), mr = new MediaRecorder(s), parts = [], t0 = performance.now();
-      mr.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
-      mr.onstop = async () => { s.getTracks().forEach(tr => tr.stop()); W.rec = null; clearInterval(W.recTimer); paintRecBtn(); const d = new Date(), name = 'Recording ' + d.toLocaleDateString('en-GB').replace(/\//g, '-') + ' ' + d.toTimeString().slice(0, 5).replace(':', '.') + '.webm'; await useFile(new File(parts, name, { type: mr.mimeType || 'audio/webm' })); };
-      mr.start(500); W.rec = mr; W.recTimer = setInterval(() => { const b = W.root && W.root.querySelector('.au-rec'); if (b) b.textContent = '■ Stop recording ' + fmt((performance.now() - t0) / 1000).replace(/\.\d+$/, ''); }, 250); paintRecBtn(); say('Recording. Leave a couple of seconds of quiet at the start so the noise can be learned from it.');
-    } catch (e) { say('Could not use the microphone: ' + (e.message || e)); }
+    let s = null, ac = null;
+    try { const want = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }, dev = micPick(); if (dev) want.deviceId = { ideal: dev };
+      s = await navigator.mediaDevices.getUserMedia({ audio: want }); ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR }); if (ac.state === 'suspended') await ac.resume();
+      const src = ac.createMediaStreamSource(s), parts = [], t0 = performance.now(), R = { pk: 0, hold: 0, clips: 0, quiet: 0, n: 0 }; let node, done = false, stopping = false;
+      const take = d => { if (done || !d || !d.length) return; parts.push(d); R.n += d.length; let m = 0; for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > m) m = a; } if (m > R.pk) R.pk = m; if (m >= 0.985) { R.clips++; R.hold = performance.now() + 1500; } };
+      try { await ac.audioWorklet.addModule(REC_WORKLET); node = new AudioWorkletNode(ac, 'patter-rec', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1, channelCountMode: 'explicit' }); node.port.onmessage = e => take(e.data); src.connect(node); }
+      catch (e) { node = ac.createScriptProcessor(4096, 1, 1); node.onaudioprocess = e => take(new Float32Array(e.inputBuffer.getChannelData(0))); const z = ac.createGain(); z.gain.value = 0; src.connect(node); node.connect(z); z.connect(ac.destination); }
+      const finish = async () => { if (stopping) return; stopping = true; if (node.port) { node.port.postMessage(0); await new Promise(r => setTimeout(r, 80)); } done = true; cancelAnimationFrame(W.recRaf); clearInterval(W.recTimer); s.getTracks().forEach(tr => tr.stop()); try { src.disconnect(); await ac.close(); } catch (e) { } W.rec = null; paintRecBtn(); paintMics();
+        if (R.n < SR * 0.2) { say('Nothing was recorded.'); return; } const x = new Float32Array(R.n); let o = 0; for (const d of parts) { x.set(d, o); o += d.length; }
+        const d = new Date(), name = 'Recording ' + d.toLocaleDateString('en-GB').replace(/\//g, '-') + ' ' + d.toTimeString().slice(0, 5).replace(':', '.') + '.wav'; await useFile(new File([AudioFX.wavF([x], SR)], name, { type: 'audio/wav' })); };
+      W.rec = { stop: finish, R, how: node.port ? 'worklet' : 'script' };
+      W.recTimer = setInterval(() => { const b = W.root && W.root.querySelector('.au-rec'); if (b) b.textContent = '■ Stop recording ' + fmt((performance.now() - t0) / 1000).replace(/\.\d+$/, ''); }, 250);
+      // the meter: the loudest sample since the last look, falling back slowly, on a scale from -60 dB to full
+      let shown = 0, loud = 0, lastSay = '';
+      const meter = () => { if (!W.rec || W.rec.R !== R) return; const cv = W.root && W.root.querySelector('.au-meter'); shown = Math.max(R.pk, shown * 0.9); R.pk = 0; loud = Math.max(shown, loud * 0.995);
+        if (cv) { const g = cv.getContext('2d'), w = cv.width, h = cv.height, db = 20 * Math.log10(shown + 1e-6), u = cl((db + 60) / 60, 0, 1), hot = performance.now() < R.hold; g.clearRect(0, 0, w, h); g.fillStyle = '#16233c'; g.fillRect(0, 0, w, h); g.fillStyle = hot || db > -3 ? '#ff7a1a' : db > -30 ? '#4fd1a5' : '#7d8aa3'; g.fillRect(0, 0, w * u, h); g.fillStyle = 'rgba(255,255,255,0.35)'; [-30, -12, -3].forEach(m => g.fillRect(Math.round(w * (m + 60) / 60), 0, 1, h)); }
+        const ld = 20 * Math.log10(loud + 1e-6), msg = performance.now() < R.hold ? 'Too loud: it is clipping. Sit back a little or turn the microphone down.' : performance.now() - t0 > 4000 && ld < -30 ? 'Very quiet. Get closer to the microphone or turn it up.' : 'Recording. Talk a hand’s width from the microphone, a little to one side of it.'; if (msg !== lastSay) { lastSay = msg; say(msg); }
+        W.recRaf = requestAnimationFrame(meter); };
+      paintRecBtn(); W.recRaf = requestAnimationFrame(meter);
+    } catch (e) { if (s) s.getTracks().forEach(tr => tr.stop()); if (ac) { try { ac.close(); } catch (e2) { } } W.rec = null; paintRecBtn(); say('Could not use the microphone: ' + (e.message || e)); }
   }
-  function paintRecBtn() { const b = W.root && W.root.querySelector('.au-rec'); if (b) { b.textContent = W.rec ? '■ Stop recording' : '● Record'; b.classList.toggle('on', !!W.rec); } }
+  function paintRecBtn() { const b = W.root && W.root.querySelector('.au-rec'), m = W.root && W.root.querySelector('.au-meter'); if (b) { b.textContent = W.rec ? '■ Stop recording' : '● Record'; b.classList.toggle('on', !!W.rec); b.closest('.au-bar').classList.toggle('rec', !!W.rec); } if (m) m.hidden = !W.rec; }
 
   /* ---------- sending it on ---------- */
   async function renderFile() { const o = W.out; if (!o) throw new Error('Nothing to send yet.'); const nm = (W.cfg.name || 'Voice').replace(/\.[a-z0-9]+$/i, '') + ' (clean).wav'; return new File([AudioFX.wav([o.y], SR)], nm, { type: 'audio/wav' }); }
@@ -201,7 +230,7 @@ const AudioTab = (() => {
   /* ---------- the panels ---------- */
   function form(root0, cfg, changed) {
     const { H, card, field, btn, sel } = UI;
-    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.ai = Object.assign(CLEAN0().ai, cfg.clean.ai || {}); cfg.clean.eq = Object.assign(CLEAN0().eq, cfg.clean.eq || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
+    W.cfg = cfg; W.changed = full => { changed(); if (full) form(root0, W.cfg, changed); else later(); }; cfg.clean = Object.assign(CLEAN0(), cfg.clean || {}); cfg.clean.nr = Object.assign(CLEAN0().nr, cfg.clean.nr || {}); cfg.clean.ai = Object.assign(CLEAN0().ai, cfg.clean.ai || {}); cfg.clean.eq = Object.assign(CLEAN0().eq, cfg.clean.eq || {}); cfg.clean.tone = Object.assign(CLEAN0().tone, cfg.clean.tone || {}); cfg.clean.gate = Object.assign(CLEAN0().gate, cfg.clean.gate || {}); cfg.edits = Array.isArray(cfg.edits) ? cfg.edits : [];
     let ws = document.getElementById('audioWs'); if (!ws) { ws = H('div', { id: 'audioWs' }); document.querySelector('main').append(ws); }
     W.root = ws; ws.innerHTML = ''; const C = cfg.clean;
     const fileIn = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm,.mp4,.mov' }); fileIn.style.display = 'none'; fileIn.addEventListener('change', () => { const f = fileIn.files && fileIn.files[0]; if (f) useFile(f); fileIn.value = ''; });
@@ -209,21 +238,21 @@ const AudioTab = (() => {
     const slider = (label, val, min, max, step, fn, show) => { const out = H('span', { className: 'au-val', textContent: show(val) }); return H('label', { className: 'field au-sl' }, H('span', { className: 'lab' }, label, out), H('input', { type: 'range', min, max, step, value: val, on: { input: e => { out.textContent = show(+e.target.value); }, change: e => { fn(+e.target.value); W.changed(true); } } })); };
     // Before, After, and Removed (only what the noise removal took away: there should be no words in it)
     const mode = () => W.before ? 'b' : W.removed ? 'r' : 'a';
-    const ab = m => H('button', { type: 'button', className: 'au-ab' + (mode() === m ? ' on' : ''), 'data-m': m, textContent: { b: 'Before', a: 'After', r: 'Removed' }[m], title: { b: 'Hear it as recorded, with your cuts (B swaps)', a: 'Hear it cleaned up (B swaps)', r: 'Hear only what the noise removal takes out. If you can hear words in it, turn the noise removal down.' }[m],
+    const ab = m => H('button', { type: 'button', className: 'au-ab' + (mode() === m ? ' on' : ''), 'data-m': m, textContent: { b: 'Before', a: 'After', r: 'Removed' }[m], title: { b: 'Hear it as recorded, with your cuts (B swaps)', a: 'Hear it cleaned up (B swaps)', r: 'Hear only what the noise and room removal take out. A faint echo of your words is the room going; clear words mean one of them is set too strong.' }[m],
       on: { click: () => setMode(m) } });
-    W.setMode = m => { if (m === 'r' && !W.outRes) { say('Turn on noise removal first; then Removed lets you hear what it takes out.'); return; } const t = nowT(), was = W.playing; W.before = m === 'b'; W.removed = m === 'r'; specCache.key = ''; ws.querySelectorAll('.au-ab').forEach(b => b.classList.toggle('on', b.dataset.m === m)); draw(); if (was) play(Math.min(t, outDur())); };
+    W.setMode = m => { if (m === 'r' && !W.outRes) { say('Turn on the AI voice cleaner or Room first; then Removed lets you hear what they take out.'); return; } const t = nowT(), was = W.playing; W.before = m === 'b'; W.removed = m === 'r'; specCache.key = ''; ws.querySelectorAll('.au-ab').forEach(b => b.classList.toggle('on', b.dataset.m === m)); draw(); if (was) play(Math.min(t, outDur())); };
     const setMode = m => W.setMode(m);
     // the top bar
     ws.append(H('div', { className: 'au-bar' },
       H('div', { className: 'au-name', textContent: cfg.src ? (cfg.name || 'Recording') : 'No recording yet' }),
-      btn('Open a recording', () => fileIn.click()), H('button', { type: 'button', className: 'au-rec', textContent: '● Record', on: { click: record } }), fileIn,
+      btn('Open a recording', () => fileIn.click()), H('button', { type: 'button', className: 'au-rec', textContent: '● Record', on: { click: record } }), H('canvas', { className: 'au-meter', width: 180, height: 10, hidden: true, title: 'The level coming in: the bar should reach the last third when you talk, and never the end' }), fileIn,
       H('span', { className: 'au-sp' }),
       H('button', { type: 'button', className: 'au-play', innerHTML: AU_PLAY, title: 'Play or pause (Space)', 'aria-label': 'Play', on: { click: toggle } }),
       H('div', { className: 'au-abw' }, ab('b'), ab('a'), ab('r')),
       H('span', { className: 'au-time' }),
       H('span', { className: 'au-sp' }),
       seg(W.view, [['wave', 'Waveform'], ['spec', 'Frequencies']], v => { W.view = v; ws.querySelectorAll('.au-bar .st-seg button').forEach(b => b.classList.toggle('on', b.textContent === (v === 'wave' ? 'Waveform' : 'Frequencies'))); draw(); }),
-      btn('－', () => zoom(1.6)), btn('＋', () => zoom(1 / 1.6)), btn('Whole thing', () => { W.t0 = 0; W.t1 = outDur(); draw(); })));
+      H('span', { className: 'au-zoomw' }, btn('－', () => zoom(1.6)), btn('＋', () => zoom(1 / 1.6)), btn('Whole thing', () => { W.t0 = 0; W.t1 = outDur(); draw(); }))));
     const waveBox = H('div', { className: 'au-wbox' }, H('canvas', { className: 'au-wave', 'aria-label': 'The recording: drag to choose a part, click to place the playhead' }), H('div', { className: 'au-head', 'aria-hidden': 'true' }, H('i', { hidden: true })));
     const overCv = H('canvas', { className: 'au-over', title: 'The whole recording: click to jump there' });
     overCv.addEventListener('pointerdown', ev => { const r = overCv.getBoundingClientRect(), d = outDur(), span = W.t1 - W.t0, c = (ev.clientX - r.left) / r.width * d; W.t0 = cl(c - span / 2, 0, Math.max(0, d - span)); W.t1 = W.t0 + span; draw(); });
@@ -232,38 +261,79 @@ const AudioTab = (() => {
       tb('Make quiet', ACT.sil, 'Silence it, keeping the length'), tb('Keep only this', ACT.keep, 'Cut out everything else'), tb('Fade in', ACT.fin, ''), tb('Fade out', ACT.fout, ''), tb('Amplify…', ACT.amplify, 'Louder or quieter by an exact number of dB'), tb('Normalise', ACT.normalise, 'Make the loudest peak -1 dB (the selection, or everything when nothing is selected)'),
       H('span', { className: 'au-sp' }), tb('Tighten long pauses', ACT.tighten, 'Shortens pauses longer than 0.7 s'), cfg.edits.length ? tb('Undo all cuts', ACT.reset, 'Takes every cut and edit off (the clean up stays). Ctrl+Z undoes one at a time.') : '');
     const left = H('div', { className: 'au-main' }, waveBox, overCv, edits, H('div', { className: 'au-foot' }, H('span', { className: 'au-status' }), H('span', { className: 'au-say', 'aria-live': 'polite' })));
-    // the clean up panel
-    const nr = C.nr, prof = nr.profile;
+    // the clean up panel, in the order the sound goes through it
+    const nr = C.nr, prof = nr.profile, G = C.gate, pc = v => v ? Math.round(v * 100) + '%' : 'Off', yn = (v, yes, no, fn) => seg(v ? '1' : '0', [['1', yes], ['0', no]], q => { fn(q === '1'); W.changed(true); });
+    const gateSet = () => { G.on = G.range > 0 || G.breath > 0; };
     const side = H('div', { className: 'au-side' },
-      card('AI voice cleaner', aiBox(C)),
-      card('Background noise, Audacity style', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
-        H('div', { className: 'btnrow' }, btn('Learn noise from the selection', learnNoise, prof ? '' : 'primary'), prof ? btn(nr.on ? 'Turn off' : 'Turn on', () => { nr.on = !nr.on; W.changed(true); }) : ''),
+      card('Studio voice', field('Everything below, set for you', seg(C.studio ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => setStudio(v === '1')), 'For a rough microphone: buzz and noise out, the room out, the tone of a close microphone, an even level and silent gaps. Each stage below can still be changed by hand. B swaps before and after.'),
+        H('div', { className: 'au-report', 'aria-live': 'polite' })),
+      card('Noise', aiBox(C),
+        field('Buzz, hum and whine', yn(C.buzz, 'Find and take out', 'Leave', v => { C.buzz = v; }), 'Finds any steady tone (mains buzz and its harmonics, a monitor’s whine) and notches out just that.'),
+        field('Rumble (traffic, desk knocks)', yn(C.rumble !== false, 'Cut', 'Keep', v => { C.rumble = v; })),
+        C.hum ? field('Mains hum (the older 50 Hz filter)', yn(C.hum, 'Take out', 'Leave', v => { C.hum = v; })) : ''),
+      card('Room', slider('Take the room out', C.room || 0, 0, 1, 0.05, v => { C.room = v; }, pc),
+        H('p', { className: 'hint', textContent: 'The echo that follows every sound in a room is predicted from the moment before and taken away, so the voice comes from the mouth, not from the room. It measures the room first: a close, dry recording is left alone.' })),
+      card('Repairs', field('Clipped peaks (recorded too loud)', yn(C.declip, 'Mend', 'Leave', v => { C.declip = v; })),
+        field('Clicks', yn(C.declick, 'Fix', 'Leave', v => { C.declick = v; })),
+        slider('Pops on P and B', C.pops || 0, 0, 1, 0.05, v => { C.pops = v; }, pc)),
+      card('Tone', slider('Match a close microphone', C.tone.on ? C.tone.amt : 0, 0, 1, 0.05, v => { C.tone.amt = v || 0.5; C.tone.on = v > 0; }, pc),
+        H('p', { className: 'hint', textContent: 'Measures your voice across the whole recording against a voice a hand’s width from a good microphone and corrects part of the difference: thin, boxy or harsh microphones come out fuller and smoother. Your own voice stays yours.' }),
+        field('Voice EQ by hand', yn(C.eq.on, 'On', 'Off', v => { C.eq.on = v; })),
+        ...(C.eq.on ? [slider('Boom (120 Hz)', C.eq.low, -6, 6, 0.5, v => { C.eq.low = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Boxiness (320 Hz)', C.eq.mud, -8, 4, 0.5, v => { C.eq.mud = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Presence (3.5 kHz)', C.eq.pres, -4, 8, 0.5, v => { C.eq.pres = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Air (10 kHz and up)', C.eq.air, -4, 8, 0.5, v => { C.eq.air = v; }, v => (v > 0 ? '+' : '') + v + ' dB')] : []),
+        slider('Soften harsh S sounds', C.deess || 0, 0, 1, 0.05, v => { C.deess = v; }, pc)),
+      card('Level and gaps', slider('Even level (every phrase as loud as the last)', C.ride || 0, 0, 1, 0.05, v => { C.ride = v; }, pc),
+        slider('Compressor (punch)', C.comp || 0, 0, 1, 0.05, v => { C.comp = v; }, pc),
+        C.level > 0 ? slider('Slow leveller (the older one)', C.level || 0, 0, 1, 0.05, v => { C.level = v; }, pc) : '',
+        field('Gaps between words', seg(G.on ? String(G.range) : '0', [['0', 'Leave'], ['12', 'Quieter'], ['24', 'Quiet'], ['60', 'Silent']], v => { G.range = +v; gateSet(); W.changed(true); }), 'Turned down after the compressor, so nothing can lift the gaps back up. Opens just before each word.'),
+        field('Breaths', seg(G.on ? String(G.breath) : '0', [['0', 'Leave'], ['9', 'Soften'], ['30', 'Take out']], v => { G.breath = +v; if (!G.on) G.range = 0; gateSet(); W.changed(true); }), 'Soften keeps them natural. Take out can sound held in on a long read.'),
+        field('Loudness', sel(C.loud == null ? '' : String(C.loud), [['', 'As recorded'], ['-16', 'Voice for video (-16 LUFS)'], ['-14', 'YouTube loud (-14 LUFS)'], ['-19', 'Quieter (-19 LUFS)']], v => { C.loud = v === '' ? null : +v; W.changed(true); }, 'Loudness'))),
+      card('Noise by hand, Audacity style', H('p', { className: 'hint', textContent: prof ? 'Learned from ' + prof.len + ' s of quiet. To learn it again, drag across a bit where you are not talking and press Learn.' : 'Drag across a bit where you are not talking (half a second or more), then press Learn noise. Like Audacity’s Noise Profile.' }),
+        H('div', { className: 'btnrow' }, btn('Learn noise from the selection', learnNoise), prof ? btn(nr.on ? 'Turn off' : 'Turn on', () => { nr.on = !nr.on; if (nr.on) C.ai.on = false; W.changed(true); }) : ''),
         ...(prof ? [slider('Turn the noise down by', nr.reduce, 3, 36, 1, v => { nr.reduce = v; }, v => v + ' dB'), slider('Sensitivity', nr.sens, 0, 18, 0.5, v => { nr.sens = v; }, v => v + ' dB'), slider('Smoothing', nr.smooth, 0, 8, 1, v => { nr.smooth = v; }, v => v + ' bands')] : []),
         H('p', { className: 'hint', textContent: 'Used when the AI voice cleaner is off. Press Removed at the top to hear exactly what it takes out.' })),
-      card('Voice', field('Voice EQ', seg(C.eq.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.eq.on = v === '1'; W.changed(true); }), 'A little less boxiness, a little more presence and air.'),
-        ...(C.eq.on ? [slider('Boom (120 Hz)', C.eq.low, -6, 6, 0.5, v => { C.eq.low = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Boxiness (320 Hz)', C.eq.mud, -8, 4, 0.5, v => { C.eq.mud = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Presence (3.5 kHz)', C.eq.pres, -4, 8, 0.5, v => { C.eq.pres = v; }, v => (v > 0 ? '+' : '') + v + ' dB'), slider('Air (10 kHz and up)', C.eq.air, -4, 8, 0.5, v => { C.eq.air = v; }, v => (v > 0 ? '+' : '') + v + ' dB')] : []),
-        slider('Compressor (punch, even level)', C.comp || 0, 0, 1, 0.05, v => { C.comp = v; }, v => v ? Math.round(v * 100) + '%' : 'Off')),
-      card('Tidy up',
-        field('Rumble (traffic, desk knocks)', seg(C.rumble !== false ? '1' : '0', [['1', 'Cut'], ['0', 'Keep']], v => { C.rumble = v === '1'; W.changed(true); })),
-        field('Mains hum', seg(C.hum ? '1' : '0', [['1', 'Take out (50 Hz)'], ['0', 'Leave']], v => { C.hum = v === '1'; W.changed(true); })),
-        field('Clicks and pops', seg(C.declick ? '1' : '0', [['1', 'Fix'], ['0', 'Leave']], v => { C.declick = v === '1'; W.changed(true); })),
-        slider('Soften harsh S sounds', C.deess || 0, 0, 1, 0.05, v => { C.deess = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
-        slider('Slow leveller (long changes in level)', C.level || 0, 0, 1, 0.05, v => { C.level = v; }, v => v ? Math.round(v * 100) + '%' : 'Off'),
-        field('Loudness', sel(C.loud == null ? '' : String(C.loud), [['', 'As recorded'], ['-16', 'Voice for video (-16 LUFS)'], ['-14', 'YouTube loud (-14 LUFS)'], ['-19', 'Quieter (-19 LUFS)']], v => { C.loud = v === '' ? null : +v; W.changed(true); }, 'Loudness'))),
       card('Send it on', H('div', { className: 'btnrow' }, btn('Use as my character’s voice', () => send('char'), 'primary'), btn('Add to the video', () => send('video')), btn('Save as WAV', () => send('wav'))),
-        H('p', { className: 'hint', textContent: 'Sends the cleaned, edited sound. The recording itself is never changed.' })));
+        H('p', { className: 'hint', textContent: 'Sends the cleaned, edited sound. The recording itself is never changed.' })),
+      card('Recording', H('label', { className: 'field au-micf', hidden: true }, H('span', { className: 'lab' }, 'Microphone'), H('select', { className: 'au-mic', 'aria-label': 'Microphone', on: { change: e => { try { localStorage.setItem('patter-mic', e.target.value); } catch (er) { } } } })),
+        H('p', { className: 'hint', textContent: 'Talk a hand’s width from the microphone, a little to one side of it, in the softest room you have (curtains, a bed, a wardrobe of clothes). While it records, the bar beside the button should reach its last third when you talk and never touch the end. Recorded straight to a WAV with the browser’s own processing off.' })));
     ws.append(H('div', { className: 'au-body' }, left, side));
-    wire(waveBox.querySelector('.au-wave')); paintRecBtn(); syncPlayBtn(); requestAnimationFrame(() => { draw(); panelInfo(); }); later();
+    wire(waveBox.querySelector('.au-wave')); paintRecBtn(); paintMics(); paintReport(); syncPlayBtn(); requestAnimationFrame(() => { draw(); panelInfo(); }); later();
     if (!W._ro) { W._ro = new ResizeObserver(() => { if (document.body.classList.contains('aud')) draw(); }); } W._ro.disconnect(); W._ro.observe(waveBox);
   }
+  /* Studio voice: one switch that sets every stage (he asked for studio sound from a rough microphone, November 2026).
+     It only writes settings; nothing is hidden, and each stage below can be changed afterwards. Off puts every stage
+     back to nothing (a learned noise profile is kept). */
+  async function setStudio(on) { const C = W.cfg.clean, st = on && typeof DeepFilter !== 'undefined' ? await DeepFilter.check() : 'none';
+    if (on) { Object.assign(C, STUDIO()); C.eq.on = false; C.nr.on = false; C.ai = { on: st === 'ready', atten: 40 }; }
+    else { const keep = C.nr && C.nr.profile, fresh = CLEAN0(); fresh.nr.profile = keep || null; Object.assign(C, fresh); }
+    W.changed(true); say(!on ? 'Studio voice is off: the recording as it came in, with your cuts.' : st === 'ready' ? 'Studio voice is on.' : 'Studio voice is on. Get the AI voice cleaner (in Noise) for the background noise: it is the biggest single part.'); }
+  /* What came in, in plain words: measured on the recording itself (VoiceFX.inspect, once a recording) and on the way
+     through the chain (how much room there was, breaths found). Advice is about the two things no clean up fully mends:
+     the level and the distance to the microphone. */
+  function reportLines() {
+    const cfg = W.cfg, r = W.insp && cfg && W.insp.id === cfg.src ? W.insp.r : null, f = cfg && proc.key === cleanKey(cfg) ? proc.info : null, out = []; if (!r) return out;
+    const hz = v => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1).replace(/\.0$/, '') + ' kHz' : Math.round(v) + ' Hz';
+    if (r.clipped) out.push(['warn', 'Too loud', r.clipped + ' peaks were cut flat. Sit back a little or turn the microphone down.']);
+    else if (r.speech < -40) out.push(['warn', 'Very quiet', 'your voice sits at ' + Math.round(r.speech) + ' dB. Get closer or turn the microphone up: a quiet recording carries more hiss.']);
+    else if (r.speech < -30) out.push(['mid', 'A little quiet', 'your voice sits at ' + Math.round(r.speech) + ' dB. A touch closer, or the microphone up a notch, gives the clean up less to do.']);
+    else out.push(['ok', 'Level', 'good.']);
+    out.push(r.snr >= 50 ? ['ok', 'Noise', 'very little.'] : r.snr >= 38 ? ['mid', 'Noise', 'some, ' + Math.round(r.snr) + ' dB under your voice.'] : ['warn', 'Noise', 'a lot, only ' + Math.round(r.snr) + ' dB under your voice.']);
+    const onMains = t => r.mains && Math.abs(t.f - Math.round(t.f / r.mains) * r.mains) < Math.max(1.5, t.f * 0.004), nm = r.tones.filter(onMains).length;
+    if (r.tones.length) out.push(['warn', !nm ? 'A steady tone' : nm === r.tones.length ? 'Mains buzz' : 'Mains buzz and a whine', 'at ' + r.tones.slice().sort((a, b) => b.up - a.up).slice(0, 3).sort((a, b) => a.f - b.f).map(t => hz(t.f)).join(', ') + '.']); else out.push(['ok', 'Buzz', 'none.']);
+    if (f && f.room) out.push(f.room.echo <= -22 ? ['ok', 'Room', 'close and dry.'] : f.room.echo <= -17 ? ['mid', 'Room', 'a little of the room in it.'] : ['warn', 'Room', 'a lot of echo. It is taken out as far as it will go; nearer the microphone is the real cure.']);
+    if (f && f.breaths) out.push(['ok', 'Breaths', f.breaths + (W.cfg.clean.gate.breath >= 20 ? ' taken out.' : ' softened.')]);
+    if (f && f.pops) out.push(['ok', 'Pops', f.pops + ' softened.']);
+    return out;
+  }
+  function paintReport() { const { H } = UI, el = W.root && W.root.querySelector('.au-report'); if (!el) return; el.innerHTML = ''; const L = reportLines(); if (!L.length) return;
+    el.append(H('div', { className: 'lab', textContent: 'What came in' }), ...L.map(([k, a, b]) => H('div', { className: 'au-rl ' + k }, H('i', {}), H('span', {}, H('b', { textContent: a + ': ' }), b)))); }
   /* The AI voice cleaner (DeepFilterNet 3): download once, then on or off and how much it may take away */
   function aiBox(C) {
     const { H, btn, field } = UI, box = H('div', {}), seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
     const draw2 = st => { box.innerHTML = '';
-      box.append(H('p', { className: 'hint', textContent: 'DeepFilterNet 3, the best free voice cleaner there is: far more natural than the old one. It takes out fans, traffic, hiss and room noise and leaves your voice alone. Runs on this computer.' }));
-      if (st !== 'ready') { const b = btn('Get the AI voice cleaner (about 30 MB, once)', async () => { b.disabled = true; try { await DeepFilter.download(q => { b.textContent = 'Downloading ' + Math.round(q * 100) + '%'; }); draw2('ready'); say('The AI voice cleaner is ready. Turn it on below.'); } catch (e) { b.disabled = false; b.textContent = 'Try the download again'; say(e.message || String(e)); } }, 'primary'); box.append(H('div', { className: 'btnrow' }, b)); return; }
-      box.append(field('AI voice cleaner', seg(C.ai.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.ai.on = v === '1'; if (C.ai.on && C.nr) C.nr.on = false; W.changed(true); }), 'When it is on, the Audacity style remover above is not used: one remover at a time sounds best.'));
-      if (C.ai.on) box.append(field('How much it takes away', seg(String(C.ai.atten == null ? 20 : C.ai.atten), [['12', 'Gentle'], ['20', 'Natural'], ['30', 'Strong'], ['100', 'Everything']], v => { C.ai.atten = +v; W.changed(true); }), 'Natural keeps a touch of the room so it does not sound vacuum sealed. Everything is for very noisy recordings.'));
+      box.append(H('p', { className: 'hint', textContent: 'The AI voice cleaner (DeepFilterNet 3) takes out fans, traffic, hiss and room noise and leaves your voice alone. Runs on this computer.' }));
+      if (st !== 'ready') { const b = btn('Get the AI voice cleaner (about 30 MB, once)', async () => { b.disabled = true; try { await DeepFilter.download(q => { b.textContent = 'Downloading ' + Math.round(q * 100) + '%'; }); if (C.studio) { C.ai.on = true; C.ai.atten = 40; if (C.nr) C.nr.on = false; say('The AI voice cleaner is ready and switched on.'); W.changed(true); } else { draw2('ready'); say('The AI voice cleaner is ready. Turn it on below.'); } } catch (e) { b.disabled = false; b.textContent = 'Try the download again'; say(e.message || String(e)); } }, 'primary'); box.append(H('div', { className: 'btnrow' }, b)); return; }
+      box.append(field('AI voice cleaner', seg(C.ai.on ? '1' : '0', [['1', 'On'], ['0', 'Off']], v => { C.ai.on = v === '1'; if (C.ai.on && C.nr) C.nr.on = false; W.changed(true); }), 'When it is on, the Audacity style remover further down is not used: one remover at a time sounds best.'));
+      if (C.ai.on) box.append(field('How much it takes away', seg(String(C.ai.atten == null ? 20 : C.ai.atten), [['12', 'Gentle'], ['20', 'Natural'], ['30', 'Strong'], ['40', 'Thorough'], ['100', 'Everything']], v => { C.ai.atten = +v; W.changed(true); }), 'Thorough takes the noise right down and still protects quiet words (with the gaps turned down below, nothing is left to hear). Everything can chew words on a hard recording.'));
     };
     draw2(typeof DeepFilter !== 'undefined' ? DeepFilter.state : 'none'); if (typeof DeepFilter !== 'undefined' && DeepFilter.state === 'unknown') DeepFilter.check().then(draw2);
     return box;
@@ -285,5 +355,5 @@ const AudioTab = (() => {
   function activate(on) { document.body.classList.toggle('aud', !!on); const ws = document.getElementById('audioWs'); if (ws) ws.hidden = !on; if (!on) { stop(); if (W.rec) W.rec.stop(); } }
   const duration = cfg => { const o = W.out; return o && W.cfg === cfg ? Math.max(0.5, o.y.length / SR) : 1; };
   function draw0(g, t, cfg, look, Wd, Hd) { g.fillStyle = '#0a1120'; g.fillRect(0, 0, Wd, Hd); }
-  return { id: 'audio', name: 'Audio', defaults, duration, draw: draw0, form, key, activate, hooks, send, _W: W, _render: render, _segmentsOf: segmentsOf, _srcRanges: srcRanges };
+  return { id: 'audio', name: 'Audio', defaults, duration, draw: draw0, form, key, activate, hooks, send, STUDIO, _W: W, _proc: proc, _render: render, _segmentsOf: segmentsOf, _srcRanges: srcRanges };
 })();

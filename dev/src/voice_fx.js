@@ -226,7 +226,7 @@ const VoiceFX = (() => {
         const mark = (p, q) => { if (q - p < 60) return; for (let j = p; j <= q; j++) br[j] = 1; nbr++; };
         if (v0 < 0) { if (b - i >= 120) mark(i, b); } else { if (v0 - i >= 250) mark(i, v0 - 100); if (b - v1 >= 300) mark(v1 + 150, b); }
         i = b; } }
-    const g = new Float32Array(nb), lo = db2(-range), soft = Math.max(lo, db2(-breath)); let last = -1e9, next = 1e9; for (let i = 0; i < nb; i++) { if (talk[i] && !br[i]) last = i; g[i] = i - last <= 120 ? 1 : lo; } for (let i = nb - 1; i >= 0; i--) { if (talk[i] && !br[i]) next = i; if (next - i <= 60) g[i] = 1; }
+    const g = new Float32Array(nb), lo = db2(-range), soft = db2(-breath); let last = -1e9, next = 1e9; for (let i = 0; i < nb; i++) { if (talk[i] && !br[i]) last = i; g[i] = i - last <= 120 ? 1 : lo; } for (let i = nb - 1; i >= 0; i--) { if (talk[i] && !br[i]) next = i; if (next - i <= 60) g[i] = 1; }
     for (let i = 0; i < nb; i++) if (br[i]) g[i] = soft;
     for (let pass = 0; pass < 2; pass++) { const q = Float32Array.from(g), R = 10; let a = 0; for (let i = -R; i <= R; i++) a += q[cl(i, 0, nb - 1)]; for (let i = 0; i < nb; i++) { g[i] = a / (2 * R + 1); a += q[cl(i + R + 1, 0, nb - 1)] - q[cl(i - R, 0, nb - 1)]; } }
     return { g, w, breaths: nbr };

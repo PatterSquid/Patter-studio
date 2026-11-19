@@ -454,6 +454,19 @@ body.aud main > :not(#audioWs){display:none!important}
 .au-sp{flex:1}
 .au-time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:18ch}
 .au-rec.on{background:#c81d24;color:#fff;border-color:#c81d24}
+.au-mic{width:100%}
+.au-micf[hidden]{display:none}
+.au-meter{width:180px;height:10px;border-radius:5px;display:block}
+.au-meter[hidden]{display:none}
+.au-zoomw{display:flex;gap:8px;align-items:center}
+.au-bar.rec .au-zoomw,.au-bar.rec .st-seg{display:none}
+.au-report{margin-top:8px;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.35}
+.au-report:empty{display:none}
+.au-rl{display:flex;gap:8px;align-items:baseline;color:var(--muted)}
+.au-rl b{color:var(--fg);font-weight:600}
+.au-rl i{flex:none;width:8px;height:8px;border-radius:50%;background:#4fd1a5;transform:translateY(-1px)}
+.au-rl.mid i{background:#e8c15a}
+.au-rl.warn i{background:#ff7a1a}
 .au-abw{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .au-ab{border:0;border-radius:0;padding:6px 12px;background:transparent;color:var(--muted)}
 .au-ab.on{background:var(--paper);color:var(--ink);font-weight:600}

@@ -117,7 +117,11 @@ const AudioFX = (() => {
     for (let i = 0; i < n + la; i++) { if (i < n) { while (q.length > qi && need[q[q.length - 1]] >= need[i]) q.pop(); q.push(i); } while (q.length > qi && q[qi] < i - la) qi++; const j = i - la; if (j < 0) continue; const want = q.length > qi ? need[q[qi]] : 1; g = want < g ? want : rl * g + (1 - rl) * want; out[j] = x[j] * g; }
     return out;
   }
-  function loudness(x, sr, target = -16) { const now = lufs(x, sr); if (now <= -69) return x; const k = db2(cl(target - now, -30, 30)), y = new Float32Array(x.length); for (let i = 0; i < x.length; i++) y[i] = x[i] * k; return limit(y, sr, -1); }
+  // To the target, with the peaks held under -1 dB. Holding peaks down takes a little loudness away again, so it is
+  // measured once more and topped up (twice at most): the figure he picks is the figure he gets.
+  function loudness(x, sr, target = -16) { const now = lufs(x, sr); if (now <= -69) return x; let k = db2(cl(target - now, -30, 30)), out = null;
+    for (let pass = 0; pass < 3; pass++) { const y = new Float32Array(x.length); for (let i = 0; i < x.length; i++) y[i] = x[i] * k; out = limit(y, sr, -1); const got = lufs(out, sr), miss = target - got; if (Math.abs(miss) < 0.3 || miss < 0 || miss > 6) break; k *= db2(miss); }
+    return out; }
 
   /* ---------- AI noise removal: RNNoise (trained on real speech and noise), built in, 10 ms frames at 48 kHz ---------- */
   let rnMod = null;
@@ -152,23 +156,34 @@ const AudioFX = (() => {
     for (let h = 1; h <= 3; h++) { const k = bin(base * h); if (k + 4 >= prof.db.length) continue; const pk = Math.max(prof.db[k - 1], prof.db[k], prof.db[k + 1]), side = (prof.db[k - 4] + prof.db[k + 4]) / 2; s += pk - side; n++; } return n > 0 && s / n > 8; }
 
   /* ---------- the whole chain, in a sensible order: one noise remover, never two ----------
-     c.ai { on, atten (dB it may take away: 12 gentle, 20 natural, 30 strong, 100 all) } is DeepFilterNet 3; c.nr is the
-     Audacity style one (used when the AI is off). keep: also hand back the sound just before and after the noise removal,
-     so he can hear exactly what is being taken out. */
-  async function chain(x, sr, c = {}, onProgress, keep) {
-    let y = x; const step = (p, s) => onProgress && onProgress(p, s), V = typeof VoiceFX !== 'undefined' ? VoiceFX : null, info = {}; let nrIn = null, nrOut = null, G = null;
+     c.ai { on, atten (dB it may take away: 12 gentle, 20 natural, 40 thorough, 100 all) } is DeepFilterNet 3; c.nr is the
+     Audacity style one (used when the AI is off). The stages from VoiceFX (c.declip, c.buzz, c.room, c.pops, c.tone,
+     c.ride, c.gate) sit round them: repairs, buzz and the room before the cleaner (it does best on a signal that is
+     already mended, and echo is easier to predict before anything has been gated out of it), tone and level after, and
+     the gaps between words turned down last of all, after the compressor, so nothing can lift them again.
+     keep: also hand back the sound just before and after the noise and room removal (so he can hear exactly what is
+     being taken out) and what was measured on the way (info).
+     The chain is in two halves. front() is the slow half (the cleaner, the room); back() is quick. frontKey(c) names the
+     settings the front depends on, so the panel can keep a front and redo only the back when a tone or level slider moves. */
+  const frontKey = c => JSON.stringify([!!c.declip, !!c.declick, c.rumble !== false, +c.rumbleHz || 80, !!c.hum, +c.humHz || 50, !!c.buzz, +c.room || 0, c.ai && c.ai.on ? [c.ai.atten == null ? 20 : +c.ai.atten] : 0, !(c.ai && c.ai.on) && c.nr && c.nr.on && c.nr.profile ? [c.nr.reduce, c.nr.sens, c.nr.smooth, c.nr.profile.len, c.nr.profile.db[40], c.nr.profile.db[400]] : 0]);
+  async function front(x, sr, c = {}, onProgress) {
+    let y = x; const step = (p, s) => onProgress && onProgress(p, s), V = typeof VoiceFX !== 'undefined' ? VoiceFX : null, info = {}; let nrIn = null, nrOut = null;
     if (V && c.declip) { step(0.01, 'Mending clipped peaks'); y = V.declip(y, sr, info); await yieldNow(); }
     if (c.declick) { step(0.02, 'Fixing clicks'); y = declick(y, sr); await yieldNow(); }
     if (c.rumble !== false) { y = rumble(y, sr, +c.rumbleHz || 80); }
     if (c.hum) { y = hum(y, sr, +c.humHz || 50); }
     if (V && c.buzz) { step(0.03, 'Looking for buzz and whine'); info.tones = await V.tones(y, sr); y = V.detone(y, sr, info.tones); await yieldNow(); }
     if (V && c.room > 0) { step(0.04, 'Taking the room out'); nrIn = y; y = await V.dry(y, sr, +c.room, info); nrOut = y; }
-    if (c.ai && c.ai.on) { if (typeof DeepFilter === 'undefined' || (await DeepFilter.check()) !== 'ready') throw new Error('The AI voice cleaner is not downloaded yet: press Get the AI voice cleaner in Background noise.');
-      step(0.12, 'AI voice cleaning'); if (!nrIn) nrIn = y; y = await DeepFilter.process(y, { atten: c.ai.atten == null ? 20 : +c.ai.atten, onProgress: q => step(0.12 + 0.55 * q, 'AI voice cleaning') }); nrOut = y; }
-    else if (c.nr && c.nr.on && c.nr.profile) { step(0.12, 'Taking out the noise'); if (!nrIn) nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.12 + 0.55 * q, 'Taking out the noise')); nrOut = y; }
+    if (c.ai && c.ai.on) { if (typeof DeepFilter === 'undefined' || (await DeepFilter.check()) !== 'ready') throw new Error('The AI voice cleaner is not downloaded yet: press Get the AI voice cleaner in Noise.');
+      step(0.12, 'AI voice cleaning'); if (!nrIn) nrIn = y; y = await DeepFilter.process(y, { atten: c.ai.atten == null ? 20 : +c.ai.atten, onProgress: q => step(0.12 + 0.6 * q, 'AI voice cleaning') }); nrOut = y; }
+    else if (c.nr && c.nr.on && c.nr.profile) { step(0.12, 'Taking out the noise'); if (!nrIn) nrIn = y; y = await denoise(y, sr, c.nr.profile, c.nr, q => step(0.12 + 0.6 * q, 'Taking out the noise')); nrOut = y; }
+    return { y, nrIn, nrOut, info };
+  }
+  async function back(F, sr, c = {}, onProgress) {
+    let y = F.y, G = null; const step = (p, s) => onProgress && onProgress(p, s), V = typeof VoiceFX !== 'undefined' ? VoiceFX : null, info = Object.assign({}, F.info);
     if (V && c.pops > 0) { step(0.74, 'Softening pops'); y = V.pops(y, sr, +c.pops, info); await yieldNow(); }
     if (V && c.gate && c.gate.on) { G = V.gate(y, sr, c.gate); info.breaths = G.breaths; }   // worked out on the clean voice here, laid on after the compressor
-    if (V && c.tone && c.tone.on) { step(0.76, 'Matching the tone'); y = await V.match(y, sr, c.tone.amt == null ? 0.7 : +c.tone.amt, info); }
+    if (V && c.tone && c.tone.on && c.tone.amt > 0) { step(0.76, 'Matching the tone'); y = await V.match(y, sr, +c.tone.amt, info); }
     if (c.eq && c.eq.on) { step(0.8, 'Voice EQ'); y = eq(y, sr, c.eq); await yieldNow(); }
     if (c.deess > 0) { step(0.84, 'Softening S sounds'); y = deess(y, sr, +c.deess); await yieldNow(); }
     if (V && c.ride > 0) { step(0.86, 'Riding the level'); y = V.ride(y, sr, +c.ride); await yieldNow(); }
@@ -176,8 +191,9 @@ const AudioFX = (() => {
     if (c.level > 0) { step(0.91, 'Evening it out'); y = level(y, sr, +c.level); await yieldNow(); }
     if (G) { step(0.93, 'Quietening the gaps'); y = V.gateApply(y, G); await yieldNow(); }
     if (c.loud != null && c.loud !== false) { step(0.95, 'Setting the loudness'); y = loudness(y, sr, +c.loud); }
-    step(1, 'Done'); return keep ? { y, nrIn, nrOut, info } : y;
+    step(1, 'Done'); return { y, nrIn: F.nrIn, nrOut: F.nrOut, info };
   }
+  async function chain(x, sr, c = {}, onProgress, keep) { const r = await back(await front(x, sr, c, onProgress), sr, c, onProgress); return keep ? r : r.y; }
   // Where the sound is quiet for a while (for tightening long pauses): [[start, end], ...] in seconds
   function pauses(x, sr, minLen = 0.7, belowDb = -42) {
     const w = Math.floor(sr * 0.02), thr = db2(belowDb), out = []; let st = -1;
@@ -200,6 +216,12 @@ const AudioFX = (() => {
     let o = 44; for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { dv.setInt16(o, Math.round(cl(chans[c][i], -1, 1) * 32767), true); o += 2; }
     return new Blob([buf], { type: 'audio/wav' });
   }
-  return { biquad, coef, eq, compress, hasHum, profile, quietest, denoise, rnnoise, rumble, hum, deess, declick, level, lufs, limit, loudness, chain, pauses, peaks, spectrogram, wav, N, HOP };
+  function wavF(chans, sr) {   // 32 bit float WAV: what the microphone gave, nothing rounded off (for recordings)
+    const n = chans[0].length, ch = chans.length, buf = new ArrayBuffer(44 + n * ch * 4), dv = new DataView(buf), ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); dv.setUint32(4, 36 + n * ch * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 3, true); dv.setUint16(22, ch, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * ch * 4, true); dv.setUint16(32, ch * 4, true); dv.setUint16(34, 32, true); ws(36, 'data'); dv.setUint32(40, n * ch * 4, true);
+    if (ch === 1) new Float32Array(buf, 44, n).set(chans[0]); else { let o = 44; for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { dv.setFloat32(o, chans[c][i], true); o += 4; } }
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  return { biquad, coef, eq, compress, hasHum, profile, quietest, denoise, rnnoise, rumble, hum, deess, declick, level, lufs, limit, loudness, chain, front, back, frontKey, pauses, peaks, spectrogram, wav, wavF, N, HOP };
 })();
 if (typeof module !== 'undefined') module.exports = AudioFX;

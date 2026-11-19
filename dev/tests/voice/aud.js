@@ -1,0 +1,11 @@
+// node aud.js in.wav out.wav '{"room":0.6,...}' [dfn.wav]   the chain in Node; with dfn.wav the AI step hands back that file (made once in the browser)
+const fs = require('fs'), SRC = require('path').join(__dirname, '../../src/');
+function load(p) { const b = fs.readFileSync(p), dv = new DataView(b.buffer, b.byteOffset, b.byteLength); let q = 12, fmt = 1, ch = 1, sr = 48000, bits = 16, d0 = 0, dn = 0;
+  while (q + 8 <= dv.byteLength) { const id = b.toString('latin1', q, q + 4), n = dv.getUint32(q + 4, true); if (id === 'fmt ') { fmt = dv.getUint16(q + 8, true); ch = dv.getUint16(q + 10, true); sr = dv.getUint32(q + 12, true); bits = dv.getUint16(q + 22, true); } if (id === 'data') { d0 = q + 8; dn = Math.min(n, dv.byteLength - d0); } q += 8 + n + (n & 1); }
+  const bs = bits / 8, n = Math.floor(dn / bs / ch), x = new Float32Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let k = 0; k < ch; k++) { const o = d0 + (i * ch + k) * bs; s += fmt === 3 ? dv.getFloat32(o, true) : dv.getInt16(o, true) / 32768; } x[i] = s / ch; } if (sr !== 48000) throw new Error('48 kHz only'); return x; }
+function save(p, x) { const n = x.length, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(48000, 24); b.writeUInt32LE(96000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.max(-1, Math.min(1, x[i])) * 32767), 44 + i * 2); fs.writeFileSync(p, b); }
+globalThis.AudioFX = require(SRC + 'audio_fx.js'); globalThis.VoiceFX = require(SRC + 'voice_fx.js');
+module.exports = { load, save };
+if (require.main === module) (async () => { const [inp, out, cfg, dfn] = process.argv.slice(2), c = JSON.parse(cfg || '{}'), x = load(inp);
+  globalThis.DeepFilter = { check: async () => 'ready', process: async () => load(dfn) }; if (!dfn && c.ai) c.ai.on = false;
+  const t0 = Date.now(), r = await AudioFX.chain(x, 48000, c, null, true); save(out, r.y); console.log(out, ((Date.now() - t0) / 1000).toFixed(1) + ' s', JSON.stringify(r.info).slice(0, 900)); })();

@@ -298,7 +298,7 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   helper; the STFT, ERB and complex features, look ahead, deep filter and overlap add are our own port of libDF and
   df/enhance.py, checked against a Python port with onnxruntime to 1e-5 (scratch work, not kept). Downloaded once into
   IndexedDB `patter-denoise` ("Get the AI voice cleaner"). `clean.ai` is `{ on, atten }` (dB it may take away: 12 gentle,
-  20 natural (default), 30 strong, 100 everything). On a test (flite speech plus pink noise and hum, SI-SDR against the
+  20 natural (default), 30 strong, 40 thorough (what Studio voice uses), 100 everything). On a test (flite speech plus pink noise and hum, SI-SDR against the
   clean voice): noisy 9.0, old Clean my voice 10.1, Audacity style 12 dB 12.3, RNNoise 12.7, DeepFilterNet natural 14.3.
   RNNoise code stays in AudioFX but is no longer offered. Tests serve `dev/tmp_dnhome/{denoise,cutout}` (symlinks to the repo
   folders) through `window.PATTER_DENOISE`: `tests/audio_ui.py`, `tests/audio_edit2.py`.
@@ -309,9 +309,70 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   Paste (`edits` kind `ins`: a stretch of the recording put in again at a point, in `segmentsOf`), Amplify by dB and
   Normalise (peak to -1 dB), with Ctrl+C, X, V (routed to `AudioTab.key` by app.js).
 * **No "Clean my voice" button.** He had it taken out (November 2026): even kept simple it sounded "a bit weird". He uses
-  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks. He also tried a "Grit" voice changer (PSOLA pitch and formant lowering with rasp, November 2026): subtle settings were inaudible and stronger ones risked sounding edited, so he chose his natural voice. Do not offer voice changing again unless he asks. "Send it on" renders a WAV into
+  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks (the Studio voice switch below is one, built for his studio sound request and awaiting his verdict). He also tried a "Grit" voice changer (PSOLA pitch and formant lowering with rasp, November 2026): subtle settings were inaudible and stronger ones risked sounding edited, so he chose his natural voice. Do not offer voice changing again unless he asks. "Send it on" renders a WAV into
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
+
+### The studio voice pass (dev/src/voice_fx.js `VoiceFX`; November 2026, on the branch `audio-pass`, NOT published yet)
+
+He asked: "Audio tab needs a serious upgrade. I want to be able to record with a shitty mic and still get studio quality
+audio (not literally obviously, but a serious improvement). We don't want any background noise, and we want it to sound
+like the avatar is talking, coming directly from his mouth. Upgrade this comprehensively". He was sent one before and
+after clip (his own recording of 12 November three ways, then the same voice through a simulated room and cheap mic) and
+has not answered yet. **Publish only when he says so**; if he does not like the sound, change the stage he names.
+* **What was wrong, measured on `dev/tmp_me.wav`** (his recording; private, never commit): hiss only 32 dB under his
+  voice; a mains buzz at 250 Hz and 1.5 kHz the whole way through; recorded quiet (voice at -34 dB); harsh round 3 and
+  6 kHz. The tab as it was (AI on Natural, EQ, compressor, loudness) left the gaps 38 dB under the voice: **the compressor
+  lifted back most of what the cleaner took out**, and the buzz stayed. With the new chain the gaps are 70 dB under.
+* **The chain** (`AudioFX.chain` = `front` then `back`; every new stage is off by default, so old settings sound the same):
+  `declip` (flat peaks redrawn, modest: 2 dB better on hard clipping), declick, rumble, old hum, **`buzz`** (`VoiceFX.tones`:
+  steady tones found in a 3 Hz a bin spectrum of the quieter frames, then `detone` notches just those), **`room`**
+  (`VoiceFX.dry`, see below), the AI cleaner (or the Audacity one), `pops` (the band under 120 Hz ducked while it towers
+  over the band above), the gate worked out here, **`tone`** (`VoiceFX.match`), EQ by hand, S softener, **`ride`** (phrase
+  loudness evened by a slow gain held through pauses), compressor, old leveller, **the gate laid on** (`VoiceFX.gate`,
+  `gateApply`: after the compressor, so nothing can lift the gaps again), loudness.
+* **The room is taken out by prediction before the cleaner** (WPE, Nakatani 2010: per frequency up to 8 kHz, a 16 tap
+  filter predicts now from 32 to 190 ms ago and the predicted part is subtracted; 5 rounds; learned from 3000 frames
+  spread over the recording so the cost does not grow with length, about 4 s). Things found on the way, do not redo them:
+  it must come BEFORE DeepFilterNet (after it, half the gain); a delay of 3 frames, not 2 (2 predicts the voice itself
+  from overlapping frames: it harmed a dry recording and could not tell dry from roomy); more rounds help more than more
+  taps; a spectral tail suppressor after the cleaner (Lebart style, with a decay measured from word endings) gave nothing
+  measurable and was thrown out. `info.room.echo` (dB of the voiced sound that could be predicted) is the measure of the
+  room: about -25 dry, -13 across a desk; the mix follows it (`(echo + 23) / 6`), so a dry recording is left alone. On a
+  simulated desk mic in a room (his voice, RT60 0.45 s, 30 cm, fan): cleaner alone PESQ 1.61 ESTOI 0.746, with the room
+  stage first 1.95 and 0.814. A very echoey recording (a metre away) is only helped a little: nothing here cures that.
+* **AI cleaner at 40 dB ("Thorough"), not Everything**: the same on ordinary recordings, and on a hard one Everything chewed
+  words (ESTOI 0.50 against 0.59). The gate does the rest in the gaps.
+* **Tone**: his long term spectrum (third octaves, voiced frames) against Byrne et al. 1994 Table II (male, 20 cm from the
+  mouth: the figures are in the code) plus a modest lift from 3 kHz (`LT_UP`: produced voices are brighter than Byrne;
+  a clean modern recording measures 5 to 9 dB over it at 5 to 10 kHz, the lift is about half that). The difference is
+  smoothed to an octave, limited, and half of it applied (`tone.amt` 0.5). It is a taste setting that cannot be judged
+  without ears: if he says dull or harsh, move `LT_UP` or the amount, not the method.
+* **Gaps and breaths** (`gate`): talking is where the voice above 250 Hz is within `under` (30) dB of his speaking level,
+  kept from 60 ms before to 120 ms after (word edges are kept by time, not level); a blip of a few ms does not count;
+  elsewhere down by `range` (24). A breath is sound with nothing at 80 to 450 Hz that lasts longer than a consonant
+  (alone for 120 ms, or a quarter second before or after the voice): down by `breath` dB (9 = soften).
+* **Studio voice** (`STUDIO()` in audio_ui.js, `clean.studio`): one switch that writes every stage's setting (declip, buzz,
+  room 0.8, AI 40 when downloaded, pops 0.6, tone 0.5, S 0.3, ride 0.6, comp 0.3, gate 24/30/9, loudness -16); Off puts
+  everything back to nothing. **This is a one press set up again** (he had "Clean my voice" taken out for how it
+  sounded): he was told so plainly. If he does not want it, take the switch out and leave the stages.
+* The panel is in chain order: Studio voice (with "What came in": level, noise, buzz, room, breaths, from
+  `VoiceFX.inspect` and the chain's `info`), Noise, Room, Repairs, Tone, Level and gaps, Noise by hand, Send it on,
+  Recording. `processed()` keeps the slow half by `AudioFX.frontKey` so tone, level and gap changes are ready in a second.
+* **Recording** takes the samples themselves (an audio worklet from a data: address, the script node as fall back) into a
+  32 bit float WAV (`AudioFX.wavF`); it used to go through MediaRecorder's Opus. A meter by the Record button (`.au-meter`)
+  and a line of advice (too quiet, clipping); the microphone can be chosen when there is more than one (`patter-mic`).
+* **Loudness now lands on the figure picked** (`AudioFX.loudness` measures again after the limiter and tops up): old
+  settings with a loudness come out about 1 dB louder than before. Everything else in old settings is sample for sample
+  the same (checked against the published build).
+* Tests and tools: `tests/audio_studio.py` (18 real steps: report, Studio on without and with the cleaner, the quick half
+  only on a level change, gaps, breaths, undo, Removed, off, recording from Chromium's pretend microphone). The measuring
+  kit is in `dev/tests/voice/` (see its README): the chain on a WAV in the browser or in Node, bad microphone versions
+  of a clean voice, scores, spectrograms, the before and after clip. The scores use DNSMOS, PESQ, ESTOI, pyroomacoustics
+  and nara_wpe from pip and Microsoft's DNSMOS model: **measuring sticks only, never in the app**.
+* Not done, needs his say so: a generative voice restorer (the Adobe Enhance kind: Resemble Enhance, Sidon and the like
+  are hundreds of MB and can change a voice, which he has turned down before); making up a top end a microphone never
+  recorded. Do not add either without asking.
 
 ## The Thumbnail tab (dev/src/thumb.js `Thumb`, dev/src/cutout.js `Cutout`, module `thumb`)
 
