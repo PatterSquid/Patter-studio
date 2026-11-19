@@ -144,7 +144,7 @@ const News = (() => {
     const T = c.T, e = t - T.entry, L = Math.max(0.2, T.land - T.entry); let ox = 0, oy = 0, rot = 0, sc = 1, alpha = 1, lift = 0;
     if (c.entry === 'zoom') { const x = cl(e / L, 0, 1), q = x * x * (1.5 - 0.5 * x); sc = lerp(2.6, 1, q); alpha = cl(e / 0.18, 0, 1); lift = 1 - q; }
     else if (c.entry === 'spin') { const q = ease.out3(e / L); sc = lerp(0.05, 1, q); rot = (1 - q) * Math.PI * 4; }
-    else { const D = DIRS[c.entry] || DIRS.drop, far = Math.pow(1 - cl(e / (L * 0.72), 0, 1), 3), up = 1 - Math.pow(cl((e - L * 0.58) / (L * 0.42), 0, 1), 2.2), back = Math.sin(cl((e - L * 0.4) / (L * 0.6), 0, 1) * Math.PI);
+    else { const D = DIRS[c.entry] || DIRS.drop, far = Math.pow(1 - cl(e / (L * 0.5), 0, 1), 3), up = 1 - Math.pow(cl((e - L * 0.36) / (L * 0.64), 0, 1), 2.6), back = Math.sin(cl((e - L * 0.3) / (L * 0.7), 0, 1) * Math.PI);   /* over its place in half the time (about when it used to get there), then let down onto the board */
       ox = D[0] * far * W * 1.1; oy = D[1] * far * H * D[3]; rot = D[2] * (far - 0.1 * back); lift = up; sc = 1 + 0.07 * up; }
     return { ox, oy, rot, sc, alpha, lift };
   }

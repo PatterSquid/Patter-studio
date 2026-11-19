@@ -1,12 +1,13 @@
 """A before and after clip of a tab, for him to judge a change by. usage: before_after.py OUT.mp4 TAB [settings.json ...]
 Plays the tab's example (then each settings file laid over it: { "news": { ... } } or the settings themselves) from the
 old build on port 8766 and the new one on 8765, side by side and labelled, then the new one again at full size (FULL=0
-leaves that out). 60 pictures a second (FPS). Needs the fonts in dev/tmp_fonts (see chart_sheet.py) and ffmpeg."""
+leaves that out). 60 pictures a second (FPS). Needs ffmpeg and the fonts in dev/tmp_fonts (see chart_sheet.py; Lora 400 and 500 italic the same
+way), and the old build's folder needs them too or its side is drawn in the wrong lettering: link dev/tmp_fonts into it."""
 import asyncio, sys, os, json, base64, subprocess, shutil, tempfile
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; TAB = sys.argv[2]; CFGS = [None] + [json.load(open(f)) for f in sys.argv[3:]]; FPS = int(os.environ.get('FPS', '60')); FULL = os.environ.get('FULL', '1') != '0'
 OLD = os.environ.get('OLD', '8766'); NEW = os.environ.get('NEW', '8765'); TMP = tempfile.mkdtemp(prefix='ba_')
-FONTS = """async()=>{ for (const [fam, w, st, file] of [['Anton', '400', 'normal', 'anton-400'], ['Archivo Narrow', '400', 'normal', 'archivonarrow-400'], ['Archivo Narrow', '700', 'normal', 'archivonarrow-700'], ['Archivo Narrow', '400', 'italic', 'archivonarrow-400i']]) { try { const f = new FontFace(fam, 'url(/tmp_fonts/' + file + '.woff2)', { weight: w, style: st }); document.fonts.add(f); await f.load(); } catch (e) { } } E.fontVersion = (E.fontVersion || 0) + 1; }"""
+FONTS = """async()=>{ for (const [fam, w, st, file] of [['Anton', '400', 'normal', 'anton-400'], ['Archivo Narrow', '400', 'normal', 'archivonarrow-400'], ['Archivo Narrow', '700', 'normal', 'archivonarrow-700'], ['Archivo Narrow', '400', 'italic', 'archivonarrow-400i'], ['Lora', '400', 'normal', 'lora-400'], ['Lora', '500', 'italic', 'lora-500i']]) { try { const f = new FontFace(fam, 'url(/tmp_fonts/' + file + '.woff2)', { weight: w, style: st }); document.fonts.add(f); await f.load(); } catch (e) { } } E.fontVersion = (E.fontVersion || 0) + 1; }"""
 SETUP = """async([m, over, w, h])=>{ if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready(); if (typeof GeoData !== 'undefined' && GeoData.load) { GeoData.load(); for (let i = 0; i < 60 && GeoData.state.status !== 'ready'; i++) await new Promise(r => setTimeout(r, 250)); }
   const mods = { charts: Charts, timeline: Timeline, map: typeof MapMod !== 'undefined' ? MapMod : null, flights: typeof Flights !== 'undefined' ? Flights : null, flyover: typeof Flyover !== 'undefined' ? Flyover : null, picto: Picto, news: News, story: Story, broll: typeof Broll !== 'undefined' ? Broll : null };
   const M = Layers.wrap(mods[m]), cfg = Object.assign(mods[m].defaults(), over || {}), look = { scheme: m === 'story' || m === 'broll' ? 'chalk' : 'saltire', format: '16:9', texture: true, preview: false };

@@ -20,7 +20,7 @@ JS = """async([m, over, N, W, fmt, AT, FROM, TO])=>{ if (typeof Studio !== 'unde
   one(tOf(0)); await new Promise(r => setTimeout(r, 600));   /* pictures and maps a tab loads on its first draw */
   for (let i = 0; i < N; i++) { const t = tOf(i); one(t); ts.push(t); out.push(c.toDataURL('image/jpeg', 0.85)); }
   return { d, out, errs, ts }; }"""
-FONTS = """async()=>{ for (const [fam, w, st, file] of [['Anton', '400', 'normal', 'anton-400'], ['Archivo Narrow', '400', 'normal', 'archivonarrow-400'], ['Archivo Narrow', '700', 'normal', 'archivonarrow-700'], ['Archivo Narrow', '400', 'italic', 'archivonarrow-400i']]) { try { const f = new FontFace(fam, 'url(/tmp_fonts/' + file + '.woff2)', { weight: w, style: st }); document.fonts.add(f); await f.load(); } catch (e) { } } E.fontVersion = (E.fontVersion || 0) + 1; }"""
+FONTS = """async()=>{ for (const [fam, w, st, file] of [['Anton', '400', 'normal', 'anton-400'], ['Archivo Narrow', '400', 'normal', 'archivonarrow-400'], ['Archivo Narrow', '700', 'normal', 'archivonarrow-700'], ['Archivo Narrow', '400', 'italic', 'archivonarrow-400i'], ['Lora', '400', 'normal', 'lora-400'], ['Lora', '500', 'italic', 'lora-500i']]) { try { const f = new FontFace(fam, 'url(/tmp_fonts/' + file + '.woff2)', { weight: w, style: st }); document.fonts.add(f); await f.load(); } catch (e) { } } E.fontVersion = (E.fontVersion || 0) + 1; }"""
 async def main():
   os.makedirs(OUT, exist_ok=True)
   async with async_playwright() as p:

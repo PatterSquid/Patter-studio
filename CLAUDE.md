@@ -176,6 +176,38 @@ the same frame; keep it that way:
 * Nothing scrolls the page at 1366 by 768; only the panels scroll. Tests click tabs and rail buttons with JS
   (`button[data-mod=...]`) and add things through `.tl-add` then `.tl-addmenu button`.
 
+## The motion pass on the Graphics tabs (branch `motion-pass`, November 2026, NOT PUBLISHED YET)
+
+After the Charts he asked for the quality of the animation in the other Graphics tabs to be raised ("the newspaper etc",
+"not the actual animator", "remembering to make it efficient for export"). Scope: Newspaper, Timeline, Pictogram, World
+map, Flights, Flyover. Story, B roll, Studio and Character are left alone unless he says otherwise. He was told the plan
+and that the Newspaper would come first as a before and after, so he can judge the standard before the other five are
+done. Publish only when he says.
+* **The rules of the pass.** Every clip keeps its exact length and the moment each thing lands (`duration()` and the
+  plan's times do not change: his videos are cut to them). No frame gets slower to export (measure with `tests/prof.py`
+  and, for one stretch at 1080p, a frame timer; software drawing here, so compare builds, not absolute numbers). Change
+  how things move, not what the clip says. He turned the two handed hands down as "a bit too much": weight, order and
+  polish, no gimmicks.
+* **The motion kit** (engine.js): `E.smear(ctx, fn, box, vx, vy, key)` draws a thing with a true smear along its travel
+  for the frames it moves fast (how it works and why is in the comment there; about 5 ms a frame for a clipping, only
+  while it flies; along the surface's sides only, so keep the camera level while things fly in). `E.wob(d, amp, decay,
+  freq)` is a wobble that dies away after a landing.
+* **Newspaper** (done): a clipping is over its place in half its landing time (about when it used to get there, so what he
+  cut to still fits), held off the board (bigger, shadow thrown further), turns level and is let down and pressed
+  flat exactly at its landing time, where the shake and a small squash now happen (it used to spring to its place, bounce,
+  and shake after it had stopped). The fast part is smeared. Tape goes on after it lands, one strip then the other.
+  Clippings already down are knocked by each one that lands (`where`). The highlighter is a chisel stroke a line (its
+  share of the time by its length, quick then slowing, streaks, heavier where the pen went down and behind the nib); the
+  underline is a pen line that swells and thins. Close shots roll a little towards the clipping's tilt (the fifth number
+  of a camera key; wide shots are level, the board itself never turns so it always covers). Export frames: the card is
+  drawn from its halved copies in exports too and the board is not painted under a clipping that is down: about 25 ms to
+  15 a frame here at 1080p.
+* Tools: `tests/tab_sheet.py OUT [port] [tabs]` (any tab's example as a contact sheet: `N`, `COLS`, `W`, `AT`, `FROM`/`TO`
+  for a close look at one move, `CFG` for other settings), `tests/before_after.py OUT.mp4 TAB [settings.json ...]` (old
+  build on 8766 beside the new on 8765, then the new at full size; says if the lengths differ; link `dev/tmp_fonts`, now
+  with Lora 400 and 500 italic, into the old build's `dev/` or its side is drawn in the wrong lettering), `tests/popdet.js` takes
+  `over` (more settings per tab), `PORT=8766 tests/runjs.py ...` runs a check on the old build.
+
 ## Charts (dev/src/charts2.js `ChartKit`, dev/src/charts.js `Charts`, module `charts`)
 
 He called the Charts tab amateur (November 2026) and asked for more kinds of chart, professional and smooth animation, and
