@@ -184,9 +184,20 @@ const ChartKit = (() => {
     for (let k = 5; k >= 1; k--) { al(ctx, 0.055); ctx.fillStyle = '#000814'; rr(ctx, c.x0 - k * 5 * u, c.y0 - k * 3 * u + 20 * u, w + k * 10 * u, h + k * 8 * u, th.r * u + k * 5 * u); ctx.fill(); }
     al(ctx, 1); const gr = ctx.createLinearGradient(0, c.y0, 0, c.y1); gr.addColorStop(0, th.card); gr.addColorStop(1, th.card2); ctx.fillStyle = gr; rr(ctx, c.x0, c.y0, w, h, th.r * u); ctx.fill(); ctx.lineWidth = 2 * u; ctx.strokeStyle = th.edge; ctx.stroke();
   }
+  /* The title as a small picture, made once. The browser sets words on whole pixels up and down, so under the slow camera a
+     big title drawn as words ticks a pixel at a time while the card under it glides. A picture is placed anywhere. It is
+     made a little bigger than it is ever shown (DS: the scale of the surface before the camera), so it stays sharp. */
+  let DS = 1;
+  const mk = (w, h) => typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  function titlePic(ctx, p, th, u) {
+    const k = cl(DS, 0.1, 4) * 1.09, key = k.toFixed(3) + th.text; if (p.tpic && p.tpic.key === key) return p.tpic.ok ? p.tpic : null;
+    const o = p.tpic = { key, ok: false }; try { ctx.font = fd(p.tfs); const tw = ctx.measureText(p.title).width, m = Math.ceil(p.tfs * 0.2), w = tw + m * 2, h = p.tfs * 1.7, W2 = Math.ceil(w * k), H2 = Math.ceil(h * k); if (!(W2 > 0 && H2 > 0) || W2 > 8000 || H2 > 2000) return null;
+      const c = mk(W2, H2), g = c.getContext('2d'); g.scale(k, k); label(g, p.title, m, h / 2, fd(p.tfs), th.text, 'left'); Object.assign(o, { c, m, w: W2 / k, h: H2 / k, ok: true }); } catch (e) { return null; }
+    return o;
+  }
   function drawHeader(ctx, t, p, th, C, u, cfg, live) {
     const c = p.card, x = c.x0 + p.pad;
-    if (!th.comic && p.title) { const q = ease.expo((t - 0.3) / 0.75); if (q > 0) { ctx.save(); ctx.fillStyle = C.accent2; rr(ctx, x, p.titleY - p.tfs * 0.5, 10 * u, p.tfs * q, 5 * u); ctx.fill(); ctx.beginPath(); ctx.rect(x, p.titleY - p.tfs, (p.cw + 30 * u) * q, p.tfs * 2); ctx.clip(); al(ctx, Math.min(1, q * 1.6)); label(ctx, p.title, x + 30 * u - (1 - q) * 30 * u, p.titleY + p.tfs * 0.04, fd(p.tfs), th.text, 'left'); ctx.restore(); al(ctx, 1); } }
+    if (!th.comic && p.title) { const q = ease.out3((t - 0.3) / 0.65); if (q > 0) { ctx.save(); ctx.fillStyle = C.accent2; rr(ctx, x, p.titleY - p.tfs * 0.5, 10 * u, p.tfs * q, 5 * u); ctx.fill(); ctx.beginPath(); ctx.rect(x, p.titleY - p.tfs, (p.cw + 30 * u) * q, p.tfs * 2); ctx.clip(); al(ctx, Math.min(1, q * 1.6)); const sp = titlePic(ctx, p, th, u); if (sp) ctx.drawImage(sp.c, x + 30 * u - (1 - q) * 30 * u - sp.m, p.titleY + p.tfs * 0.04 - sp.h / 2, sp.w, sp.h); else label(ctx, p.title, x + 30 * u - (1 - q) * 30 * u, p.titleY + p.tfs * 0.04, fd(p.tfs), th.text, 'left'); ctx.restore(); al(ctx, 1); } }
     if (p.sub) { const q = ease.out3((t - 0.6) / 0.6); al(ctx, q); label(ctx, p.sub, x + (th.comic ? 0 : 30 * u), p.subY + (1 - q) * 10 * u, fl(30 * u, 500), th.dim, 'left'); al(ctx, 1); }
     p.leg.forEach((q, k) => { const a = ease.out3((t - 0.7 - k * 0.09) / 0.5); if (a <= 0) return; al(ctx, a); const col = tone(p.D.cols[q.j], th); ctx.fillStyle = col; rr(ctx, q.x, p.legY - 11 * u, 22 * u, 22 * u, th.comic ? 0 : 6 * u); ctx.fill(); if (th.comic) { ctx.lineWidth = 3 * u; ctx.strokeStyle = th.edge; ctx.stroke(); } label(ctx, q.s, q.x + 32 * u, p.legY + 1 * u, fl(p.lfs), th.text, 'left'); al(ctx, 1); });
     if (p.counterOn && live) { const s = spring((t - 0.75) * 1.2, 6.5, 9); if (s > 0) { const rx = p.tall ? c.x0 + p.pad + (th.comic ? 0 : 30 * u) : c.x1 - p.pad; ctx.save(); ctx.translate(rx, p.cntY); ctx.scale(0.6 + 0.4 * s, 0.6 + 0.4 * s); al(ctx, Math.min(1, s * 1.5)); label(ctx, p.fmt(live.v), 0, 0, fd(78 * u), tone(live.col, th), p.tall ? 'left' : 'right'); label(ctx, live.s || '', 0, 54 * u, fl(28 * u, 600), th.dim, p.tall ? 'left' : 'right'); ctx.restore(); al(ctx, 1); } }
@@ -270,7 +281,7 @@ const ChartKit = (() => {
       if (th.comic) { ctx.beginPath(); E.curvePath(ctx, pts); ctx.strokeStyle = th.edge; ctx.lineWidth = 19 * u; ctx.stroke(); ctx.beginPath(); E.curvePath(ctx, pts); ctx.strokeStyle = col; ctx.lineWidth = 9 * u; ctx.stroke(); }
       else { ctx.beginPath(); E.curvePath(ctx, pts); ctx.strokeStyle = rgba(col, 0.16); ctx.lineWidth = 26 * u; ctx.stroke(); ctx.beginPath(); E.curvePath(ctx, pts); ctx.strokeStyle = col; ctx.lineWidth = 8 * u; ctx.stroke(); }
       if (n <= 16) for (let i = 0; i <= Math.floor(f + 1e-6); i++) { const s = spring((f - i) * 2.2 + 0.05, 6, 9); if (s <= 0) continue; ctx.fillStyle = th.comic ? '#fff' : th.card; ctx.strokeStyle = th.comic ? th.edge : col; ctx.lineWidth = (th.comic ? 4 : 4) * u; ctx.beginPath(); ctx.arc(p.X(i), p.Y(rows[i].v[j]), 8 * u * Math.min(1.2, s), 0, 7); ctx.fill(); ctx.stroke(); }
-      const done = f >= n - 1 - 1e-6; if (!th.comic) { al(ctx, fa * 0.28); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(head[0], head[1], (done ? 20 : 26) * u, 0, 7); ctx.fill(); al(ctx, fa); }
+      if (!th.comic) { al(ctx, fa * 0.28); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(head[0], head[1], 24 * u, 0, 7); ctx.fill(); al(ctx, fa); }
       ctx.fillStyle = th.comic ? '#fff' : '#ffffff'; ctx.strokeStyle = th.comic ? th.edge : col; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(head[0], head[1], 12 * u, 0, 7); ctx.fill(); ctx.stroke(); al(ctx, 1);
       if (m > 1) { /* each line's number rides at its head */ const s = ease.out3((f - 0.2) / 0.6) * fa; if (s > 0) { al(ctx, s); strong(ctx, th, C, p.fmt(val(Math.min(f, n - 1 - 1e-9))), head[0] - 16 * u, head[1] - 30 * u, fd(30 * u), th.comic ? th.text : col, 'right'); al(ctx, 1); } }
       if (j === 0) live = { v: val(Math.min(f, n - 1 - 1e-9)), s: rows[Math.min(n - 1, Math.round(f))].l, col: D.cols[0] };
@@ -304,7 +315,7 @@ const ChartKit = (() => {
   function drawRace(ctx, t, p, th, C, u, cfg, out) {
     const { rows, n, m, D, A } = p, steps = Math.max(1, m - 1), q = cl((t - p.T0) / p.B, 0, 1), f = (q < 0.06 ? q * q / 0.12 : q > 0.94 ? 0.94 - (1 - q) * (1 - q) / 0.12 : q - 0.03) / 0.94 * steps, mx = p.maxAt(f), inn = ease.out3((t - p.T0 + 0.7) / 0.6), hl = tone(hx(cfg.hlColour) || '#e3302c', th);
     // the moment, big and quiet in the corner
-    const per = D.names[Math.min(m - 1, Math.round(f))] || '', pk = fitK(per, fd(190 * u), (A.x1 - A.x0) * 0.4); al(ctx, inn * (th.dark ? 0.16 : 0.13) * (1 - out)); label(ctx, per, A.x1, A.y1 - 4 * u, fd(190 * u * pk), th.comic ? th.edge : th.text, 'right', 'bottom'); al(ctx, 1);
+    const per = D.names[Math.min(m - 1, Math.round(f))] || '', pk = fitK(per, fd(190 * u), (A.x1 - A.x0) * 0.4), turn = sm(Math.abs(f - Math.floor(f) - 0.5) * 5); al(ctx, inn * (th.dark ? 0.16 : 0.13) * (1 - out) * (f >= steps - 0.5 || f < 0.5 ? Math.max(turn, f < 0.5 ? (f < 0.25 ? 1 : turn) : 1) : turn));   /* one moment fades out as the next fades in */ label(ctx, per, A.x1, A.y1 - 4 * u, fd(190 * u * pk), th.comic ? th.edge : th.text, 'right', 'bottom'); al(ctx, 1);
     ctx.save(); ctx.beginPath(); ctx.rect(p.card.x0, A.y0 - 6 * u, p.card.x1 - p.card.x0, A.y1 - A.y0 + 12 * u); ctx.clip();
     rows.map((r, i) => [i, p.pos(i, f)]).sort((a, b) => b[1] - a[1]).forEach(([i, pos]) => { if (pos > p.shown + 0.6) return; const r = rows[i], y = p.top0 + (pos + 0.5) * p.rh, v = p.val(i, f), a = cl(p.shown + 0.1 - pos, 0, 1) * inn * (1 - out), col = r.hl ? hl : tone(r.c || E.COLOURS[PAL[i % PAL.length]], th), x1 = p.bx0 + Math.max(0, v) / mx * (p.bx1 - p.bx0) * ease.out3((t - p.T0 + 0.7 - pos * 0.05) / 0.7); if (a <= 0) return;
       GA *= a; al(ctx, 1); label(ctx, p.xl[i].s, p.bx0 - 20 * u, y, fl(32 * u, 700), th.text, 'right'); block(ctx, th, u, p.bx0, y - p.bh / 2, x1 - p.bx0, p.bh, col, [0, 1, 1, 0]); strong(ctx, th, C, p.fmt(v), x1 + 18 * u, y + 2 * u, fd(Math.min(40 * u, p.bh * 0.6)), th.text, 'left'); GA /= a; al(ctx, 1); });
@@ -331,14 +342,14 @@ const ChartKit = (() => {
      card: a slow push through the build, a lean in on each callout, and a pull back at the end. */
   function draw(ctx, t, cfg, look, W, H) {
     const p = plan(cfg, look, W, H), C = E.palette(look), th = theme(cfg, C), u = p.u, out = p.endDur ? ease.io3((t - p.endStart) / p.endDur) : 0;
-    let z = 1, fx = W / 2, fy = H / 2;
+    let z = 1, fx = W / 2, fy = H / 2; { const m = ctx.getTransform ? ctx.getTransform() : null; DS = m ? Math.hypot(m.a, m.b) || 1 : 1; }
     if (cfg.camera) { const push = ease.sine((t - 0.4) / Math.max(1, p.drawEnd - 0.4)) * 0.035, back = ease.io3((t - p.drawEnd - 0.1) / 1.1); z = 1 + push * (1 - back);
       p.ms.forEach(c => { const r0 = p.reach[c.row]; if (r0 === undefined) return; const b = ease.io3((t - r0 + 0.25) / 0.6) * (1 - ease.io3((t - r0 - 1.2) / 0.8)) * (1 - back); if (b <= 0) return; const tx = p.type === 'pie' || p.type === 'donut' ? p.cx : p.horiz ? (p.bx0 + p.bx1) / 2 : p.X ? p.X(c.row) : W / 2, ty = p.horiz ? p.Yr(c.row) : (p.A.y0 + p.A.y1) / 2; z += 0.04 * b; fx = lerp(fx, lerp(W / 2, tx, 0.5), b); fy = lerp(fy, lerp(H / 2, ty, 0.3), b); }); }
     else z = 1 + 0.012 * ease.sine(t / p.dur);
     const d = Math.min(1, t / 1.2); fx += Math.sin(t * 0.7) * 2.5 * u * d; fy += Math.cos(t * 0.55) * 2 * u * d; { /* the card is never cut by the edge of the frame, however far the camera leans */ const c = p.card, mg = 10 * u, hx2 = (W / 2 - mg) / z, hy2 = (H / 2 - mg) / z, ax = c.x1 - hx2, bx = c.x0 + hx2, ay = c.y1 - hy2, by = c.y0 + hy2; fx = ax <= bx ? cl(fx, ax, bx) : W / 2; fy = ay <= by ? cl(fy, ay, by) : H / 2; }
     E.drawBg(ctx, C, look, W, H, (fx - W / 2) * -0.3, (fy - H / 2) * -0.3);
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-fx, -fy);
-    const ci = th.comic ? spring((t - 0.1) * 1.2) : ease.expo((t - 0.05) / 0.8), outA = 1 - ease.io3((t - p.endStart - p.endDur * 0.45) / (p.endDur * 0.55 || 1)) * (p.endDur ? 1 : 0);
+    const ci = th.comic ? spring((t - 0.1) * 1.2) : ease.out3((t - 0.05) / 0.7), outA = 1 - ease.io3((t - p.endStart - p.endDur * 0.45) / (p.endDur * 0.55 || 1)) * (p.endDur ? 1 : 0);
     if (th.comic) { const c = p.card; ctx.translate((c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2 + (1 - ci) * -H * 1.1 + (1 - outA) * H * 0.2); ctx.rotate((-0.6 - 9 * (1 - ci)) * Math.PI / 180); ctx.translate(-(c.x0 + c.x1) / 2, -(c.y0 + c.y1) / 2); GA = outA; } else { ctx.translate(0, (1 - ci) * 70 * u + (1 - outA) * 50 * u); GA = Math.min(1, ci * 1.3) * outA; }
     al(ctx, 1); drawCard(ctx, p, th, C, u);
     let live = null; const body = { bar: drawBars, grouped: drawBars, stacked: drawBars, hbar: drawHBars, percent: drawHBars, line: drawLines, area: drawLines, pie: drawPie, donut: drawPie, race: drawRace, number: drawNumbers }[p.type];

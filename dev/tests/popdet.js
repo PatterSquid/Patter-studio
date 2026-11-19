@@ -6,7 +6,9 @@ async (opt) => {
   const want = (opt && opt.mods) || ['charts', 'timeline', 'picto', 'news', 'story', 'broll', 'studio', 'intro'], out = {}, W0 = 320, H0 = 180, FPS = (opt && opt.fps) || 60;
   const c = document.createElement('canvas'); c.width = W0; c.height = H0; const g = c.getContext('2d', { willReadFrequently: true });
   for (const k of want) { const m0 = all[k]; if (!m0) continue; const M = Layers.wrap(m0); let variants = [['default', m0.defaults()]];
-    if (k === 'charts' && opt && opt.all) { variants = []; for (const ty of ['line', 'bar']) { const cf = m0.defaults(); cf.type = ty; variants.push([ty, cf]); } }
+    if (k === 'charts' && opt && opt.all) { variants = [];   // every kind of chart from its example, in the look asked for (opt.style), and the two classic ones
+      for (const ty of Object.keys(ChartKit.TYPES)) variants.push([ty, Object.assign(m0.defaults(), JSON.parse(JSON.stringify(ChartKit.EXAMPLES[ty])), { type: ty, style: opt.style || 'sleek', ending: opt.ending || 'none', avg: !!opt.avg })]);
+      for (const ty of ['line', 'bar']) variants.push(['classic ' + ty, { type: ty, title: 'UK population, millions', source: 's', rows: [['1975', '56.2'], ['1985', '56.6'], ['1995', '58.0'], ['2005', '60.4'], ['2015', '65.1'], ['2024', '69.3']], prefix: '', suffix: 'm', decimals: 'auto', zeroBase: false, colour: 'Irn-Bru orange', hlColour: 'Neon red', milestones: [{ on: true, idx: 3, caption: 'Growth' }], counter: true, camera: true, speed: 'normal', hold: 2, ending: 'none', endText: '' }]); }
     for (const [vn, cfg] of variants) { const look = { scheme: k === 'story' || k === 'broll' ? 'chalk' : 'saltire', format: '16:9', texture: true, preview: false }, { W, H } = E.dims('16:9');
       let d; try { d = M.duration(cfg, look); } catch (e) { out[k + ':' + vn] = 'ERR ' + e.message; continue; } const n = Math.min(Math.round(d * FPS), (opt && opt.max) || 5400), D = new Float32Array(n); let prev = null, err = null;
       // warm up (pictures, fonts) so loading does not look like a pop
