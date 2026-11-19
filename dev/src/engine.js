@@ -322,9 +322,13 @@ const E = (() => {
   }
 
   function title(ctx, text, t, W, H, C, u, y) {
-    if (!text) return; const hs = spring((t - 0.05) * 1.1, 6.5, 9); const T = String(text).toUpperCase(), fs0 = (H > W ? 52 : 48) * u;
+    /* The title banner of the map, timeline and pictogram tabs. It used to swell up on a spring and rock several times; it
+       now drops into place from just above, a touch big, and settles with one small rock (quality pass, November 2026). */
+    if (!text) return; const x = (t - 0.05) / 0.42; if (x <= 0) return; const e = ease.out3(x), T = String(text).toUpperCase(), fs0 = (H > W ? 52 : 48) * u;
     ctx.font = fd(fs0); const w = ctx.measureText(T).width + fs0 * 0.9, k = Math.min(1, W * 0.86 / w);
-    banner(ctx, T, W / 2, y ?? H * (H > W ? 0.075 : 0.085), fs0 * k, C.accent2, '#fff', C, (-2 - 6 * (1 - hs)) * Math.PI / 180, 0.6 + 0.4 * hs);
+    ctx.save(); ctx.globalAlpha *= Math.min(1, x * 3.5);
+    banner(ctx, T, W / 2, (y ?? H * (H > W ? 0.075 : 0.085)) - (1 - e) * 64 * u, fs0 * k, C.accent2, '#fff', C, (-2 - 5 * (1 - e)) * Math.PI / 180 + wob(t - 0.05 - 0.4, 0.016, 8, 19), 1 + 0.14 * (1 - e));
+    ctx.restore();
   }
   function fadeIn(ctx, t, W, H, C, look) { const f = 1 - ease.expo(t / 0.35); if (f > 0 && !look.transparent) { ctx.save(); ctx.globalAlpha = f; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); ctx.restore(); } }
   function hexMix(a, b, t) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const r = Math.round(lerp(pa >> 16, pb >> 16, t)), g = Math.round(lerp((pa >> 8) & 255, (pb >> 8) & 255, t)), bl = Math.round(lerp(pa & 255, pb & 255, t)); return `rgb(${r},${g},${bl})`; }
@@ -374,5 +378,6 @@ const E = (() => {
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low'; ctx.drawImage(c, 0, 0, cw, ch, x0 + (horiz ? off : 0), y0 + (horiz ? 0 : off), bw, bh); ctx.restore();
   }
   const wob = (d, amp, decay = 9, freq = 26) => d <= 0 ? 0 : amp * Math.exp(-decay * d) * Math.sin(freq * d);
-  return { smear, wob, tc, rulerLabel, previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
+  const hexA = (c, al) => { const m = /^#([0-9a-f]{6})$/i.exec(c || ''); if (!m) return `rgba(245,130,31,${al})`; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${al})`; };   // a colour let through (a streak that fades to nothing in its own colour)
+  return { smear, wob, hexA, tc, rulerLabel, previewOnCpu, tm, setTm, hookBox, behind, title, fadeIn, hexMix, camera, cl, lerp, ease, spring, rng, SCHEMES, COLOURS, palette, dims, FONT, fd, fl, drawBg, panel, grain, banner, arrow, burst, ripple, star, puff, speedLines, wrapText, fitFont, curvePath, shake, renderInto, Player, exportMP4, exportPNG, saveBlob, checker, Zip };
 })();

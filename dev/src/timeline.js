@@ -31,19 +31,29 @@ const Timeline = (() => {
     ck = key; return cp;
   }
   const duration = (cfg, look) => { const { W, H } = E.dims(look.format); return plan(cfg, look, W, H).dur; };
+  /* How it moves (quality pass, November 2026; every stop is still reached at the moment it always was). The head used to
+     lurch from stop to stop (four times its average speed in the middle of each hop) with the camera bolted to it. It now
+     gathers and sheds speed smoothly (`glide`), trails a short streak while it travels, and the camera follows a moment
+     behind and comes to rest after it (`camS`), so the picture pans in one easy move. At a stop the stem grows, the card
+     opens out from it, the year is stamped on, then the words come up line by line. */
+  const glide = x => { x = cl(x, 0, 1); return x * x * x * (x * (x * 6 - 15) + 10); };
   function headPos(p, t) {
-    if (t < p.T[0]) return { s: p.s0 - 80 * p.u + 80 * p.u * ease.io4((t - p.START + 0.6) / 0.6), i: -1 };
-    for (let i = 0; i < p.n; i++) { if (i === p.n - 1 || t < p.T[i] + p.Hs[i]) return { s: p.pos[i], i }; const q = ease.io4((t - p.T[i] - p.Hs[i]) / p.Ss[i]); if (q < 1) return { s: lerp(p.pos[i], p.pos[i + 1], q), i }; }
+    if (t < p.T[0]) return { s: p.s0 - 80 * p.u + 80 * p.u * glide((t - p.START + 0.6) / 0.6), i: -1 };
+    for (let i = 0; i < p.n; i++) { if (i === p.n - 1 || t < p.T[i] + p.Hs[i]) return { s: p.pos[i], i }; const q = glide((t - p.T[i] - p.Hs[i]) / p.Ss[i]); if (q < 1) return { s: lerp(p.pos[i], p.pos[i + 1], q), i }; }
     return { s: p.pos[p.n - 1], i: p.n - 1 };
   }
+  // where the camera looks along the line: the head's place a little while ago and a little ahead, weighed together
+  const CAMW = [[-0.34, 1], [-0.24, 2], [-0.14, 3], [-0.05, 3], [0.04, 2], [0.12, 1]];
+  const camS = (p, t) => CAMW.reduce((a, [dt, w]) => a + headPos(p, Math.max(t + dt, 0)).s * w, 0) / 12;
   function draw(ctx, t, cfg, look, W, H) {
     const p = plan(cfg, look, W, H), C = E.palette(look), u = p.u, h = headPos(p, t), out = ease.io3((t - p.endT) / 1.3);
     const XY = (s, c = 0) => p.vert ? [p.line + c, s] : [s, p.line + c];
     let z = 1, fx = W / 2, fy = H / 2;
     if (cfg.camera) {
       const zIn = p.vert ? 1.08 : 1.4, intro = ease.io3((t - 0.3) / 1.0);
-      if (p.vert) { const half = H / (2 * zIn), cy = cl(h.s, half, H - half); fy = lerp(H / 2, lerp(H / 2, cy, intro), 1 - out); fx = W / 2; }
-      else { const half = W / (2 * zIn), cx = cl(h.s + 60 * u, half, W - half); fx = lerp(W / 2, lerp(W / 2, cx, intro), 1 - out); fy = lerp(H / 2, lerp(H / 2, p.line - 20 * u, intro), 1 - out); }
+      const cs = camS(p, t);
+      if (p.vert) { const half = H / (2 * zIn), cy = cl(cs, half, H - half); fy = lerp(H / 2, lerp(H / 2, cy, intro), 1 - out); fx = W / 2; }
+      else { const half = W / (2 * zIn), cx = cl(cs + 60 * u, half, W - half); fx = lerp(W / 2, lerp(W / 2, cx, intro), 1 - out); fy = lerp(H / 2, lerp(H / 2, p.line - 20 * u, intro), 1 - out); }
       z = lerp(1, lerp(1, zIn, intro), 1 - out);
     } else z = 1 + 0.03 * ease.sine(t / p.dur);
     ctx.save(); E.camera(ctx, W, H, fx, fy, z, t, u);
@@ -62,30 +72,36 @@ const Timeline = (() => {
       const [x, y] = XY(p.pos[i]), k = spring((t - p.T[i] + 0.05) * 1.3, 6.5, 10), r = 22 * u; ctx.save(); ctx.translate(x, y);
       if (k > 0) { ctx.scale(k, k); ctx.fillStyle = C.shadow; ctx.beginPath(); ctx.arc(5 * u, 5 * u, r, 0, 7); ctx.fill(); ctx.fillStyle = p.mk; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill(); ctx.lineWidth = 5 * u; ctx.strokeStyle = C.ink; ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.arc(-6 * u, -6 * u, 5 * u, 0, 7); ctx.fill(); }
       else { ctx.fillStyle = C.paper; ctx.beginPath(); ctx.arc(0, 0, 10 * u, 0, 7); ctx.fill(); ctx.lineWidth = 4 * u; ctx.strokeStyle = C.ink; ctx.stroke(); }
+      const fl2 = 1 - ease.out3((t - p.T[i]) / 0.32); if (k > 0 && fl2 > 0) { ctx.save(); ctx.globalAlpha *= fl2 * 0.75; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, r * (1.05 + (1 - fl2) * 0.5), 0, 7); ctx.fill(); ctx.restore(); }
       ctx.restore(); if (k > 0) E.ripple(ctx, x, y, 70 * u, (t - p.T[i]) / 0.8, p.mk, u);
     });
-    if (t < p.endT) { const [x, y] = XY(hs); ctx.fillStyle = '#fff'; ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(x, y, 14 * u, 0, 7); ctx.fill(); ctx.stroke(); ctx.fillStyle = C.accent2; ctx.beginPath(); ctx.arc(x, y, 6 * u, 0, 7); ctx.fill(); }
+    if (t < p.endT) { const [x, y] = XY(hs), dt = 1 / 120, v = (headPos(p, t + dt).s - headPos(p, t - dt).s) / (2 * dt), L = Math.min(Math.abs(v) * 0.03, 130 * u);
+      if (L > 3 * u && hs > a + 1) { const [tx, ty] = XY(Math.max(a, hs - Math.sign(v) * L)), gr = ctx.createLinearGradient(tx, ty, x, y); gr.addColorStop(0, E.hexA ? E.hexA(p.mk, 0) : 'rgba(245,130,31,0)'); gr.addColorStop(1, p.mk); ctx.save(); ctx.strokeStyle = gr; ctx.lineWidth = 9 * u; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke(); ctx.restore(); }
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(x, y, 14 * u, 0, 7); ctx.fill(); ctx.stroke(); ctx.fillStyle = C.accent2; ctx.beginPath(); ctx.arc(x, y, 6 * u, 0, 7); ctx.fill(); }
     ctx.restore();
     E.title(ctx, cfg.title, t, W, H, C, u); E.fadeIn(ctx, t, W, H, C, look);
   }
   function card(ctx, p, s, i, q, C, u, XY) {
-    const side = i % 2 === 0 ? -1 : 1, gap = 46 * u, [x, y] = XY(p.pos[i]), fsY = 44 * u, fsL = 28 * u, cw = p.cardW;
+    const side = i % 2 === 0 ? -1 : 1, gap = 46 * u, [x, y] = XY(p.pos[i]), fsY = 44 * u, fsL = 28 * u, cw = p.cardW, te = q * 0.9;   // te: seconds since the head got here
     ctx.font = fl(fsL); const lines = E.wrapText(ctx, String(s[1] || '').toUpperCase(), cw - 34 * u, 3), ch = fsY * 1.3 + 22 * u + lines.length * fsL * 1.18 + (lines.length ? 18 * u : 0);
-    const stp = cl(q * 2.2, 0, 1);
+    const stp = ease.out3(te / 0.2);
     // stem
     ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * u; ctx.beginPath();
     if (p.vert) { ctx.moveTo(x + side * 22 * u, y); ctx.lineTo(x + side * (22 * u + (gap - 22 * u) * stp), y); } else { ctx.moveTo(x, y + side * 22 * u); ctx.lineTo(x, y + side * (22 * u + (gap - 22 * u) * stp)); }
     ctx.stroke();
-    const sp = spring((q - 0.22) * 1.4, 6.5, 9); if (sp <= 0) return;
+    // the card opens out from the end of the stem (a little past full, then back), turning to its slight tilt as it does
+    const f = (te - 0.1) / 0.32; if (f <= 0) return; const open = ease.back(f, 1.9), wide = 0.86 + 0.14 * ease.out3(f / 0.7), turn = 1 - ease.out3(f);
     let cx, top;
     if (p.vert) { cx = x + side * (gap + cw / 2); top = y - ch / 2; } else { cx = x; top = side < 0 ? y - gap - ch : y + gap; }
     const ax = p.vert ? x + side * gap : x, ay = p.vert ? y : y + side * gap;
-    ctx.save(); ctx.translate(ax, ay); ctx.rotate(side * (1.5 + 6 * (1 - sp)) * Math.PI / 180); ctx.scale(0.6 + 0.4 * sp, 0.6 + 0.4 * sp); ctx.translate(-ax, -ay);
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(side * (1.5 + 5 * turn) * Math.PI / 180); ctx.scale(p.vert ? open : wide, p.vert ? wide : open); ctx.translate(-ax, -ay);
     E.panel(ctx, cx - cw / 2, top, cw, ch, C, u, { shadow: 9, grain: true });
-    ctx.font = fd(fsY); const yt = String(s[0] || ''), yw = ctx.measureText(yt).width + 30 * u;
-    if (yt) { ctx.fillStyle = p.tag; ctx.fillRect(cx - yw / 2, top + 16 * u, yw, fsY * 1.3); ctx.lineWidth = 4 * u; ctx.strokeStyle = C.ink; ctx.strokeRect(cx - yw / 2, top + 16 * u, yw, fsY * 1.3); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(yt, cx, top + 16 * u + fsY * 0.67); }
+    // the year is stamped on once the card is open, then the words come up a line at a time
+    ctx.font = fd(fsY); const yt = String(s[0] || ''), yw = ctx.measureText(yt).width + 30 * u, ys = cl((te - 0.27) / 0.18, 0, 1);
+    if (yt && ys > 0) { const e = ease.out3(ys), k = 1 + 0.55 * (1 - e), my = top + 16 * u + fsY * 0.65; ctx.save(); ctx.globalAlpha *= Math.min(1, ys * 3); ctx.translate(cx, my); ctx.rotate(-side * 0.1 * (1 - e)); ctx.scale(k, k); ctx.translate(-cx, -my);
+      ctx.fillStyle = p.tag; ctx.fillRect(cx - yw / 2, top + 16 * u, yw, fsY * 1.3); ctx.lineWidth = 4 * u; ctx.strokeStyle = C.ink; ctx.strokeRect(cx - yw / 2, top + 16 * u, yw, fsY * 1.3); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(yt, cx, top + 16 * u + fsY * 0.67); ctx.restore(); }
     ctx.font = fl(fsL); ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    lines.forEach((ln, k) => ctx.fillText(ln, cx, top + 16 * u + fsY * 1.3 + 20 * u + fsL * 0.6 + k * fsL * 1.18));
+    lines.forEach((ln, k) => { const w = ease.out3((te - 0.36 - k * 0.06) / 0.2); if (w <= 0) return; ctx.save(); ctx.globalAlpha *= w; ctx.fillText(ln, cx, top + 16 * u + fsY * 1.3 + 20 * u + fsL * 0.6 + k * fsL * 1.18 + (1 - w) * 9 * u); ctx.restore(); });
     ctx.restore();
   }
   function form(root, cfg, changed) {

@@ -25,12 +25,13 @@ const Picto = (() => {
     cp = { u, tall, N, G, cols, rows, s, ox, oy, asg, rank, waveK, starts, gf, end, dur, headH, legH, pad, base }; ck = key; return cp;
   }
   const duration = (cfg, look) => { const { W, H } = E.dims(look.format); return plan(cfg, look, W, H).dur; };
-  function person(ctx, s, fill, C, lit) {
+  function person(ctx, s, fill, C, lit, shine) {
     const lw = Math.max(1, s * 0.07);
     const body = () => { ctx.beginPath(); ctx.moveTo(-s * 0.34, s * 0.46); ctx.lineTo(-s * 0.34, s * 0.18); ctx.quadraticCurveTo(-s * 0.34, -s * 0.06, -s * 0.1, -s * 0.06); ctx.lineTo(s * 0.1, -s * 0.06); ctx.quadraticCurveTo(s * 0.34, -s * 0.06, s * 0.34, s * 0.18); ctx.lineTo(s * 0.34, s * 0.46); ctx.closePath(); };
     const head = () => { ctx.beginPath(); ctx.arc(0, -s * 0.27, s * 0.17, 0, 7); };
     ctx.save(); ctx.translate(lw * 1.3, lw * 1.3); ctx.fillStyle = C.shadow; body(); ctx.fill(); head(); ctx.fill(); ctx.restore();
     ctx.fillStyle = fill; ctx.strokeStyle = C.ink; ctx.lineWidth = lw; ctx.lineJoin = 'round'; body(); ctx.fill(); ctx.stroke(); head(); ctx.fill(); ctx.stroke();
+    if (shine > 0.01) { ctx.fillStyle = `rgba(255,255,255,${shine.toFixed(3)})`; body(); ctx.fill(); head(); ctx.fill(); }
     if (lit) { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.arc(-s * 0.06, -s * 0.32, s * 0.05, 0, 7); ctx.fill(); }
   }
   function draw(ctx, t, cfg, look, W, H) {
@@ -38,11 +39,17 @@ const Picto = (() => {
     ctx.save(); E.camera(ctx, W, H, W / 2, H / 2 + p.headH * 0.1, z, t, u); E.drawBg(ctx, C, look, W, H);
     const vis = p.G.map(g => g.n > 0);
     for (let i = 0; i < p.N; i++) {
-      const col = i % p.cols, row = Math.floor(i / p.cols), x = p.ox + col * p.s, y = p.oy + row * p.s * 1.16, ap = spring((t - 0.2 - (col + row) * p.waveK) * 1.25);
-      if (ap <= 0) continue;
-      let fill = p.base, lit = false, sc = ap; const g = p.asg[i];
-      if (g >= 0) { const G = p.G[g], dur = Math.min(1.0, G.n * 0.035) * p.gf[g], st = p.starts[g] + (G.n > 1 ? p.rank[i] / (G.n - 1) : 0) * dur, lp = t - st; if (lp > 0) { fill = G.col; lit = true; sc *= 1 + Math.sin(cl(lp / 0.28, 0, 1) * Math.PI) * 0.3; } }
-      ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); person(ctx, p.s * 0.9, fill, C, lit); ctx.restore();
+      /* Quality pass, November 2026 (same times as before). A figure used to pop up on a spring and wobble, and its colour
+         switched in one frame under a big bulge. Now each rises into place and settles once; when its turn comes the colour
+         runs in over a few frames as it hops and lands with a small squash; and when a group is complete a soft gleam
+         passes over it once. */
+      const col = i % p.cols, row = Math.floor(i / p.cols), x = p.ox + col * p.s, y = p.oy + row * p.s * 1.16, xa = (t - 0.2 - (col + row) * p.waveK) / 0.4;
+      if (xa <= 0) continue;
+      let fill = p.base, lit = false, sc = ease.back(xa, 1.5), dy = (1 - ease.out3(xa)) * p.s * 0.38, sq = 1, shine = 0; const g = p.asg[i];
+      if (g >= 0) { const G = p.G[g], dur = Math.min(1.0, G.n * 0.035) * p.gf[g], st = p.starts[g] + (G.n > 1 ? p.rank[i] / (G.n - 1) : 0) * dur, lp = t - st;
+        if (lp > 0) { const k = lp / 0.11, b = Math.sin(cl(lp / 0.3, 0, 1) * Math.PI); fill = k < 1 ? E.hexMix(p.base, G.col, k) : G.col; lit = true; sc *= 1 + b * 0.16; dy -= b * p.s * 0.15; sq = 1 - E.wob(lp - 0.3, 0.07, 13, 30);
+          const gl = (t - p.starts[g] - dur - 0.2 - (col + row * 0.5) * 0.03) / 0.17; if (gl > 0 && gl < 1) shine = Math.sin(gl * Math.PI) * 0.26; } }   /* a narrow band travelling across, not the whole group at once */
+      ctx.save(); ctx.translate(x, y + dy + p.s * 0.41 * (1 - sq)); ctx.scale(sc / sq, sc * sq); person(ctx, p.s * 0.9, fill, C, lit, shine); ctx.restore();
     }
     ctx.restore();
     // Legend (screen space)
@@ -55,9 +62,9 @@ const Picto = (() => {
         const lineH = fs * 2.0, y0 = H - p.legH / 2 - (rowsL.length - 1) * lineH / 2;
         rowsL.forEach((r, ri) => {
           const tw = r.reduce((a, k) => a + ws[k] + gap, -gap); let x = (W - tw) / 2; const y = y0 + ri * lineH;
-          r.forEach(k => { const o = items[k], w = ws[k], st = p.starts[o.i], sp = spring((t - st + 0.05) * 1.2, 6.5, 9);
+          r.forEach(k => { const o = items[k], w = ws[k], st = p.starts[o.i], xl = (t - st + 0.05) / 0.4, sp = xl > 0 ? ease.back(xl, 1.4) : 0;
             if (sp > 0) { const prog = ease.io4((t - st) / (Math.min(1.0, o.g.n * 0.035) + 0.2)), txt = Math.round(o.g.pct * prog) + '% ' + o.g.label.toUpperCase();
-              ctx.save(); ctx.translate(x + w / 2, y); ctx.rotate((k % 2 ? 1.5 : -1.5) * Math.PI / 180); ctx.scale(0.5 + 0.5 * sp, 0.5 + 0.5 * sp); const bh = fs * 1.55;
+              ctx.save(); ctx.translate(x + w / 2, y + (1 - ease.out3(xl)) * fs * 0.9); ctx.rotate((k % 2 ? 1.5 : -1.5) * Math.PI / 180); ctx.scale(0.6 + 0.4 * sp, 0.6 + 0.4 * sp); const bh = fs * 1.55;
               ctx.fillStyle = C.shadow; ctx.fillRect(-w / 2 + 5 * u, -bh / 2 + 5 * u, w, bh); ctx.fillStyle = C.paper; ctx.fillRect(-w / 2, -bh / 2, w, bh); ctx.lineWidth = 4 * u; ctx.strokeStyle = C.ink; ctx.strokeRect(-w / 2, -bh / 2, w, bh);
               ctx.fillStyle = o.g.col; ctx.fillRect(-w / 2 + fs * 0.45, -fs * 0.42, fs * 0.84, fs * 0.84); ctx.strokeRect(-w / 2 + fs * 0.45, -fs * 0.42, fs * 0.84, fs * 0.84);
               ctx.font = fd(fs); ctx.fillStyle = C.ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, -w / 2 + fs * 1.6, fs * 0.04); ctx.restore(); }
