@@ -554,6 +554,12 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   follows its drawing and drawings shorter than 0.2 s are skipped (`p.bk.art`): his relaxed and open hands swapping in
   mid air read as a glitch. The open (back of hand) drawing is not used automatically. Thumbs down was dropped (a mirrored
   hand). Missing shapes he could draw: side on (chop) and pinch.
+* **A fourth version he turned down** (19 November 2026). He said the right hand lying still was "very robotic", so both
+  hands were made to share the work (left, right, both, the second hand joining in or leaving early, more beats, a resting
+  hand that shifts). He watched the before and after and said "I actually prefer the hands before". The hands above stay
+  as they are. That work is kept on the branch `hands-pass` (with its checks `tests/char_hands_use.js` and
+  `tests/char_hands_trace.py`): do not publish or merge it, and do not rebuild it unless he asks. If the hands come up
+  again, ask what he wants changed before building, and change little.
 * **Listen** (`dev/src/listen.js`, `listen/`, about 180 MB, IndexedDB `patter-listen`): Whisper base English int8 ONNX in a
   helper writes the words from his recording, so a voiceover alone drives the character ("Write the words from the
   recording"). Tests serve `dev/tmp_lshome/{listen,cutout}` through `window.PATTER_LISTEN`. A PatterScript file can be
