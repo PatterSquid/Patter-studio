@@ -25,7 +25,9 @@ async def main():
   os.makedirs(OUT, exist_ok=True)
   async with async_playwright() as p:
     b = await p.chromium.launch(args=['--no-proxy-server']); pg = await b.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:200]))
-    await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort()); await pg.goto(f'http://127.0.0.1:{PORT}/dist/test.html'); await pg.wait_for_timeout(2500); await pg.evaluate(FONTS)
+    await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
+    if os.environ.get('REALMAP'): await pg.route('**/test/fixture.json', lambda r: r.abort())   # the real world map (from the CDN) instead of the ten country test map
+    await pg.goto(f'http://127.0.0.1:{PORT}/dist/test.html'); await pg.wait_for_timeout(2500); await pg.evaluate(FONTS)
     for name in TABS:
       r = await pg.evaluate(JS, [name, OVER.get(name), N, W, FMT, AT, FROM, TO])
       if not r['out']: print(name, r['errs']); continue

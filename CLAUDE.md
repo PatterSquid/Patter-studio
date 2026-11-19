@@ -222,6 +222,16 @@ when he says.
   build on 8766 beside the new on 8765, then the new at full size; says if the lengths differ; link `dev/tmp_fonts`, now
   with Lora 400 and 500 italic, into the old build's `dev/` or its side is drawn in the wrong lettering), `tests/popdet.js` takes
   `over` (more settings per tab), `PORT=8766 tests/runjs.py ...` runs a check on the old build.
+* **Comparing the map tabs between two builds: two traps.** (1) The test page asks port 8765 for its ten country test map;
+  a page served from another port (the old build on 8766) is refused it and quietly gets the real world map from the CDN
+  instead, so the two sides draw different maps and their lengths differ by a few hundredths of a second (a map clip's
+  length depends on the countries' shapes). `REALMAP=1` on `tests/runjs.py` and `tests/tab_sheet.py` gives a page the real
+  map; `tests/before_after.py` does it for both sides by default. With the same map, every tab's length is identical to
+  the published build in both shapes (checked). (2) Land drawn on the graphics card is a tenth of a second a frame in this
+  software browser and far worse with two pages at once (three seconds a frame): `before_after.py` draws the map tabs'
+  land the plain way (`look.gpu = false`, same picture, about twenty frames a second) unless `GPU=1`.
+* Never kill processes by a pattern picked out of `ps` when the same text is in the command doing the killing (a heredoc
+  that names the file, say): it kills its own shell. Stop a background job with its task id, then look for strays.
 
 ## Charts (dev/src/charts2.js `ChartKit`, dev/src/charts.js `Charts`, module `charts`)
 

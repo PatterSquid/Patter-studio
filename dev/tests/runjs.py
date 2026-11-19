@@ -6,6 +6,7 @@ async def main():
         b=await p.chromium.launch(args=['--no-proxy-server']); pg=await b.new_page(viewport={'width':1600,'height':1100}); errs=[]
         pg.on('pageerror',lambda e:errs.append('PAGEERR '+str(e)))
         await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
+        if os.environ.get('REALMAP'): await pg.route('**/test/fixture.json', lambda r: r.abort())   # the real world map from the CDN instead of the ten country test map
         await pg.goto('http://127.0.0.1:' + os.environ.get('PORT', '8765') + '/dist/test.html')   # PORT=8766 runs the same check on the old build served there; await pg.wait_for_timeout(2000)
         r=await pg.evaluate(open(f).read(), arg)
         print(json.dumps(r,indent=1)[:6000]); print('pageerrors',errs[:5]); await b.close()
