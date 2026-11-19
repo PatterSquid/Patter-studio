@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.19.2",
+  "version": "2026.11.19.3",
   "file": "app/patter-studio.html",
-  "notes": "Smoother, weightier animation in the Newspaper, Timeline, Pictogram, World map, Flights and Flyover tabs: clippings land with a real smear and are pressed down, marker and pen strokes, timeline cards open then the year then the words, figures settle once, pins and planes with weight, labels arrive once. Every clip keeps its length. Newspaper exports are quicker. Fixed: maps with the graphics chip off no longer paint the sea as land, and Antarctica works as a stop"
+  "notes": "Audio tab: Studio voice. One switch for a rough microphone: buzz and noise out, the room taken out so the voice comes from the mouth, the tone of a close microphone, an even level, silent gaps and softened breaths. A report of what came in (level, noise, buzz, room). Every stage can be set by hand. Recording now goes straight to a 32 bit WAV with a level meter and a choice of microphone. Loudness lands on the figure you pick."
 }

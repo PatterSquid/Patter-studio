@@ -309,17 +309,18 @@ recording's own seconds) are applied on top; the cleaned sound is cached by sett
   Paste (`edits` kind `ins`: a stretch of the recording put in again at a point, in `segmentsOf`), Amplify by dB and
   Normalise (peak to -1 dB), with Ctrl+C, X, V (routed to `AudioTab.key` by app.js).
 * **No "Clean my voice" button.** He had it taken out (November 2026): even kept simple it sounded "a bit weird". He uses
-  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks (the Studio voice switch below is one, built for his studio sound request and awaiting his verdict). He also tried a "Grit" voice changer (PSOLA pitch and formant lowering with rasp, November 2026): subtle settings were inaudible and stronger ones risked sounding edited, so he chose his natural voice. Do not offer voice changing again unless he asks. "Send it on" renders a WAV into
+  the AI voice cleaner and the other settings by hand. Do not bring a one press clean up back unless he asks (the Studio voice switch below is one, built for his studio sound request: he was told so and published it). He also tried a "Grit" voice changer (PSOLA pitch and formant lowering with rasp, November 2026): subtle settings were inaudible and stronger ones risked sounding edited, so he chose his natural voice. Do not offer voice changing again unless he asks. "Send it on" renders a WAV into
   CutMedia and `AudioTab.hooks.send` (app.js) sets the Character's voice or adds it to a Video audio track.
 * Tests: `tests/audio_ui.py` (needs `dev/tmp_noisy.wav`: flite speech plus hiss, hum and rumble).
 
-### The studio voice pass (dev/src/voice_fx.js `VoiceFX`; November 2026, on the branch `audio-pass`, NOT published yet)
+### The studio voice pass (dev/src/voice_fx.js `VoiceFX`; November 2026, published as 2026.11.19.3)
 
 He asked: "Audio tab needs a serious upgrade. I want to be able to record with a shitty mic and still get studio quality
 audio (not literally obviously, but a serious improvement). We don't want any background noise, and we want it to sound
 like the avatar is talking, coming directly from his mouth. Upgrade this comprehensively". He was sent one before and
 after clip (his own recording of 12 November three ways, then the same voice through a simulated room and cheap mic) and
-has not answered yet. **Publish only when he says so**; if he does not like the sound, change the stage he names.
+said "Publish" the same evening. He has not yet said what he thinks of it in use: if he comes back on the sound, change
+the stage he names and keep the rest.
 * **What was wrong, measured on `dev/tmp_me.wav`** (his recording; private, never commit): hiss only 32 dB under his
   voice; a mains buzz at 250 Hz and 1.5 kHz the whole way through; recorded quiet (voice at -34 dB); harsh round 3 and
   6 kHz. The tab as it was (AI on Natural, EQ, compressor, loudness) left the gaps 38 dB under the voice: **the compressor
@@ -355,7 +356,7 @@ has not answered yet. **Publish only when he says so**; if he does not like the 
 * **Studio voice** (`STUDIO()` in audio_ui.js, `clean.studio`): one switch that writes every stage's setting (declip, buzz,
   room 0.8, AI 40 when downloaded, pops 0.6, tone 0.5, S 0.3, ride 0.6, comp 0.3, gate 24/30/9, loudness -16); Off puts
   everything back to nothing. **This is a one press set up again** (he had "Clean my voice" taken out for how it
-  sounded): he was told so plainly. If he does not want it, take the switch out and leave the stages.
+  sounded): he was told so plainly and published it. If he later does not want it, take the switch out and leave the stages.
 * The panel is in chain order: Studio voice (with "What came in": level, noise, buzz, room, breaths, from
   `VoiceFX.inspect` and the chain's `info`), Noise, Room, Repairs, Tone, Level and gaps, Noise by hand, Send it on,
   Recording. `processed()` keeps the slow half by `AudioFX.frontKey` so tone, level and gap changes are ready in a second.
@@ -365,7 +366,7 @@ has not answered yet. **Publish only when he says so**; if he does not like the 
 * **Loudness now lands on the figure picked** (`AudioFX.loudness` measures again after the limiter and tops up): old
   settings with a loudness come out about 1 dB louder than before. Everything else in old settings is sample for sample
   the same (checked against the published build).
-* Tests and tools: `tests/audio_studio.py` (18 real steps: report, Studio on without and with the cleaner, the quick half
+* Tests and tools: `tests/audio_studio.py` (19 real steps: report, Studio on without and with the cleaner, the quick half
   only on a level change, gaps, breaths, undo, Removed, off, recording from Chromium's pretend microphone). The measuring
   kit is in `dev/tests/voice/` (see its README): the chain on a WAV in the browser or in Node, bad microphone versions
   of a clean voice, scores, spectrograms, the before and after clip. The scores use DNSMOS, PESQ, ESTOI, pyroomacoustics
