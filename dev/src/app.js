@@ -180,7 +180,7 @@
   let scrubbing = false;
   // The preview waits paused on the first frame unless Autoplay is ticked (remembered on this computer)
   const autoplay = () => { try { return localStorage.getItem('patter-autoplay') === '1'; } catch (e) { return false; } };
-  const begin = () => autoplay() ? player.restart() : player.reset();
+  const begin = () => autoplay() ? player.restart() : (mod().park ? player.toEnd() : player.reset());   // a tab with a park() rests on its finished picture rather than an empty first frame
   $('autoplay').checked = autoplay(); $('autoplay').addEventListener('change', e => { try { localStorage.setItem('patter-autoplay', e.target.checked ? '1' : '0'); } catch (er) { } if (e.target.checked) player.play(); });
   if (autoplay()) player.play();
   // Smooth preview: while you're not changing anything, background workers draw the whole clip ahead of time,

@@ -69,7 +69,8 @@ const Repair = (() => {
       if (cfg.studio != null) { if (!plain(cfg.studio)) { delete cfg.studio; n++; } else if (mods.studio) n += clip('studio', cfg.studio, mods, (depth || 0) + 1); }
       return n;
     }
-    n += fix(cfg, M.defaults(), k === 'studio' ? ['shows'] : null);
+    let leave = null; if (typeof M.legacy === 'function') { try { leave = M.legacy(cfg, depth || 0); } catch (e) { } }   // a tab's own say on settings from an older version: what must not be filled in, so they stay as they were
+    n += fix(cfg, M.defaults(), k === 'studio' ? ['shows'] : leave);
     if ((k === 'story' || k === 'broll') && Array.isArray(cfg.scenes)) cfg.scenes.forEach(sc => {
       if (!sc || sc.type === 'travel') return;
       ['people', 'acts'].forEach(f => { if (!Array.isArray(sc[f])) { sc[f] = []; n++; } });

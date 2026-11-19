@@ -155,7 +155,7 @@ const E = (() => {
 
   // Live preview player.
   function Player(canvas, getState, onTime) {
-    const vctx = canvas.getContext('2d'); let cpu = null, cctx = null; let cache = null, playing = false, t = 0, last = performance.now(), dur = 5, scrubbing = false, quality = 1, avg = 0, count = 0, frozen = false, lastKey = '', mode = 'normal', loop = null;
+    const vctx = canvas.getContext('2d'); let cpu = null, cctx = null; let park = 0, cache = null, playing = false, t = 0, last = performance.now(), dur = 5, scrubbing = false, quality = 1, avg = 0, count = 0, frozen = false, lastKey = '', mode = 'normal', loop = null;
     // Resting: while paused with nothing changing and nobody touching anything, the preview checks a few times a second
     // instead of every screen refresh, so the computer is left alone. Any click, key, typing or mouse move wakes it at once.
     let active = performance.now(), sleepT = 0; const recent = []; let lastMod = '';
@@ -179,6 +179,7 @@ const E = (() => {
       const { mod, cfg, look } = st, { W, H } = dims(look.format);
       if (mod.id !== lastMod) { lastMod = mod.id; recent.length = 0; div = beatOf[mod.id] || 1; seen = miss = 0; drawEma = 0; hold = 1500; lateRun = 0; }   // and its beat is remembered for when he comes back to it   // each tab's drawing time is its own
       dur = mod.duration(cfg, look);
+      if (park === 1) { park = 2; try { t = mod.park ? cl(mod.park(cfg, look), 0, dur) : dur; } catch (e) { t = dur; } }   // resting on the finished picture (see toEnd)
       if (playing && !scrubbing) { t += dt; if (loop) { if (t > loop[1] || t < loop[0] - 0.05) t = loop[0]; } else if (t >= dur) { t = dur; playing = false; } }
       // When paused, only redraw if something actually changed (time, settings or size), so the computer isn't kept busy
       if (!playing) { if (dirty || now - heavyAt > 240 || mod.id !== heavyMod) { heavyKey = JSON.stringify(cfg) + JSON.stringify(look); heavyAt = now; heavyMod = mod.id; dirty = false; }
@@ -221,8 +222,11 @@ const E = (() => {
     }
     requestAnimationFrame(frame);
     return {
-      setCache(c) { cache = c; wake(); }, play() { playing = true; wake(); }, pause() { playing = false; wake(); }, freeze(v) { frozen = !!v; wake(); }, toggle() { if (!playing && !loop && t >= dur - 1e-3) t = 0; playing = !playing; wake(); return playing; }, reset() { t = loop ? loop[0] : 0; playing = false; wake(); },
-      restart() { t = loop ? loop[0] : 0; playing = true; wake(); }, seek(v) { t = v; wake(); }, setMode(m) { mode = m; quality = 1; wake(); }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } wake(); }, get loop() { return loop; }, scrub(on) { scrubbing = on; wake(); }, wake, get drawMs() { if (!recent.length) return 0; const r = recent.slice().sort((a, b) => a - b); return r[r.length >> 1]; }, get t() { return t; }, get playing() { return playing; }, get beat() { return div; }, get pictures() { return shownN; }, get refresh() { return vs; },
+      setCache(c) { cache = c; wake(); }, play() { playing = true; wake(); }, pause() { playing = false; wake(); }, freeze(v) { frozen = !!v; wake(); }, toggle() { if (!playing && !loop && (t >= dur - 1e-3 || park === 2)) t = 0; park = 0; playing = !playing; wake(); return playing; }, reset() { t = loop ? loop[0] : 0; playing = false; park = 0; wake(); },
+      /* Rest on the finished picture instead of the empty first frame (a chart being typed in is seen as it will end up); Play
+         then starts from the beginning. The tab says where with park(cfg, look), else it is the last frame. */
+      toEnd() { playing = false; park = loop ? 0 : 1; if (loop) t = loop[0]; wake(); },
+      restart() { t = loop ? loop[0] : 0; playing = true; park = 0; wake(); }, seek(v) { t = v; park = 0; wake(); }, setMode(m) { mode = m; quality = 1; wake(); }, setLoop(r) { loop = r; if (r) { t = r[0]; playing = true; } wake(); }, get loop() { return loop; }, scrub(on) { scrubbing = on; wake(); }, wake, get drawMs() { if (!recent.length) return 0; const r = recent.slice().sort((a, b) => a - b); return r[r.length >> 1]; }, get t() { return t; }, get playing() { return playing; }, get beat() { return div; }, get pictures() { return shownN; }, get refresh() { return vs; },
     };
   }
   function checker(ctx, x, y, w, h) { const s = 12; ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = '#cfcfcf'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#efefef'; for (let j = 0; j * s < h; j++) for (let i = (j % 2); i * s < w; i += 2) ctx.fillRect(x + i * s, y + j * s, s, s); ctx.restore(); }
