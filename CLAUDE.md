@@ -370,9 +370,9 @@ has not answered yet. **Publish only when he says so**; if he does not like the 
   kit is in `dev/tests/voice/` (see its README): the chain on a WAV in the browser or in Node, bad microphone versions
   of a clean voice, scores, spectrograms, the before and after clip. The scores use DNSMOS, PESQ, ESTOI, pyroomacoustics
   and nara_wpe from pip and Microsoft's DNSMOS model: **measuring sticks only, never in the app**.
-* Not done, needs his say so: a generative voice restorer (the Adobe Enhance kind: Resemble Enhance, Sidon and the like
-  are hundreds of MB and can change a voice, which he has turned down before); making up a top end a microphone never
-  recorded. Do not add either without asking.
+* Not done, needs his say so: a generative voice restorer (the Adobe Enhance kind; the open ones, Resemble Enhance for
+  one, are large downloads and can change a voice, which he has turned down before: check sizes and licences before
+  proposing one); making up a top end a microphone never recorded. Do not add either without asking.
 
 ## The Thumbnail tab (dev/src/thumb.js `Thumb`, dev/src/cutout.js `Cutout`, module `thumb`)
 

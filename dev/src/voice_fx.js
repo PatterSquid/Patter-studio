@@ -85,7 +85,9 @@ const VoiceFX = (() => {
   }
   function detone(x, sr, list) { let y = x; for (const t of list || []) { if (!(t.f > 20 && t.f < sr / 2 - 200)) continue; const bw = Math.max(3, t.f * 0.005); y = A.biquad(y, A.coef('notch', t.f, sr, t.f / bw)); } return y; }
   // Is it mains? (most of the tones sit on multiples of 50 or of 60 Hz)
-  function mains(list) { if (!list || !list.length) return 0; for (const base of [50, 60]) { let n = 0; for (const t of list) { const h = Math.round(t.f / base); if (h >= 1 && Math.abs(t.f - h * base) < Math.max(1.5, t.f * 0.004)) n++; } if (n >= Math.max(1, list.length * 0.6)) return base; } return 0; }
+  // (a harmonic counts up to 2.5 kHz and within a fifth of a percent: the mains wanders that much, and higher up every tone is near some multiple)
+  const onMains = (f, base) => { const h = Math.round(f / base); return base > 0 && h >= 1 && f <= 2500 && Math.abs(f - h * base) < Math.max(1.5, f * 0.002); };
+  function mains(list) { if (!list || !list.length) return 0; for (const base of [50, 60]) { let n = 0; for (const t of list) if (onMains(t.f, base)) n++; if (n >= Math.max(1, list.length * 0.6)) return base; } return 0; }
 
   /* ---------- the room ----------
      In a room every sound is followed by fainter copies of itself off the walls, so part of what the microphone hears
@@ -239,6 +241,6 @@ const VoiceFX = (() => {
     const info = {}; declip(x, sr, info); const tn = await tones(x, sr);
     return { speech: +speech.toFixed(1), floor: +floor.toFixed(1), snr: +(speech - floor).toFixed(1), peak: +(20 * Math.log10(mx + 1e-9)).toFixed(1), clipped: info.clipped || 0, tones: tn, mains: mains(tn), secs: +(x.length / sr).toFixed(1) };
   }
-  return { declip, tones, detone, mains, dry, WPE, pops, tone, match, ride, gate, gateApply, inspect, speechLevel, bandEnergy, FFT, LT_F, LT_M };
+  return { declip, tones, detone, mains, onMains, dry, WPE, pops, tone, match, ride, gate, gateApply, inspect, speechLevel, bandEnergy, FFT, LT_F, LT_M };
 })();
 if (typeof module !== 'undefined') module.exports = VoiceFX;

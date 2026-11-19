@@ -317,7 +317,7 @@ const AudioTab = (() => {
     else if (r.speech < -30) out.push(['mid', 'A little quiet', 'your voice sits at ' + Math.round(r.speech) + ' dB. A touch closer, or the microphone up a notch, gives the clean up less to do.']);
     else out.push(['ok', 'Level', 'good.']);
     out.push(r.snr >= 50 ? ['ok', 'Noise', 'very little.'] : r.snr >= 38 ? ['mid', 'Noise', 'some, ' + Math.round(r.snr) + ' dB under your voice.'] : ['warn', 'Noise', 'a lot, only ' + Math.round(r.snr) + ' dB under your voice.']);
-    const onMains = t => r.mains && Math.abs(t.f - Math.round(t.f / r.mains) * r.mains) < Math.max(1.5, t.f * 0.004), nm = r.tones.filter(onMains).length;
+    const nm = r.tones.filter(t => VoiceFX.onMains(t.f, r.mains)).length;
     if (r.tones.length) out.push(['warn', !nm ? 'A steady tone' : nm === r.tones.length ? 'Mains buzz' : 'Mains buzz and a whine', 'at ' + r.tones.slice().sort((a, b) => b.up - a.up).slice(0, 3).sort((a, b) => a.f - b.f).map(t => hz(t.f)).join(', ') + '.']); else out.push(['ok', 'Buzz', 'none.']);
     if (f && f.room) out.push(f.room.echo <= -22 ? ['ok', 'Room', 'close and dry.'] : f.room.echo <= -17 ? ['mid', 'Room', 'a little of the room in it.'] : ['warn', 'Room', 'a lot of echo. It is taken out as far as it will go; nearer the microphone is the real cure.']);
     if (f && f.breaths) out.push(['ok', 'Breaths', f.breaths + (W.cfg.clean.gate.breath >= 20 ? ' taken out.' : ' softened.')]);
