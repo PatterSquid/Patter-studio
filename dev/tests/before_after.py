@@ -8,17 +8,19 @@ from playwright.async_api import async_playwright
 OUT = sys.argv[1]; TAB = sys.argv[2]; CFGS = [None] + [json.load(open(f)) for f in sys.argv[3:]]; FPS = int(os.environ.get('FPS', '60')); FULL = os.environ.get('FULL', '1') != '0'
 OLD = os.environ.get('OLD', '8766'); NEW = os.environ.get('NEW', '8765'); TO = float(os.environ.get('TO', '1e9'));   # TO: only the first so many seconds (the map tabs take a third of a second a frame here)
 TMP = tempfile.mkdtemp(prefix='ba_')
-# The map tabs draw their land on the graphics card, which this browser fakes in software (a tenth of a second a frame, far
-# worse with two pages at once). Both sides draw it the plain way instead (same picture, ten times quicker) unless GPU=1.
+# The map tabs draw their land on the graphics card, which this browser fakes in software: with the real world map that is
+# seconds a frame. Unless GPU=1, both sides are drawn as the app's own preview draws them without a graphics card (the
+# lighter map, plain 2D drawing: a twentieth of a second a frame). Do not use the plain drawing with the full detail map
+# (preview false, gpu false): the whole globe comes out the colour of the land (a fault in that fallback, see CLAUDE.md).
 GPU = os.environ.get('GPU', '0' if TAB in ('map', 'flights', 'flyover') else '1') == '1'
 FONTS = """async()=>{ for (const [fam, w, st, file] of [['Anton', '400', 'normal', 'anton-400'], ['Archivo Narrow', '400', 'normal', 'archivonarrow-400'], ['Archivo Narrow', '700', 'normal', 'archivonarrow-700'], ['Archivo Narrow', '400', 'italic', 'archivonarrow-400i'], ['Lora', '400', 'normal', 'lora-400'], ['Lora', '500', 'italic', 'lora-500i']]) { try { const f = new FontFace(fam, 'url(/tmp_fonts/' + file + '.woff2)', { weight: w, style: st }); document.fonts.add(f); await f.load(); } catch (e) { } } E.fontVersion = (E.fontVersion || 0) + 1; }"""
 SETUP = """async([m, over, w, h, GPU])=>{ if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready(); if (typeof GeoData !== 'undefined' && GeoData.load) { GeoData.load(); for (let i = 0; i < 60 && GeoData.state.status !== 'ready'; i++) await new Promise(r => setTimeout(r, 250)); }
   const mods = { charts: Charts, timeline: Timeline, map: typeof MapMod !== 'undefined' ? MapMod : null, flights: typeof Flights !== 'undefined' ? Flights : null, flyover: typeof Flyover !== 'undefined' ? Flyover : null, picto: Picto, news: News, story: Story, broll: typeof Broll !== 'undefined' ? Broll : null };
-  const M = Layers.wrap(mods[m]), cfg = Object.assign(mods[m].defaults(), over || {}), look = { scheme: m === 'story' || m === 'broll' ? 'chalk' : 'saltire', format: '16:9', texture: true, preview: false }; if (!GPU) look.gpu = false;
+  const M = Layers.wrap(mods[m]), cfg = Object.assign(mods[m].defaults(), over || {}), look = { scheme: m === 'story' || m === 'broll' ? 'chalk' : 'saltire', format: '16:9', texture: true, preview: false }; if (!GPU) { look.gpu = false; look.preview = true; }
   if (typeof Repair !== 'undefined') Repair.clip(m, cfg, mods); window.__c = document.createElement('canvas'); __c.width = w; __c.height = h; window.__g = __c.getContext('2d'); window.__M = M; window.__cfg = cfg; window.__look = look;
   M.draw(__g, 0.5, cfg, look, 1920, 1080); await new Promise(r => setTimeout(r, 700)); return M.duration(cfg, look); }"""
-FRAMES = """async([i0, i1, fps, tag, w, h])=>{ const out = [], g = __g, k = w / 1920; for (let i = i0; i < i1; i++) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); g.save(); g.scale(k, k); __M.draw(g, i / fps, __cfg, __look, 1920, 1080); g.restore();
-    if (tag) { g.save(); g.font = '700 ' + Math.round(30 * Math.max(k, 0.7)) + 'px "Archivo Narrow", sans-serif'; const tw = g.measureText(tag).width + 40, th = 46 * Math.max(k, 0.7); g.globalAlpha = 0.72; g.fillStyle = '#05080f'; g.beginPath(); g.roundRect(18, h - th - 16, tw, th, th / 2); g.fill(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(tag, 18 + tw / 2, h - 16 - th / 2 + 1); g.restore(); }
+FRAMES = """async([i0, i1, fps, tag, w, h, TOP])=>{ const out = [], g = __g, k = w / 1920; for (let i = i0; i < i1; i++) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); g.save(); g.scale(k, k); __M.draw(g, i / fps, __cfg, __look, 1920, 1080); g.restore();
+    if (tag) { g.save(); g.font = '700 ' + Math.round(30 * Math.max(k, 0.7)) + 'px "Archivo Narrow", sans-serif'; const tw = g.measureText(tag).width + 40, th = 46 * Math.max(k, 0.7); g.globalAlpha = 0.72; g.fillStyle = '#05080f'; const ty = TOP ? 16 : h - th - 16; g.beginPath(); g.roundRect(18, ty, tw, th, th / 2); g.fill(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(tag, 18 + tw / 2, ty + th / 2 + 1); g.restore(); }
     const b = await new Promise(r => __c.toBlob(r, 'image/jpeg', 0.94)); const u = new Uint8Array(await b.arrayBuffer()); let s = ''; for (let j = 0; j < u.length; j += 32768) s += String.fromCharCode.apply(null, u.subarray(j, j + 32768)); out.push(btoa(s)); } return out; }"""
 async def page(b, port):
   pg = await b.new_page(); pg.on('pageerror', lambda e: print('PAGE ERROR', port, str(e)[:200])); await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
@@ -27,10 +29,11 @@ async def page(b, port):
   # Both now get the real map (REALMAP=0: neither asks the CDN, both sides use whatever they can reach).
   if os.environ.get('REALMAP', '1') != '0': await pg.route('**/test/fixture.json', lambda r: r.abort())
   await pg.goto(f'http://127.0.0.1:{port}/dist/test.html'); await pg.wait_for_timeout(2500); await pg.evaluate(FONTS); return pg
+# (the Flyover has its year in the bottom corner, so its label goes at the top)
 async def shoot(pg, over, tag, w, h, folder, n0):
   d = await pg.evaluate(SETUP, [TAB, over, w, h, GPU]); nf = round(min(d, TO) * FPS); n = n0
   for i0 in range(0, nf, 24):
-    for f in await pg.evaluate(FRAMES, [i0, min(nf, i0 + 24), FPS, tag, w, h]): open(f'{folder}/f{n:05d}.jpg', 'wb').write(base64.b64decode(f)); n += 1
+    for f in await pg.evaluate(FRAMES, [i0, min(nf, i0 + 24), FPS, tag, w, h, TAB == 'flyover']): open(f'{folder}/f{n:05d}.jpg', 'wb').write(base64.b64decode(f)); n += 1
   return n, d
 async def main():
   for d in ('old', 'new', 'full'): os.makedirs(f'{TMP}/{d}')
@@ -52,5 +55,7 @@ async def main():
   if FULL: subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-framerate', str(FPS), '-i', f'{TMP}/full/f%05d.jpg', *enc, f'{TMP}/b.mp4'], check=True); parts.append(f'{TMP}/b.mp4')
   open(f'{TMP}/list.txt', 'w').write(''.join(f"file '{x}'\n" for x in parts))
   subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/list.txt', '-c', 'copy', '-movflags', '+faststart', OUT], check=True)
-  print('made', OUT, os.path.getsize(OUT)); print('frames kept in', TMP)
+  print('made', OUT, os.path.getsize(OUT))
+  if os.environ.get('KEEP'): print('frames kept in', TMP)
+  else: shutil.rmtree(TMP, ignore_errors=True)   # each run clears its own frames (clearing a shared folder from outside wiped another run's)
 asyncio.run(main())

@@ -92,7 +92,7 @@ git add -A && git commit && git push origin main
   pixel: about 6 ms at 1080p here for a full frame, 0.6 ms for a plain copy). Fixed: the chart panel grain is sampled
   unsmoothed (it was 12 ms of a 21 ms frame; faint noise looks the same, at most 6 levels in 255 different); Story's baked
   scenery is cropped to where it has drawing (`trimBake`, pixel identical; worst frames 27 to 14 ms); Newspaper cards
-  in the preview draw from halved copies near their size on screen (`cardMip`; exports unchanged). Left as they are on
+  draw from halved copies near their size on screen (`cardMip`; exports too since the motion pass). Left as they are on
   purpose: the zooming background (unsmoothed it shimmers), Story's chalk speckle (bold, would shimmer), the Studio's
   plant strips and rain beads (the life of the room).
 * **How it answers the hand** (third pass, November 2026: "runs like a proper software"). `tests/tour.py out.json [tabs]`
@@ -230,6 +230,15 @@ when he says.
   the published build in both shapes (checked). (2) Land drawn on the graphics card is a tenth of a second a frame in this
   software browser and far worse with two pages at once (three seconds a frame): `before_after.py` draws the map tabs'
   land the plain way (`look.gpu = false`, same picture, about twenty frames a second) unless `GPU=1`.
+* **A map fault found on the way and mended** (`fixWinding` in geodata.js). In the detailed world map Antarctica's first
+  ring is a speck round the pole and its coast comes second, so it read as everything but Antarctica. Two things followed
+  in the published app: with the graphics chip switched off (Look), a map at full detail had its whole sea painted the
+  colour of the land; and Antarctica picked as a stop turned the whole globe its colour and sent the camera astray. The
+  outline is now the ring that encloses the most, whichever comes first. A clip that stops on Antarctica changes length
+  (it was unusable before); nothing else does. This is also why `before_after.py` draws the map tabs as the app's
+  preview does (`look.preview`, `look.gpu = false`): the old build's side still has the fault at full detail.
+* Run one background job at a time, and let each clear its own files (`before_after.py` removes its own frames): two
+  preview jobs sharing a folder that one of them emptied cost a run here.
 * Never kill processes by a pattern picked out of `ps` when the same text is in the command doing the killing (a heredoc
   that names the file, say): it kills its own shell. Stop a background job with its task id, then look for strays.
 

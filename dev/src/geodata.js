@@ -40,7 +40,14 @@ const GeoData = (() => {
     } catch (e) { return null; }
   }
   function fixWinding(geom) {
-    const fix = rings => rings.map((r, i) => { const a = d3.geoArea({ type: 'Polygon', coordinates: [r] }); return (i === 0 ? a > 2 * Math.PI : a < 2 * Math.PI) ? r.slice().reverse() : r; });
+    /* The outline is the ring that encloses the most (taking each ring's smaller side), wound to enclose that side; the
+       others are holes. It is nearly always the first ring, but not for Antarctica in the detailed map: its first ring is a
+       speck round the pole left by the cut along the date line and the coast comes second, which read as "a speck with
+       the whole world outside Antarctica cut out of it" and came out as everything but Antarctica. Drawn without the
+       graphics chip at full detail that painted the whole sea the colour of the land (found in the motion pass, November
+       2026; the chip's own drawing happened to cope). */
+    const fix = rings => { if (!rings.length) return rings; const ar = rings.map(r => d3.geoArea({ type: 'Polygon', coordinates: [r] })), small = ar.map(a => Math.min(a, 4 * Math.PI - a)); let o = 0; small.forEach((v, i) => { if (v > small[o] * 1.0001) o = i; });
+      const out = rings.map((r, i) => (i === o ? ar[i] > 2 * Math.PI : ar[i] < 2 * Math.PI) ? r.slice().reverse() : r); if (o) out.unshift(out.splice(o, 1)[0]); return out; };
     if (geom.type === 'Polygon') return { type: 'Polygon', coordinates: fix(geom.coordinates) };
     return { type: 'MultiPolygon', coordinates: geom.coordinates.map(fix) };
   }
