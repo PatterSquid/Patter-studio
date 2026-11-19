@@ -559,7 +559,8 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   hand that shifts). He watched the before and after and said "I actually prefer the hands before". The hands above stay
   as they are. That work is kept on the branch `hands-pass` (with its checks `tests/char_hands_use.js` and
   `tests/char_hands_trace.py`): do not publish or merge it, and do not rebuild it unless he asks. If the hands come up
-  again, ask what he wants changed before building, and change little.
+  again, ask what he wants changed before building, and change little. What put him off, in his words: "the unnatural
+  movement and yeah a bit too much".
 * **Listen** (`dev/src/listen.js`, `listen/`, about 180 MB, IndexedDB `patter-listen`): Whisper base English int8 ONNX in a
   helper writes the words from his recording, so a voiceover alone drives the character ("Write the words from the
   recording"). Tests serve `dev/tmp_lshome/{listen,cutout}` through `window.PATTER_LISTEN`. A PatterScript file can be
