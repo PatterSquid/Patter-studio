@@ -111,12 +111,12 @@ const Flights = (() => {
     });
     marks.forEach(m => {
       const e = t - m.t0;
-      if (m.pl.P) Globe.country(ctx, proj, m.pl.P, { preview: look.preview,  trace: 0, fill: ease.io4(e / (0.6 * sp)), lift: ease.io4((e - 0.3) / 0.4) * 10 * u }, m.col, C, u);
+      if (m.pl.P) Globe.country(ctx, proj, m.pl.P, { preview: look.preview,  trace: 0, fill: ease.io4(e / (0.6 * sp)), lift: ease.back((e - 0.3) / 0.46, 2.4) * 10 * u }, m.col, C, u);
       else if (Globe.visible(proj, m.pl.pt)) { const q = proj(m.pl.pt); Globe.pin(ctx, q[0], q[1], 64 * u, m.col, C, u, e / (0.55 * sp)); }
       if (m.isDest && e > 0 && e < 0.9 && Globe.visible(proj, m.pl.pt)) { const q = proj(m.pl.pt); E.ripple(ctx, q[0], q[1], 110 * u, e / 0.9, m.col, u); E.burst(ctx, q[0], q[1], 90 * u, (e - 0.05) / 0.45, C, u, 12); }
     });
     // Labels
-    const labelFor = (pl, t0) => { if (cfg.labels === 'none' || !pl || t < t0) return; const fade = Globe.labelFade(proj, pl.pt, W, H, u); if (fade <= 0.01) return; let box; if (pl.P && (box = Globe.screenBox(proj, pl.P, look.preview)) && box[1][0] - box[0][0] > 2) { } else { const q = proj(pl.pt); box = [[q[0] - 30 * u, q[1] - 80 * u], [q[0] + 30 * u, q[1] + 10 * u]]; } labels.push({ text: pl.name, box, alpha: fade, prog: spring((t - t0) * 1.2, 6.5, 9) }); };
+    const labelFor = (pl, t0) => { if (cfg.labels === 'none' || !pl || t < t0) return; const fade = Globe.labelFade(proj, pl.pt, W, H, u); if (fade <= 0.01) return; let box; if (pl.P && (box = Globe.screenBox(proj, pl.P, look.preview)) && box[1][0] - box[0][0] > 2) { } else { const q = proj(pl.pt); box = [[q[0] - 30 * u, q[1] - 80 * u], [q[0] + 30 * u, q[1] + 10 * u]]; } labels.push({ text: pl.name, box, alpha: fade, prog: Globe.pop(t - t0) }); };
     const seen = new Set();
     p.routes.forEach((r, i) => {
       if (!seen.has(r[0].name) && (cfg.mode !== 'chain' || i === 0)) { seen.add(r[0].name); labelFor(r[0], (r.origin ?? r.start) + 0.3); }
@@ -150,7 +150,9 @@ const Flights = (() => {
       ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; strokeArc(); ctx.strokeStyle = routeCol; ctx.globalAlpha = 0.9; ctx.lineWidth = 12 * u; ctx.stroke(); ctx.globalAlpha = 1; strokeArc(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3.5 * u; ctx.stroke(); ctx.restore();
       const here = at3(q); if (q >= 1 || here.show <= 0.01) return;
       const a = at3(q - 0.01), b = at3(q + 0.01), c = [here.x, here.y], ang = Math.atan2(b.y - a.y, b.x - a.x);
-      const size = (cfg.vehicle === 'plane' ? 104 : cfg.vehicle === 'arrow' ? 90 : 86) * u * (1 + 0.25 * Math.sin(Math.PI * q) * (air ? 1 : 0));
+      // it leaves small and grows, and comes in shrinking onto the place (it used to appear and vanish at full size)
+      const up = ease.out3((t - r.start) / 0.4), dn = ease.out3((r.start + r.D - t) / 0.32), ends = (0.45 + 0.55 * up) * (0.5 + 0.5 * dn); here.show *= Math.min(1, (t - r.start) / 0.12) * Math.min(1, (r.start + r.D - t) / 0.1);
+      const size = (cfg.vehicle === 'plane' ? 104 : cfg.vehicle === 'arrow' ? 90 : 86) * u * (1 + 0.25 * Math.sin(Math.PI * q) * (air ? 1 : 0)) * ends;
       if (air && Globe.visible(proj, gi(q))) { const g = proj(gi(q)); Globe.shadowBlob(ctx, g[0] + 6 * u, g[1] + 4 * u, size * 0.9 * (1 - 0.4 * Math.sin(Math.PI * q)), C, 0.28 * (1 - 0.5 * Math.sin(Math.PI * q))); }
       // Fades and shrinks a touch as it slips over the horizon, instead of blinking out
       late.push(() => { ctx.save(); ctx.globalAlpha *= here.show; Globe.vehicle(ctx, cfg.vehicle, c[0], c[1], ang, size * (0.85 + 0.15 * here.show), C, u, t + i, cfg.vehicle === 'dinghy' ? '#f5821f' : cfg.vehicle === 'arrow' ? C.accent2 : '#ffffff'); ctx.restore(); });

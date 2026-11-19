@@ -143,10 +143,17 @@ const Globe = (() => {
     ctx.restore();
   }
   function screenBox(proj, P, preview) { const b = d3.geoPath(proj).bounds(preview || proj.scale() < 640 * (proj._u || 1) ? P.lo : P.f); return isFinite(b[0][0]) ? b : null; }
+  /* Quality pass, November 2026 (same start times as before).
+     pop: how a name label or a flag arrives, in seconds since its moment: up to a touch over its size and back, once (they
+     used to ride a spring and rock three or four times).
+     pin: it used to slow down as it neared the map, as if lowered on a string. It now falls faster as it comes, digs in
+     with a squash, and rocks upright about its point; its shadow gathers under it as it nears. */
+  const pop = d => d <= 0 ? 0 : ease.back(d / 0.42, 1.6);
   function pin(ctx, x, y, size, col, C, u, drop) {
-    if (drop <= 0) return; const fall = (1 - ease.out3(cl(drop * 1.6, 0, 1))) * -size * 3, sq = drop < 0.62 ? 1 : 1 + Math.sin(cl((drop - 0.62) / 0.38, 0, 1) * Math.PI) * 0.18;
-    ctx.save(); ctx.globalAlpha = 0.35 * cl(drop * 2, 0, 1); ctx.fillStyle = C.shadow; ctx.beginPath(); ctx.ellipse(x + 4 * u, y + 2 * u, size * 0.32, size * 0.12, 0, 0, 7); ctx.fill(); ctx.restore();
-    ctx.save(); ctx.translate(x, y + fall); ctx.scale(1 / sq, sq);
+    if (drop <= 0) return; const land = 0.5, f = cl(drop / land, 0, 1), li = drop - land, fall = (1 - f * f) * -size * 3;
+    const sq = li <= 0 ? 1 + 0.07 * f : 1 - E.wob(li, 0.2, 5.5, 15), tilt = E.wob(li, 0.14, 4.5, 11);
+    ctx.save(); ctx.globalAlpha = 0.35 * f * f; ctx.fillStyle = C.shadow; ctx.beginPath(); ctx.ellipse(x + 4 * u, y + 2 * u, size * 0.32 * (0.5 + 0.5 * f), size * 0.12 * (0.5 + 0.5 * f), 0, 0, 7); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(x, y + fall); ctx.rotate(tilt); ctx.scale(1 / sq, sq);
     const s = size, body = () => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-s * 0.18, -s * 0.35, -s * 0.38, -s * 0.5, -s * 0.38, -s * 0.72); ctx.arc(0, -s * 0.72, s * 0.38, Math.PI, 0); ctx.bezierCurveTo(s * 0.38, -s * 0.5, s * 0.18, -s * 0.35, 0, 0); ctx.closePath(); };
     ctx.save(); ctx.translate(4 * u, 4 * u); body(); ctx.fillStyle = C.shadow; ctx.fill(); ctx.restore();
     body(); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 4.5 * u; ctx.strokeStyle = C.ink; ctx.stroke();
@@ -237,5 +244,5 @@ const Globe = (() => {
     E.drawBg(ctx, C, look, W, H, 0, 0, false); const st = GeoData.state; ctx.fillStyle = look.transparent ? '#333' : '#fff'; ctx.font = fl(34 * u); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(st.status === 'error' ? st.error : 'Loading the world map…', W / 2, H / 2);
   }
-  return { smooth, placeLabels, labelFade, projection, prep, camForCountry, camForPoints, flight, drawGlobe, outline, country, screenBox, pin, area, label, vehicle, shadowBlob, visible, partial, loading, R0 };
+  return { pop, smooth, placeLabels, labelFade, projection, prep, camForCountry, camForPoints, flight, drawGlobe, outline, country, screenBox, pin, area, label, vehicle, shadowBlob, visible, partial, loading, R0 };
 })();

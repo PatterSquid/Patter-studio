@@ -180,9 +180,9 @@ the same frame; keep it that way:
 
 After the Charts he asked for the quality of the animation in the other Graphics tabs to be raised ("the newspaper etc",
 "not the actual animator", "remembering to make it efficient for export"). Scope: Newspaper, Timeline, Pictogram, World
-map, Flights, Flyover. Story, B roll, Studio and Character are left alone unless he says otherwise. He was told the plan
-and that the Newspaper would come first as a before and after, so he can judge the standard before the other five are
-done. Publish only when he says.
+map, Flights, Flyover. Story, B roll, Studio and Character are left alone unless he says otherwise. He saw the Newspaper
+first as a before and after and said "Go" for the other five; each was sent as its own before and after. Publish only
+when he says.
 * **The rules of the pass.** Every clip keeps its exact length and the moment each thing lands (`duration()` and the
   plan's times do not change: his videos are cut to them). No frame gets slower to export (measure with `tests/prof.py`
   and, for one stretch at 1080p, a frame timer; software drawing here, so compare builds, not absolute numbers). Change
@@ -202,6 +202,21 @@ done. Publish only when he says.
   of a camera key; wide shots are level, the board itself never turns so it always covers). Export frames: the card is
   drawn from its halved copies in exports too and the board is not painted under a clipping that is down: over a whole
   clip at 1080p here the frames average 18 ms before and 14 after (three clippings: 37 and 30), the smear included.
+* **Timeline** (done): the head gathers and sheds speed smoothly between stops (`glide`; it used to hit four times its
+  average speed mid hop) and trails a short streak; the camera follows a moment behind and comes to rest after it (`camS`)
+  instead of being bolted to it. At a stop: stem, the card opens out from the stem's end (a little past full and back), the
+  year is stamped on, the words come up a line at a time (all inside about 0.6 s, so a fast timeline still reads). Stops are
+  reached at the same moments.
+* **Pictogram** (done): figures rise into place and settle once (they popped on a spring and wobbled); a figure's colour
+  runs in over a few frames as it hops and lands with a small squash (it switched in one frame under a bulge); a narrow
+  gleam crosses each finished group once; the key's chips rise in.
+* **The title banner** (`E.title`: map, flights, flyover, timeline, pictogram; the charts do not use it) drops in from
+  just above and settles with one small rock.
+* **World map, Flights, Flyover** (done, a lighter touch: they were already the most worked): name labels and flags arrive
+  once (`Globe.pop`, a touch over size and back; they rocked on a spring), a pin falls faster as it comes, digs in and
+  rocks upright (it slowed into the map as if on a string), a country comes up a little past its height and settles
+  (map, flights, flyover), a plane leaves small and grows and comes in shrinking onto the place (it appeared and vanished
+  at full size). The flying camera was left as it is (`Globe.flight` and `Globe.smooth` were already tuned).
 * Tools: `tests/tab_sheet.py OUT [port] [tabs]` (any tab's example as a contact sheet: `N`, `COLS`, `W`, `AT`, `FROM`/`TO`
   for a close look at one move, `CFG` for other settings), `tests/before_after.py OUT.mp4 TAB [settings.json ...]` (old
   build on 8766 beside the new on 8765, then the new at full size; says if the lengths differ; link `dev/tmp_fonts`, now

@@ -135,7 +135,7 @@ const Flyover = (() => {
       if (e.act === 'fly') { continue; }
       if (e.act === 'drain') { const q = ease.io3(d / 1.3); on = prevOn * (1 - q); col = prevCol || e.col; fresh = 0; lift = -5 * ease.out3(d / 0.7) * (1 - ease.io3((d - 1.4) / 1.4)); continue; }
       const q = ease.io3(d / 0.9); on = prevOn + (1 - prevOn) * q; col = prevCol && prevOn > 0.01 ? mixH(prevCol, e.col, q) : e.col;
-      fresh = 1 - ease.io3((d - 2.2) / 1.6); lift = e.act === 'lift' ? 15 * cl(spring(d * 1.1, 5, 9), 0, 1.25) * (1 - ease.io3((d - 2.2) / 1.6)) : 0;
+      fresh = 1 - ease.io3((d - 2.2) / 1.6); lift = e.act === 'lift' ? 15 * ease.back(d / 0.62, 2.6) * (1 - ease.io3((d - 2.2) / 1.6)) : 0;   /* up past its height and back, once (it rode a spring and bobbed) */
       if (older === 'fade') on *= 1 - ease.io3((d - 3.2) / 1.2);
     }
     return on > 0.002 || Math.abs(lift) > 0.05 ? { on, col: col || '#f5821f', lift, fresh } : null;
@@ -210,7 +210,7 @@ const Flyover = (() => {
     // Name flags on poles, always upright
     const L = p.labels.map(l => { const e = t - l.t0, out = 1 - ease.io3((t - l.end + 0.5) / 0.5); if (e < 0 || out <= 0) return null; const st = stateOf(p, l.f.name, t, cfg.older), lp = labelPt(l.f), q = pr(lp[0], lp[1], st ? Math.max(0, st.lift) : 0); return { l, e, out, q }; }).filter(Boolean).sort((a, b) => a.q[1] - b.q[1]);
     L.forEach(({ l, e, out, q }) => {
-      const [x, y, k] = q; if (x < -200 || x > W + 200 || y < -100 || y > H + 300) return; const pop = cl(spring(e * 1.3, 6, 10), 0, 1.2), sc = k * Math.sqrt(cl(Z, 0.4, 4)) * 0.85 * pop * out * u; if (sc < 0.04) return;
+      const [x, y, k] = q; if (x < -200 || x > W + 200 || y < -100 || y > H + 300) return; const pop = Globe.pop(e), sc = k * Math.sqrt(cl(Z, 0.4, 4)) * 0.85 * pop * out * u; if (sc < 0.04) return;
       const pole = 92 * sc, fs = 40 * sc, text = String(l.text).toUpperCase(); ctx.save(); ctx.translate(x, y); ctx.lineCap = 'round';
       ctx.strokeStyle = C.ink; ctx.lineWidth = 5 * sc; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -pole); ctx.stroke(); ctx.fillStyle = C.ink; ctx.beginPath(); ctx.ellipse(0, 0, 9 * sc, 4 * sc, 0, 0, 7); ctx.fill();
       ctx.font = E.fd(fs); const tw = ctx.measureText(text).width, bw = tw + fs * 0.8, bh = fs * 1.4; ctx.translate(0, -pole); ctx.rotate(Math.sin(t * 3 + x * 0.01) * 0.03);

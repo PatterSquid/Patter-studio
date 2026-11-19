@@ -10,7 +10,7 @@ OUT = sys.argv[1]; PORT = sys.argv[2] if len(sys.argv) > 2 else '8765'; TABS = (
 AT = [float(x) for x in os.environ['AT'].split(',')] if os.environ.get('AT') else None; N = len(AT) if AT else int(os.environ.get('N', '12')); COLS = int(os.environ.get('COLS', '4')); W = int(os.environ.get('W', '640')); FMT = os.environ.get('FMT', '16:9')
 FROM = float(os.environ['FROM']) if os.environ.get('FROM') else None; TO = float(os.environ['TO']) if os.environ.get('TO') else None
 OVER = json.load(open(os.environ['CFG'])) if os.environ.get('CFG') else {}
-JS = """async([m, over, N, W, fmt, AT, FROM, TO])=>{ if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready();
+JS = """async([m, over, N, W, fmt, AT, FROM, TO])=>{ if (typeof Studio !== 'undefined' && Studio.ready) await Studio.ready(); if (typeof GeoData !== 'undefined' && GeoData.load) { GeoData.load(); for (let i = 0; i < 60 && GeoData.state.status !== 'ready'; i++) await new Promise(r => setTimeout(r, 250)); }
   const mods = { charts: Charts, timeline: Timeline, map: typeof MapMod !== 'undefined' ? MapMod : null, flights: typeof Flights !== 'undefined' ? Flights : null, flyover: typeof Flyover !== 'undefined' ? Flyover : null, picto: Picto, news: News, story: Story, broll: typeof Broll !== 'undefined' ? Broll : null };
   if (!mods[m]) return { d: 0, out: [], errs: ['no such tab'], ts: [] }; const M = Layers.wrap(mods[m]), cfg = Object.assign(mods[m].defaults(), over || {}), look = { scheme: m === 'story' || m === 'broll' ? 'chalk' : 'saltire', format: fmt, texture: true };
   if (typeof Repair !== 'undefined') Repair.clip(m, cfg, mods); if (M.prepare) { try { await M.prepare(cfg, look); } catch (e) { } }
