@@ -181,7 +181,8 @@ const Character = (() => {
       const k = cfg.voice + '|' + script + '|' + eng; if (!waiting[k]) { waiting[k] = setTimeout(() => { LipSync.forMedia(cfg.voice, script, id => CutMedia.blobOf(id), eng).then(() => { tick++; }, e => console.warn('lip sync', e)).finally(() => { setTimeout(() => delete waiting[k], 50); }); }, 350); }
       return last[cfg.voice] || null;
     }
-    if (script.trim()) { if (!textMemo.has(script)) { textMemo.set(script, LipSync.fromText(script, cfg.pace || 1)); if (textMemo.size > 12) textMemo.delete(textMemo.keys().next().value); } return textMemo.get(script); }
+    if (script.trim()) { const pace = cl(+cfg.pace || 1, 0.4, 2.5), key = pace + '|' + script;   // a pace that is not a number (damaged settings) is the normal pace; each pace has its own timing
+      if (!textMemo.has(key)) { textMemo.set(key, LipSync.fromText(script, pace)); if (textMemo.size > 12) textMemo.delete(textMemo.keys().next().value); } return textMemo.get(key); }
     return null;
   }
   async function prepare(cfg) {
@@ -403,6 +404,8 @@ const Character = (() => {
       if (end - start < 0.6 || clash(start, end, side)) return;
       const span = u.b - u.a, base = target0 <= 0.3 && !hot ? 'desk' : span < 1.1 ? 'desk' : 'talk'; n++;   // a thought: the hand comes up loosely curled and beats with the stresses; a quick aside stays on the desk
       const unit = { id: 'u' + Math.round(start * 100), k: base, kind: 'gesture', side: GEST[base].side === 'both' ? 'both' : side, start, end, at: start + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST[base].label }; moves.push(unit);
+      // a hand held up through a thought does not hang on one spot: at each new phrase it settles a little way off (a couple of fingers' width), as a hand finds a new place for a new idea. Its own chance, from where the thought starts, so nothing else in the performance is disturbed
+      if (base === 'talk' && u.ph.length > 1) { const R2 = rng(hash('st' + Math.round(start * 100) + ':' + u.ph.length)); unit.st = u.ph.map((P, j) => ({ t: P.a, x: j ? (R2() - 0.5) * 0.05 : 0, y: j ? (R2() - 0.5) * 0.036 : 0, r: j ? (R2() - 0.5) * 0.1 : 0 })); }
       // a bigger gesture for each thought in the unit that calls for one: on its word's stressed syllable, never the same one twice running, not on top of each other
       u.ph.forEach(P => { const best = P.cand.find(c => fam(c.k) !== lastBig && pk[c.i].t - (lastT[fam(c.k)] != null ? lastT[fam(c.k)] : -99) >= 8); if (!best) return;
         const G = GEST[best.k], at = pk[best.i].t; if (at - lastStroke < (G.art || G.bang ? bigGap : 1.5)) return;
@@ -542,6 +545,7 @@ const Character = (() => {
            is a moving hold: it drifts a few pixels, never the same way twice. Beats go on after the springs (f), so
            the flick keeps its shape. */
         let bx = 0, by = 0, br2 = 0;
+        if (m.st && Gs.art) { let j = 0; while (j + 1 < m.st.length && m.st[j + 1].t - 0.15 <= t) j++; const c = m.st[j], q = j ? m.st[j - 1] : c, k = j ? sm((t - (c.t - 0.15)) / 0.45) : 1; ax += q.x + (c.x - q.x) * k; ay += q.y + (c.y - q.y) * k; ar += q.r + (c.r - q.r) * k; }
         if (Gs.art && !Gs.bang && !Gs.wag && !Gs.tap && !Gs.shake) {
           for (const q of ix.beats(t)) { if (q.t < m.start + 0.3 || q.t > m.end - 0.45 || (m.at != null && Math.abs(q.t - m.at) < 0.24 && big)) continue; const k = BEAT(t - q.t) * q.a * (Gs.bt2 || 1) * (0.75 + 0.25 * E); if (k) { by += 0.034 * k; br2 += 0.2 * k; bx -= 0.008 * k; } }
           if (big && m.at != null) { const k = LAND(t - m.at) * 0.8 * (0.75 + 0.25 * E); if (k) { by += 0.034 * k; br2 += 0.2 * k; bx -= 0.008 * k; } }   // a bigger gesture lands on its word: a small drop as it arrives, eased back
@@ -601,7 +605,7 @@ const Character = (() => {
       raw.hx[i] = q.head[0]; raw.hy[i] = q.head[1]; raw.hr[i] = q.head[2]; raw.hl[i] = q.head[3]; raw.sx[i] = q.sit[0]; raw.sr[i] = q.sit[1]; raw.ld[i] = q.lidT; raw.jw[i] = q.jawT; raw.gz[i] = q.gz;
       ['L', 'R'].forEach(sd => { raw['b' + sd + 'x'][i] = q.brow[sd][0]; raw['b' + sd + 'y'][i] = q.brow[sd][1]; raw['b' + sd + 'r'][i] = q.brow[sd][2]; const a = q.arms[sd]; raw['a' + sd + 'x'][i] = a.dx; raw['a' + sd + 'y'][i] = a.dy; raw['a' + sd + 'r'][i] = a.rot; arts[sd][i] = a.hide ? '-hide' : a.art || ''; mirs[sd][i] = (a.fx ? 1 : 0) + (a.fy ? 2 : 0); scs[sd][i] = a.sc || 1; }); }
     // which hand drawing shows, frame by frame: one that would show for under a fifth of a second is skipped (the one before it stays), so a hand never flickers
-    const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && j - i < BF * 0.2) { for (let k = i; k < j; k++) { a[k] = a[i - 1]; mirs[sd][k] = mirs[sd][i - 1]; scs[sd][k] = scs[sd][i - 1]; } } i = j; } art[sd] = a; });
+    const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && (j - i < BF * 0.2 || (j - i < BF * 0.4 && a[j] !== a[i - 1] && a[i] !== '-hide' && a[j] !== '-hide'))) { const rr = raw['a' + sd + 'r']; for (let k = i; k < j; k++) { a[k] = a[i - 1]; mirs[sd][k] = mirs[sd][i - 1]; scs[sd][k] = scs[sd][i - 1]; rr[k] = rr[i - 1]; } } i = j; } art[sd] = a; });   // (the drawing that stays keeps its own turn: the skipped one's turn would spin it)   // nor is a drawing shown for a moment on the way from one to another (desk, relaxed for a quarter second, finger up): the hand goes straight there
     const out = {}; Object.keys(SPR).forEach(k => { const [w, z] = SPR[k], src = raw[k], y = new Float32Array(n), sub = 4, h = 1 / BF / sub, cut = /^a[LR]r$/.test(k) ? art[k[1]] : null, lag = Math.round(2 * z / w * BF), o = new Float32Array(n); let x = src[0], v = 0, s0 = 0;
       for (let i = 0; i < n; i++) { const tg = src[i]; if (cut && i > 0 && cut[i] !== cut[i - 1]) { for (let q = s0; q < i; q++) o[q] = y[Math.min(i - 1, q + lag)]; s0 = i; x = tg; v = 0; }   // a new drawing starts at its own turn: nothing carries over from the last one
         for (let s2 = 0; s2 < sub; s2++) { v += (w * w * (tg - x) - 2 * z * w * v) * h; x += v * h; } y[i] = x; }
