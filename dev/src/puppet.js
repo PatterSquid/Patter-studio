@@ -109,6 +109,7 @@ const Puppet = (() => {
       if (ctx.eye && /pupil/.test(nm)) { node.role = 'pupil'; node.side = ctx.eye; }
       if (/brow/.test(nm)) { node.role = 'brow'; node.side = /left/.test(nm) ? 'L' : 'R'; }
       if (ctx.eye && !node.group && /^lid/.test(nm)) node.role = 'lid';
+      if (ctx.view && !ctx.eye && !ctx.mouth && /^nose/.test(nm)) node.role = 'nose';
       if (node.group && nm === 'body') node.role = 'body';
       if (node.group && /^(r|l|right |left )?arm$/.test(nm)) { node.role = 'arm'; node.side = /^r/.test(nm) ? 'R' : 'L'; }
       if (/^(t\d|string|drawstring|hoodie string)/.test(nm) && !node.group) node.role = 'dangle';
@@ -313,6 +314,17 @@ const Puppet = (() => {
   /* ---------- drawing one pose ----------
      pose: { view, mouth, blink (0 open .. 1 shut), brow: { L: [dx, dy, rot], R: [...] }, pupil: [dx, dy] (fractions of the eye),
              head: [dx, dy, rot], body: [breath], swaps: { nodeId: kidIndex }, dangle: rot, arms: { R: { dx, dy, rot, sc } } (where the wrist goes, in puppet pixels, and the hand's turn) } */
+  // a scratch surface that only ever grows (one whose size followed the head would be made again on every frame he leans)
+  const scrG = {}; const scratchG = (k, w, h) => { let c = scrG[k]; if (!c || c.width < w || c.height < h) { const W2 = Math.max(w, c ? c.width : 0), H2 = Math.max(h, c ? c.height : 0); c = scrG[k] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W2, H2) : Object.assign(document.createElement('canvas'), { width: W2, height: H2 }); } return c; };
+  /* The face is more than swapped drawings (November 2026, the animator programme: "the standard of a professional animation"):
+     * turn [x, y] in puppet pixels: the features slide over the head as it turns and nods, the nose furthest, then the
+       mouth, the eyes, the brows (FZ), so a flat head reads as a round one (what a cut out animator does by hand);
+     * lid -1..1: the upper lids, drawn taller or shorter from their top edge: wide eyed, narrowed, and the in between
+       drawings of a blink (the blink drawing itself is still the shut eye);
+     * jaw 0..1: everything under the top of the mouth is let down a little (JAW of its height at most), so the chin drops
+       and an open mouth opens further when he leans on a word. The head is drawn on its own at the size it will show,
+       then put back in two pieces; the same surface carries the red face. */
+  const FZ = { nose: [1, 1], mouth: [0.8, 0.85], eye: [0.66, 0.6], brow: [0.6, 0.5] }, JAW = 0.085, LID_DOWN = 0.75, LID_UP = 0.3;
   const scr = {}; const scratch = (k, w, h) => { let c = scr[k]; if (!c || c.width !== w || c.height !== h) { c = scr[k] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }); } return c; };
   /* Smaller copies of the layers for when he is drawn small (the preview, the Studio, an export below full size): each
      layer is drawn from a copy made once at about the size it lands on screen (in steps of a sixteenth, made with high
@@ -340,9 +352,11 @@ const Puppet = (() => {
       return nd.vis;
     };
     if (rig._sit === undefined) { const hn = N.find(n => n.role === 'head'); rig._sit = hn ? hn.parent : -9; } const sitId = rig._sit;
-    let g = g0, plainK = 0; const flush = +P.flush || 0;
+    let g = g0, plainK = 0; const flush = +P.flush || 0, jaw = Math.max(0, Math.min(1, +P.jaw || 0)), turn = P.turn && (P.turn[0] || P.turn[1]) ? P.turn : null, lid = Math.max(-1, Math.min(1, +P.lid || 0));
+    // where the jaw hinges in the head view showing: a little under the top of its mouth
+    const seamOf = () => { const vk = rig.views[P.view] != null ? P.view : 'front', C = rig._seam || (rig._seam = {}); if (C[vk] === undefined) { const vn = N[rig.views[vk]], mo = vn && (function f(n) { if (n.role === 'mouth') return n; for (const k of n.kids || []) { const r = f(k); if (r) return r; } return null; })(vn); C[vk] = mo && mo.box ? mo.box[1] + (mo.box[3] - mo.box[1]) * 0.12 : null; } return C[vk]; };
     const paint = nd => {
-      if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return;
+      if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return; const par0 = N[nd.parent];
       g.save(); if (op < 1) g.globalAlpha *= op;
       if (P.sit && nd.id === sitId) { const [px, py] = rig.pivot.body; g.translate(P.sit[0] || 0, 0); g.translate(px, py); g.rotate(P.sit[1] || 0); g.translate(-px, -py); }   // a shift of weight: all of him, about the seat
       if (nd.role === 'head' && P.head) { const [px, py] = rig.pivot.head, [dx, dy, r] = P.head; g.translate(px + dx, py + dy); g.rotate(r || 0); if (P.head[3]) g.scale(1 + P.head[3], 1 + P.head[3]); g.translate(-px, -py); }
@@ -357,16 +371,23 @@ const Puppet = (() => {
       if (nd.role === 'brow' && P.brow && P.brow[nd.side] && nd.box) { const b = nd.box, [dx, dy, r] = P.brow[nd.side], cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2; let ox = dx * (b[2] - b[0]), oy = dy * (b[3] - b[1]);
         if (nd.lim) { const cs = Math.cos(r || 0), sn = Math.sin(r || 0); let over = -1e9; nd.lim.pts.forEach(([x, y]) => { const X = cx + ox + (x - cx) * cs - (y - cy) * sn, Y = cy + oy + (x - cx) * sn + (y - cy) * cs, ly = lidAt(nd.lim.lid, X); if (ly != null) over = Math.max(over, Y - ly); }); if (over > nd.lim.allow) oy -= over - nd.lim.allow; }   // never down into the eye
         g.translate(cx + ox, cy + oy); g.rotate(r || 0); g.translate(-cx, -cy); }
+      if (turn && FZ[nd.role] && par0 && par0.role === 'view' && par0.view !== 'left' && par0.view !== 'right') g.translate(turn[0] * FZ[nd.role][0], turn[1] * FZ[nd.role][1]);
+      if (lid && nd.role === 'lid' && nd.box) { const k = lid > 0 ? 1 + lid * LID_DOWN : 1 + lid * LID_UP; g.translate(0, nd.box[1]); g.scale(1, k); g.translate(0, -nd.box[1]); }
       if (nd.role === 'pupil' && P.pupil && nd.box) { const par = N[nd.parent], eb = par && par.box, w = eb ? eb[2] - eb[0] : 20, h = eb ? eb[3] - eb[1] : 20; g.translate(P.pupil[0] * w * 0.28, P.pupil[1] * h * 0.2); }
       if (nd.role === 'dangle' && P.dangle && nd.box) { const b = nd.box, cx = (b[0] + b[2]) / 2; g.translate(cx, b[1]); g.rotate(P.dangle * (nd.id % 2 ? 1 : -0.8)); g.translate(-cx, -b[1]); }
-      if (nd.role === 'head' && flush > 0.01 && rig.headBox) {
-        // red in the face: the head drawn on its own, multiplied with red rising from the neck, then put back
-        const hb = rig.headBox, w = hb[2] - hb[0], h = hb[3] - hb[1], c = scratch('flush', w, h), m = scratch('flushm', w, h), cg = c.getContext('2d'), mg = m.getContext('2d'), outer = g;
-        cg.setTransform(1, 0, 0, 1, 0, 0); cg.clearRect(0, 0, w, h); cg.translate(-hb[0], -hb[1]); g = cg; for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g = outer;
-        cg.setTransform(1, 0, 0, 1, 0, 0); mg.setTransform(1, 0, 0, 1, 0, 0); mg.globalCompositeOperation = 'copy'; mg.drawImage(c, 0, 0);
-        const gr = cg.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, `rgba(230,60,40,${Math.min(1, 0.85 * flush)})`); gr.addColorStop(0.55, `rgba(230,70,50,${Math.min(1, 0.6 * flush)})`); gr.addColorStop(1, `rgba(235,90,70,${Math.min(1, 0.25 * flush)})`);
-        cg.globalCompositeOperation = 'multiply'; cg.fillStyle = gr; cg.fillRect(0, 0, w, h); cg.globalCompositeOperation = 'destination-in'; cg.drawImage(m, 0, 0); cg.globalCompositeOperation = 'source-over';
-        g.drawImage(c, hb[0], hb[1], w, h);
+      if (nd.role === 'head' && rig.headBox && (flush > 0.01 || (jaw > 0.004 && seamOf() != null))) {
+        // the head drawn on its own at the size it will show: reddened from the neck up when he rages, its jaw let down, then put back
+        const hb = rig.headBox, m0 = g.getTransform(), sc = Math.min(1.6, Math.max(0.08, Math.ceil(Math.hypot(m0.a, m0.b) * 24) / 24)), pad = 4, w = Math.ceil((hb[2] - hb[0]) * sc) + pad * 2, h = Math.ceil((hb[3] - hb[1]) * sc) + pad * 2;
+        const c = scratchG('head', w, h), cg = c.getContext('2d'), outer = g;
+        cg.setTransform(1, 0, 0, 1, 0, 0); cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1; cg.clearRect(0, 0, c.width, c.height); cg.setTransform(sc, 0, 0, sc, pad - hb[0] * sc, pad - hb[1] * sc); cg.imageSmoothingQuality = 'high'; g = cg; for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g = outer;
+        cg.setTransform(1, 0, 0, 1, 0, 0);
+        if (flush > 0.01) { const m = scratchG('headm', c.width, c.height), mg = m.getContext('2d'); mg.setTransform(1, 0, 0, 1, 0, 0); mg.globalCompositeOperation = 'copy'; mg.drawImage(c, 0, 0);
+          const gr = cg.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, `rgba(230,60,40,${Math.min(1, 0.85 * flush)})`); gr.addColorStop(0.55, `rgba(230,70,50,${Math.min(1, 0.6 * flush)})`); gr.addColorStop(1, `rgba(235,90,70,${Math.min(1, 0.25 * flush)})`);
+          cg.globalCompositeOperation = 'multiply'; cg.fillStyle = gr; cg.fillRect(0, 0, w, h); cg.globalCompositeOperation = 'destination-in'; cg.drawImage(m, 0, 0); cg.globalCompositeOperation = 'source-over'; }
+        const X = hb[0] - pad / sc, Y = hb[1] - pad / sc, seam = jaw > 0.004 ? seamOf() : null;
+        if (seam != null) { const sy = Math.max(1, Math.min(h - 2, Math.round((seam - hb[1]) * sc) + pad));   // above the seam as it is; below it stretched down from the seam
+          g.drawImage(c, 0, 0, w, sy + 1, X, Y, w / sc, (sy + 1) / sc); g.drawImage(c, 0, sy, w, h - sy, X, Y + sy / sc, w / sc, (h - sy) / sc * (1 + jaw * JAW)); }
+        else g.drawImage(c, 0, 0, w, h, X, Y, w / sc, h / sc);
       }
       else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
       else { const q = L[nd.li], b = q && bm[nd.li] ? sized(rig, nd.li, lv0) : null; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }

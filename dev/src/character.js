@@ -172,7 +172,10 @@ const Character = (() => {
   function perfOf(cfg, A, rig, dur) {
     const key = JSON.stringify([cfg.moves || [], cfg.energy, cfg.hands, cfg.sync, cfg.mood, cfg.costume, cfg.seed, cfg.autoEmo, rig ? rig.id : 0, rig && rig.triggers ? Object.keys(rig.triggers).length : 0, dur.toFixed(2)]);
     let box = perfMemo.get(A || 'none'); if (box && box.key === key) return box.p;
-    const R = rng(hash((cfg.voice || '') + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E, dur };
+    // the chance in the performance comes from the recording itself (its loudness, sampled), not from the name the file was
+    // given when it came in: the same recording is always performed the same way, here, in an export helper, or loaded again
+    const sig = A && A.env && A.env.length ? (A._sig || (A._sig = (() => { let h = A.env.length; for (let i = 0; i < A.env.length; i += 7) h = (Math.imul(h, 31) + Math.round(A.env[i] * 200)) | 0; return 'e' + h; })())) : (cfg.voice || '');
+    const R = rng(hash(sig + (cfg.script || '').length + (cfg.seed || 0))), E = cl(+cfg.energy || 1, 0.2, 2.5), p = { E, dur };
     const env = A ? A.env : new Float32Array(0), fps = A ? A.fps : 100, envAt = t => { const f = t * fps, i = Math.floor(f); if (i < 0 || i >= env.length - 1) return 0; return env[i] + (env[i + 1] - env[i]) * (f - i); };
     const pros = (A && A.pros) || null, sem = A && A.words && A.words.length && typeof Semantics !== 'undefined' ? Semantics.read(A.words) : null; p.pros = pros; p.sem = sem;
     // smoothed loudness and phrases (speech between pauses of more than a third of a second)
@@ -426,7 +429,7 @@ const Character = (() => {
     else lift = -sm(cl((p.slow(t) - 0.3) / 0.45, 0, 1)) * 0.3 * Math.min(1.4, G) * damp;
     pose.brow.L = [em.L[0], em.L[1] + lift + liftL, em.L[2]]; pose.brow.R = [em.R[0], em.R[1] + (lift + liftR) * 1.08, em.R[2]];
     // blinks (shut for about a tenth of a second)
-    for (const b of ix.blinks(t)) { if (t >= b && t - b < 0.115) { pose.blink = 1; break; } }
+    for (const b of ix.blinks(t)) { if (t >= b && t - b < 0.095) { pose.blink = 1; break; } }
     // eyes: on the camera; away while he finds a thought, small darts between
     for (const g of ix.glances(t)) { const w = easeWin(t, g.a, g.b, 0.07, 0.09); if (w > 0) { pose.pupil = [g.x * w, g.y * w]; break; } }
     // breathing, deeper before each phrase
@@ -480,6 +483,16 @@ const Character = (() => {
     // rage: red in the face (pulsing with the shouting), teeth gritted when he is not talking
     const fw = cl(em.flush, 0, 1);
     if (fw > 0.02) { pose.flush = fw * (0.8 + 0.2 * Math.sin(t * 5.3)) * (0.85 + 0.3 * cl(L, 0, 1)); if (pose.mouth === 'Neutral' && fw > 0.5) pose.mouth = 'S'; }
+    /* The face rig (Puppet.draw: turn, lid, jaw). What each is aiming at here; the springs and the blink come after.
+       * turn: the features slide over the head as it moves, so a nod reads as the head tipping and a shake as it turning
+         (they travel about half as far again as the head itself); a real look away takes the head a little with it (gz);
+       * lid: eyes widen as the brows go up (an accent, a question, surprise) and narrow as they come down (anger, doubt);
+         the lids follow the eyes down and up (Becker and Fuchs 1988); never quite frozen;
+       * jaw: how far the mouth shape showing opens, further the louder he says it. */
+    { const br = (pose.brow.L[1] + pose.brow.R[1]) / 2, py = pose.pupil[1], doubt = Math.abs(pose.brow.L[1] - pose.brow.R[1]);
+      pose.lidT = cl((br < 0 ? br * 1.55 : br * 0.4) + doubt * 0.25 + (py > 0 ? py * 0.4 : py * 0.45) + wave(t, s[3], 0.31) * 0.03, -1, 0.55);
+      pose.gz = Math.abs(pose.pupil[0]) > 0.4 ? pose.pupil[0] : 0;
+      const op = OPEN[pose.mouth] || 0; pose.jawT = op * cl(0.5 + 0.8 * L, 0.5, 1.2) * (lw > 0.4 ? 1.15 : 1); }
     // the hoodie strings swing a little with the head
     pose.dangle = (wave(t, s[0], 0.55) - wave(t - 0.2, s[0], 0.55)) * 0.15 * E + hr * 0.4;
     return pose;
@@ -487,12 +500,13 @@ const Character = (() => {
   /* The plan played through springs, worked out once at 60 a second: a move overshoots a touch and settles, the hand's
      turn trails its travel, nothing starts or stops dead (minimum jerk like movement: Flash and Hogan 1985). Each
      channel is then slid back by its spring's delay, so a stroke still lands on its syllable. */
-  const SPR = { hx: [17, 0.8], hy: [19, 0.72], hr: [16, 0.74], hl: [12, 0.9], sx: [7, 0.9], sr: [7, 0.9], bLy: [22, 0.68], bRy: [22, 0.68], bLr: [26, 0.7], bRr: [26, 0.7], bLx: [26, 0.8], bRx: [26, 0.8], aLx: [20, 0.66], aLy: [22, 0.62], aLr: [14, 0.55], aRx: [20, 0.66], aRy: [22, 0.62], aRr: [14, 0.55] };
+  const OPEN = { Aa: 1, Uh: 0.6, Oh: 0.62, L: 0.5, Ee: 0.34, D: 0.3, R: 0.28, 'W-Oo': 0.3, S: 0.16, F: 0.1, M: 0, Neutral: 0 };   // how far each mouth shape lets the jaw down
+  const SPR = { ld: [26, 0.85], jw: [36, 0.8], gz: [9.5, 0.85], hx: [17, 0.8], hy: [19, 0.72], hr: [16, 0.74], hl: [12, 0.9], sx: [7, 0.9], sr: [7, 0.9], bLy: [22, 0.68], bRy: [22, 0.68], bLr: [26, 0.7], bRr: [26, 0.7], bLx: [26, 0.8], bRx: [26, 0.8], aLx: [20, 0.66], aLy: [22, 0.62], aLr: [14, 0.55], aRx: [20, 0.66], aRy: [22, 0.62], aRr: [14, 0.55] };
   const BF = 60;
   function bake(cfg, A, rig, p, dur) {
     const n = Math.ceil((dur + 2) * BF) + 2, raw = {}, arts = { L: new Array(n), R: new Array(n) }; Object.keys(SPR).forEach(k => { raw[k] = new Float32Array(n); });
     for (let i = 0; i < n; i++) { const q = targetAt(cfg, A, rig, p, i / BF);
-      raw.hx[i] = q.head[0]; raw.hy[i] = q.head[1]; raw.hr[i] = q.head[2]; raw.hl[i] = q.head[3]; raw.sx[i] = q.sit[0]; raw.sr[i] = q.sit[1];
+      raw.hx[i] = q.head[0]; raw.hy[i] = q.head[1]; raw.hr[i] = q.head[2]; raw.hl[i] = q.head[3]; raw.sx[i] = q.sit[0]; raw.sr[i] = q.sit[1]; raw.ld[i] = q.lidT; raw.jw[i] = q.jawT; raw.gz[i] = q.gz;
       ['L', 'R'].forEach(sd => { raw['b' + sd + 'x'][i] = q.brow[sd][0]; raw['b' + sd + 'y'][i] = q.brow[sd][1]; raw['b' + sd + 'r'][i] = q.brow[sd][2]; const a = q.arms[sd]; raw['a' + sd + 'x'][i] = a.dx; raw['a' + sd + 'y'][i] = a.dy; raw['a' + sd + 'r'][i] = a.rot; arts[sd][i] = a.hide ? '-hide' : a.art || ''; }); }
     // which hand drawing shows, frame by frame: one that would show for under a fifth of a second is skipped (the one before it stays), so a hand never flickers
     const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && j - i < BF * 0.2) { for (let k = i; k < j; k++) a[k] = a[i - 1]; } i = j; } art[sd] = a; });
@@ -509,10 +523,16 @@ const Character = (() => {
     const q = targetAt(cfg, A, rig, p, t), F = q.fast, hh = rig.pivot.headH;
     if (p.bk) {
       q.head = [bk(p, 'hx', t), bk(p, 'hy', t), bk(p, 'hr', t), bk(p, 'hl', t)]; q.sit = [bk(p, 'sx', t), bk(p, 'sr', t), 1];
+      { const gz = bk(p, 'gz', t), tx = q.head[0] * 0.55 + gz * 0.014 * hh, ty = q.head[1] * 0.42; q.head[0] += gz * 0.010 * hh; q.head[2] += gz * 0.008;
+        q.turn = [cl(tx, -0.024 * hh, 0.024 * hh), cl(ty, -0.014 * hh, 0.017 * hh)]; q.lid = bk(p, 'ld', t); q.jaw = Math.max(0, bk(p, 'jw', t)); }
       ['L', 'R'].forEach(sd => { q.brow[sd] = [bk(p, 'b' + sd + 'x', t), bk(p, 'b' + sd + 'y', t), bk(p, 'b' + sd + 'r', t)]; const a = q.arms[sd]; a.dx = bk(p, 'a' + sd + 'x', t); a.dy = Math.min(0.012 * hh, bk(p, 'a' + sd + 'y', t));   // the desk is solid: a hand never goes through it
         const T = p.bk.art[sd], i = Math.max(0, Math.min(T.length - 1, Math.floor(t * BF + 1e-6))), k = T[i]; a.rot = i + 1 < T.length && T[i + 1] !== k ? p.bk.ch['a' + sd + 'r'][i] : bk(p, 'a' + sd + 'r', t); a.art = k === '-hide' ? '' : k; a.hide = k === '-hide'; if (!a.art) { a.fy = 0; a.fx = 0; } });
       q.dangle += (bk(p, 'hx', t) - bk(p, 'hx', t - 0.14)) / hh * 6 + (bk(p, 'sx', t) - bk(p, 'sx', t - 0.2)) / hh * 8;   // the strings swing behind the head
     }
+    /* A blink is not a switch: the lids come down over about 45 ms, stay shut under a tenth of a second and take half as
+       long again to open (Stern and others 1984). The puppet has one shut eye drawing, so the way down and the way back
+       are the upper lids drawn part of the way (lid), one or two frames each at 30 a second. */
+    if (!q.blink) for (const b of p.ix.blinks(t + 0.05)) { const u = t - b; if (u >= -0.045 && u < 0) { q.lid = Math.max(q.lid || 0, 0.62 * sm((u + 0.045) / 0.045)); break; } if (u >= 0.095 && u < 0.25) { q.lid = Math.max(q.lid || 0, 0.7 * (1 - sm((u - 0.095) / 0.155))); break; } }
     q.head[0] += F.h[0]; q.head[1] += F.h[1]; q.head[2] += F.h[2]; q.body[0] += F.b;
     ['L', 'R'].forEach(sd => { const a = q.arms[sd]; a.dx += F[sd][0]; a.dy += F[sd][1]; a.rot += F[sd][2]; if (a.art) handArt(rig, q.swaps, a.art, sd); });
     return q;

@@ -7,6 +7,7 @@
    ([angry], [point]) are taken out of the words and come back with the time of the word they sit before. */
 const LipSync = (() => {
   const SR = 16000, HOP = 160, WIN = 512, FPS = SR / HOP;   // 100 frames a second
+  let RETIME = true;
   const cl = (v, a, b) => v < a ? a : v > b ? b : v;
 
   /* ---------- words to mouth shapes ---------- */
@@ -245,6 +246,50 @@ const LipSync = (() => {
   const MID = WIN / 2 / SR;
   function segments(al) { const out = []; let cur = null; for (let t = 0; t < al.path.length; t++) { const q = al.st[al.path[t]], key = q.unit == null ? -1 : q.unit; if (!cur || cur[2] !== key) { cur = [t ? t / FPS + MID : 0, (t + 1) / FPS + MID, key, t, t + 1]; out.push(cur); } else { cur[1] = (t + 1) / FPS + MID; cur[4] = t + 1; } } return out; }
 
+  /* ---------- sharing a word out among its sounds ----------
+     The search finds where a word is (with the listener, to about 20 ms) and inside it can hear a hiss, and a shut mouth
+     when it is truly quiet. What it cannot do is tell a W, an L, an R or an N from the vowel beside it, or where a vowel
+     ends and a soft consonant starts: they are all voiced and about as loud. Left alone it gave "way" 300 ms of W and 40
+     of vowel, "one" no vowel at all, and the mouth missed the opening on a syllable about one time in five. So inside
+     each word the edges it can really hear are kept (the word's own ends, a hiss that is hissy, the closure of a P or a B, which it puts on the quietest moment)
+     and everything between two such edges is shared out by how long such sounds last in speech: a glide, a nasal or a
+     stop about 50 to 70 ms and never more than its share, the vowels all the rest (two vowels written as one sound, as
+     in "my", 60 to 40). The jaw then opens on every syllable, which is what the eye reads as being in sync
+     (Klatt 1979 for how long sounds last; the old animators' rule: hit the vowels and the closed lips, let the rest go). */
+  const WANT = { V: 9, G: 5.5, N: 6, B: 6, T: 5, S: 9, F: 6.5 };
+  /* Where each of a run of sounds ends (frames f0 to f1), as the best fit of two things: how long each kind of sound
+     wants to be (above), and the loudness inside the run, the vowels on its louder frames and the consonants in its
+     dips. Every way of cutting the run is tried (it is short). */
+  function share(U, f0, f1, ft) {
+    // quiet frames at either end of the run belong to no sound: the fit is made on the part that can be heard, and the end sounds reach out over the rest
+    { let a = f0, b = f1; while (b - a > U.length + 2 && ft.en[Math.min(ft.n - 1, b - 1)] < 0.08) b--; while (b - a > U.length + 2 && ft.en[Math.min(ft.n - 1, a)] < 0.08) a++; if (a > f0 || b < f1) { const e = share(U, a, b, ft); e[e.length - 1] = f1; return e; } }
+    const n = f1 - f0, m = U.length, ends = new Array(m); if (n <= m) { for (let x = 0; x < m; x++) ends[x] = Math.min(f1, f0 + Math.round((x + 1) * n / m)); ends[m - 1] = f1; return ends; }
+    let lo = 1e9, hi = -1e9; for (let t = f0; t < f1; t++) { const e = ft.en[Math.min(ft.n - 1, t)]; if (e < lo) lo = e; if (e > hi) hi = e; } const sp = Math.max(0.08, hi - lo);
+    const pre = new Float64Array(n + 1); for (let t = 0; t < n; t++) pre[t + 1] = pre[t] + (ft.en[Math.min(ft.n - 1, f0 + t)] - lo) / sp;   // loudness within the run, 0 to 1, summed
+    const nv = U.filter(u => u.k === V).length, fixed = U.reduce((x, u) => x + (u.k === V ? 0 : WANT[u.k] || 5), 0), room = nv ? Math.max(n * 0.44, n - fixed) : 0;
+    const want = U.map((u, x) => u.k === V ? room * (x > 0 && U[x - 1].k === V ? 0.4 : x + 1 < m && U[x + 1].k === V ? 0.6 : 1) / Math.max(1, nv - U.filter((q, y) => q.k === V && y > 0 && U[y - 1].k === V).length) : (WANT[u.k] || 5) * (nv ? Math.min(1, (n - room) / fixed) : n / fixed));
+    const cost = (x, a, b) => { const len = b - a, loud = pre[b] - pre[a], u = U[x], w = Math.max(1.5, want[x]); if (u.k === V) return (len - loud) * 1.0 + (len < 4 ? (4 - len) * 1.5 : 0) + Math.abs(len - w) / w * 0.9; const least = u.v === 'W-Oo' ? 5 : u.v === 'F' || u.v === 'M' ? 4 : 2; return loud * 0.9 + Math.abs(len - w) / w * 1.3 + (len > w * 2 ? (len - w * 2) * 0.5 : 0) + (len < least ? (least - len) * 2 : 0); };   // a W is a pucker the eye catches, an F the teeth on the lip: each wants its two frames of picture
+    const best = [], from = []; for (let x = 0; x < m; x++) { best.push(new Float64Array(n + 1).fill(1e18)); from.push(new Int32Array(n + 1)); }
+    for (let b2 = 1; b2 <= n - (m - 1); b2++) best[0][b2] = cost(0, 0, b2);
+    for (let x = 1; x < m; x++) for (let b2 = x + 1; b2 <= n - (m - 1 - x); b2++) { let bv = 1e18, ba = x; for (let a2 = x; a2 < b2; a2++) { const v = best[x - 1][a2]; if (v >= 1e17) continue; const c = v + cost(x, a2, b2); if (c < bv) { bv = c; ba = a2; } } best[x][b2] = bv; from[x][b2] = ba; }
+    let e = n; for (let x = m - 1; x >= 0; x--) { ends[x] = f0 + e; e = x > 0 ? from[x][e] : 0; }
+    return ends;
+  }
+  function retime(seg, al, ft) {
+    const mean = (a, f0, f1) => { let m = 0, c = 0; for (let t = f0; t < Math.min(ft.n, f1); t++) { m += a[t]; c++; } return c ? m / c : 0; };
+    let i = 0;
+    while (i < seg.length) {
+      if (seg[i][2] < 0) { i++; continue; } const w = al.units[seg[i][2]].word; let j = i; while (j + 1 < seg.length && seg[j + 1][2] >= 0 && al.units[seg[j + 1][2]].word === w) j++;
+      // the sounds of this word that follow each other with no silence between, and which of them can be trusted where they are
+      const sure = q => { const U = al.units[seg[q][2]], n = seg[q][4] - seg[q][3]; return (U.k === S && n >= 4 && mean(ft.hf, seg[q][3], seg[q][4]) > 0.32) || (U.k === B && n >= 3); };   // a closure sits where the search found the quietest moment
+      let a = i; while (a <= j) { if (sure(a)) { a++; continue; } let b = a; while (b + 1 <= j && !sure(b + 1)) b++;
+        if (b > a) { const f0 = seg[a][3], f1 = seg[b][4], U = []; for (let q = a; q <= b; q++) U.push(al.units[seg[q][2]]);
+          const ends = share(U, f0, f1, ft); let acc = f0; for (let q = a; q <= b; q++) { const e = ends[q - a]; seg[q][3] = acc; seg[q][4] = e; seg[q][0] = acc ? acc / FPS + MID : 0; seg[q][1] = e / FPS + MID; acc = e; } }
+        a = b + 1; }
+      i = j + 1; }
+    return seg;
+  }
+
   /* ---------- shapes from sound alone (no script) ---------- */
   function guess(ft) {
     const out = []; for (let t = 0; t < ft.n; t++) { const e = ft.en[t], h = ft.hf[t], l = ft.lf[t]; let v = 'Neutral';
@@ -303,7 +348,7 @@ const LipSync = (() => {
     if (!P.words.length) return { visemes: tidy(guess(ft).map(([t, v]) => [t ? t + MID : 0, v]), LEAD), words: [], tags: [], env, lev, fps: FPS, dur, script: false };
     const pin = pinWords(P, heard, ft.n, ft); let al = pin ? align(ft, P.words, pin.win) : null; const pinned = al ? pin.hit : 0; if (!al) al = align(ft, P.words);
     if (OWN_W > 0 && P.words.length >= 12) for (let pass = 0; pass < 2; pass++) { const own = learn(ft, al); if (!own) break; const a2 = align(ft, P.words, pinned ? pin.win : null, own); if (!a2) break; al = a2; }
-    const seg = segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
+    const seg = RETIME ? retime(segments(al), al, ft) : segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
     let bySound = null; const soundShape = () => { if (!bySound) { bySound = new Array(ft.n).fill('Neutral'); const g = guess(ft); g.forEach(([t, v], i) => { const f0 = Math.round(t * FPS), f1 = g[i + 1] ? Math.round(g[i + 1][0] * FPS) : ft.n; for (let f = f0; f < f1; f++) bySound[f] = v === 'Neutral' ? 'Uh' : v; }); } return bySound; };
     const fit = toSound(seg, al, ft, seg.some(q => q[2] < 0 && q[4] - q[3] >= 7) ? soundShape() : null);
     fit.forEach(q => { if (q[1] != null) vis.push([q[0], q[1]]); });
@@ -350,5 +395,5 @@ const LipSync = (() => {
       if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.03); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
-  return { _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
+  return { _retime: v => { RETIME = !!v; }, _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
 })();
