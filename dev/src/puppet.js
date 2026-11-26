@@ -371,6 +371,23 @@ const Puppet = (() => {
       if (nd.role === 'body' && P.body) { const [px, py] = rig.pivot.body, k = P.body[0] || 0; g.translate(px, py); g.scale(1 + k * 0.4, 1 + k); g.translate(-px, -py); }
       if (nd.role === 'sleeve') plainK = P.arms && P.arms[nd.side] ? +P.arms[nd.side].plain || 0 : 0;
       if (nd.role === 'hand' && P.arms && P.arms[nd.side] && P.arms[nd.side].hide) { g.restore(); return; }
+      if (nd.role === 'hand' && P.arms && P.arms[nd.side] && P.arms[nd.side].trail && P.arms[nd.side].trail.length > 1 && rig.arms && rig.arms[nd.side] && nd.box) {
+        /* A hand in fast motion: drawn at each of the moments it was handed (trail), every one at an equal share, added
+           up on a surface of its own ('lighter' adds, so the sum is the true average a shutter would make) and laid in
+           the hand's place. A moment may show another drawing of the hand (the swap set is pointed at it for that
+           one). */
+        const A = rig.arms[nd.side], TR = P.arms[nd.side].trail, K = TR.length, m0 = g.getTransform(), k0 = Math.hypot(m0.a, m0.b), b0 = nd.box;
+        const reach = Math.max(Math.hypot(b0[0] - A.cuff[0], b0[1] - A.cuff[1]), Math.hypot(b0[2] - A.cuff[0], b0[1] - A.cuff[1]), Math.hypot(b0[0] - A.cuff[0], b0[3] - A.cuff[1]), Math.hypot(b0[2] - A.cuff[0], b0[3] - A.cuff[1])) * 1.2 * k0 + 3;
+        let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; TR.forEach(q => { const cx = A.cuff[0] + (q.dx || 0), cy = A.cuff[1] + (q.dy || 0), X = m0.a * cx + m0.c * cy + m0.e, Y = m0.b * cx + m0.d * cy + m0.f; x0 = Math.min(x0, X - reach); y0 = Math.min(y0, Y - reach); x1 = Math.max(x1, X + reach); y1 = Math.max(y1, Y + reach); });
+        const cw = g.canvas ? g.canvas.width : 1e9, chh = g.canvas ? g.canvas.height : 1e9; x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0)); x1 = Math.min(cw, Math.ceil(x1)); y1 = Math.min(chh, Math.ceil(y1));
+        if (x1 > x0 && y1 > y0) { const w = x1 - x0, h = y1 - y0, c = scratchG('trail', w, h), cg = c.getContext('2d'), outer = g, had = Object.prototype.hasOwnProperty.call(sw, nd.id), was = sw[nd.id];
+          cg.setTransform(1, 0, 0, 1, 0, 0); cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1; cg.clearRect(0, 0, c.width, c.height); cg.globalCompositeOperation = 'lighter'; cg.imageSmoothingQuality = 'high'; g = cg;
+          TR.forEach(q => { cg.setTransform(m0.a, m0.b, m0.c, m0.d, m0.e - x0, m0.f - y0); cg.globalAlpha = 1 / K; cg.translate(A.cuff[0] + (q.dx || 0), A.cuff[1] + (q.dy || 0)); cg.rotate(q.rot || 0); if (q.sc) cg.scale(q.sc, q.sc); if (q.fx || q.fy) cg.scale(q.fx ? -1 : 1, q.fy ? -1 : 1); cg.translate(-A.cuff[0], -A.cuff[1]);
+            if (q.swi >= 0) sw[nd.id] = q.swi; else delete sw[nd.id]; for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); });
+          if (had) sw[nd.id] = was; else delete sw[nd.id]; g = outer; cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1;
+          g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(c, 0, 0, w, h, x0, y0, w, h); }
+        g.restore(); return;
+      }
       if ((nd.role === 'sleeve' || nd.role === 'hand') && P.arms && P.arms[nd.side] && rig.arms && rig.arms[nd.side]) {
         const A = rig.arms[nd.side], q = P.arms[nd.side], c1 = [A.cuff[0] + (q.dx || 0), A.cuff[1] + (q.dy || 0)];
         if (nd.role === 'sleeve') { const v0 = [A.cuff[0] - A.shoulder[0], A.cuff[1] - A.shoulder[1]], v1 = [c1[0] - A.shoulder[0], c1[1] - A.shoulder[1]], a0 = Math.atan2(v0[1], v0[0]), ang = Math.atan2(v1[1], v1[0]) - a0, k = Math.max(0.72, Math.min(1.35, Math.hypot(v1[0], v1[1]) / Math.hypot(v0[0], v0[1])));
@@ -417,7 +434,22 @@ const Puppet = (() => {
   }
   // names of the things a script can trigger: hands, poses, costumes (as found in the swap sets)
   const triggerNames = rig => Object.keys(rig.triggers || {});
-  function forWorkers(id) { const r = mem[id]; if (!r) return null; const { mips, sheet, ...rest } = r; return rest; }
+  /* Where each hand drawing's weight lies from the cuff (the middle of its paint, in puppet pixels): the way that hand
+     points. A hand changing from one drawing to another is turned through from the one way to the other (Character's
+     bake), so it reads as one hand rolling over, not two pictures swapped. Worked out once on the page from the
+     pictures themselves and kept on the rig, so the export helpers are handed the very same numbers. */
+  function handAxis(rig) {
+    if (!rig) return null; if (rig.haxis) return rig.haxis; if (!rig.arms || !rig.bm) return null;
+    try { const S = 40, c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(S, S) : Object.assign(document.createElement('canvas'), { width: S, height: S }), g = c.getContext('2d', { willReadFrequently: true }), out = {};
+      rig.nodes.filter(n => n.role === 'hand' && rig.arms[n.side]).forEach(h => { const A = rig.arms[h.side], b = h.box; if (!b) return; const k = S / Math.max(b[2] - b[0], b[3] - b[1], 1);
+        out[h.side] = h.kids.map(kid => { const leaves = []; (function f(n) { if (n.li != null) leaves.push(n.li); (n.kids || []).forEach(f); })(kid);
+          g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); g.setTransform(k, 0, 0, k, -b[0] * k, -b[1] * k); leaves.forEach(li => { const q = rig.layers[li], bm = rig.bm[li]; if (q && bm) g.drawImage(bm, q.x, q.y, q.w, q.h); });
+          const d = g.getImageData(0, 0, S, S).data; let m = 0, mx = 0, my = 0; for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const al = d[(y * S + x) * 4 + 3]; m += al; mx += al * (x + 0.5); my += al * (y + 0.5); }
+          return m > 0 ? [+(mx / m / k + b[0] - A.cuff[0]).toFixed(1), +(my / m / k + b[1] - A.cuff[1]).toFixed(1)] : [0, 0]; }); });
+      rig.haxis = out; } catch (e) { rig.haxis = null; }
+    return rig.haxis || null;
+  }
+  function forWorkers(id) { const r = mem[id]; if (!r) return null; handAxis(r); const { mips, sheet, ...rest } = r; return rest; }
   function adopt(r) { if (!r || !r.id) return; r.mips = null; mem[r.id] = r; tick++; }
-  return { forWorkers, adopt, importFile, setHands, readPSD, unzip, list, load, get, remove, draw, exporting, steady, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
+  return { forWorkers, adopt, importFile, setHands, readPSD, unzip, list, load, get, remove, draw, exporting, steady, handAxis, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
 })();

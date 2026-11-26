@@ -238,6 +238,10 @@ const Character = (() => {
       p.phrases.forEach(ph => { const inP = peaks.filter(q => q.t >= ph.a - 0.05 && q.t <= ph.b + 0.05).sort((x, y) => (y.v + y.pr) - (x.v + x.pr)); const keep = inP.slice(0, Math.max(1, Math.ceil(inP.length * 0.5))).sort((x, y) => x.t - y.t);
         keep.forEach(q => { if (nods.length && q.t - nods[nods.length - 1].t < 0.32) return; nods.push({ t: q.t, a: cl(0.35 + (q.v - 0.5) * 1.3 + q.pr * 2, 0.3, 1), s: R() < 0.5 ? -1 : 1 }); }); }); }
     p.nods = nods;
+    // what a raised hand beats on: the words he leans on, by how hard he leans on each (not only the ones strong enough for a nod)
+    // (a hand rides the rhythm of the talk: a clear flick on the words that stand out, the faintest pulse on the lesser ones, nothing on the throwaway words; two closer than a fifth of a second leave the stronger)
+    { const src = pros && pros.units && pros.units.length ? pros.units.filter(u => u.w >= 0 && u.prom >= 0.22).map(u => ({ t: u.t, a: cl(0.16 + 0.84 * u.prom, 0.2, 1) })) : nods.map(q => ({ t: q.t, a: cl(q.a, 0.45, 1) })), out = [];
+      src.sort((x, y) => x.t - y.t).forEach(q => { const L = out[out.length - 1]; if (L && q.t - L.t < 0.2) { if (q.a > L.a) out[out.length - 1] = q; return; } out.push(q); }); p.beats = out; }
     // moves: the script's tags, then the ones added on the timeline
     const moves = []; (A && A.tags || []).forEach((g, i) => { const m = readTag(g.tag, rig); if (m) moves.push(Object.assign({ id: 'tag' + i, start: g.t, auto: true, tag: g.tag, word: g.word }, m)); });
     (Array.isArray(cfg.moves) ? cfg.moves : []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
@@ -265,7 +269,7 @@ const Character = (() => {
     planEyes(cfg, A, p, moves, R, dur);
     p.seeds = [R() * 9, R() * 9, R() * 9, R() * 9];
     const D = dur + 12;
-    p.ix = { moves: mkIdx(moves, m => m.start - 0.6, m => Math.min(D, m.end + 0.8), D), phr: mkIdx(p.phrases, q => q.a - 0.8, q => q.b + 0.9, D), nods: mkIdx(nods, q => q.t - 0.5, q => q.t + 0.6, D), shakes: mkIdx(p.shakes, q => q.a - 0.1, q => q.b + 0.1, D), tilts: mkIdx(p.tilts, q => q.a - 0.5, q => q.b + 0.6, D), raises: mkIdx(p.raises, q => q.a - 0.3, q => q.b + 0.5, D), glances: mkIdx(p.glances, q => q.a - 0.2, q => q.b + 0.3, D), blinks: mkIdx(p.blinks, q => q, q => q + 0.3, D) };
+    p.ix = { moves: mkIdx(moves, m => m.start - 0.6, m => Math.min(D, m.end + 0.8), D), phr: mkIdx(p.phrases, q => q.a - 0.8, q => q.b + 0.9, D), nods: mkIdx(nods, q => q.t - 0.5, q => q.t + 0.6, D), beats: mkIdx(p.beats, q => q.t - 0.5, q => q.t + 0.6, D), shakes: mkIdx(p.shakes, q => q.a - 0.1, q => q.b + 0.1, D), tilts: mkIdx(p.tilts, q => q.a - 0.5, q => q.b + 0.6, D), raises: mkIdx(p.raises, q => q.a - 0.3, q => q.b + 0.5, D), glances: mkIdx(p.glances, q => q.a - 0.2, q => q.b + 0.3, D), blinks: mkIdx(p.blinks, q => q, q => q + 0.3, D) };
     bake(cfg, A, rig, p, dur);
     perfMemo.set(A || 'none', { key, p }); if (perfMemo.size > 16) perfMemo.delete(perfMemo.keys().next().value);
     return p;
@@ -527,14 +531,25 @@ const Character = (() => {
         if (Gs.sweep) ax += Gs.sweep * amp * (sm((us + 0.2) / 0.36) - 0.5);                           // across, through the stressed syllable
         if (Gs.tap) ay -= Gs.tap * (us < -0.16 ? sm((us + 0.5) / 0.3) : us < 0 ? 1 - sm((us + 0.16) / 0.16) : 0);   // up first, then down onto the desk on the word
         if (Gs.wob) ar += Math.sin(us * 9) * Gs.wob * easeWin(t, at - 0.15, at + 0.9, 0.15, 0.4);
-        if (Gs.sway) { ay += Math.sin(t * 3.1 + 1) * 0.012; ar += Math.sin(t * 2.3) * 0.07; }
         if (Gs.drift) { ax += Math.sin(t * 0.83 + 2) * 0.012; ay += Math.sin(t * 1.7) * 0.006; ar += Math.sin(t * 1.1 + 1) * 0.035; }   // a hand resting while he talks is never quite still
-        if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.18) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a * (Gs.bt || 1); ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent (its low point just ahead of the loudest moment, like the nods)
-        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: (ay + antic * (1 - w)) * hh2, rot: ar * mir, art: Gs.art, th: Gs.late || 0.3, fy: Gs.fy || 0, fxp: Gs.fx || 0, sc: Gs.sc || 1, plain: Gs.plain || 0, f: [fx * hh2 * mir * w, fy * hh2 * w, fr * mir * w], an: antic * hh2 }); });
+        /* A raised hand is never a statue (it hung dead still through whole sentences: "everybody punched each other's
+           head in" without a flicker). Two things, both small. It beats on the words he leans on, the way a hand does:
+           cocked back a little, a quick flick down from the wrist that lands on the stressed syllable, a slower
+           recovery (BEAT); most of it is the hand turning at the wrist, the forearm barely moves. And between beats it
+           is a moving hold: it drifts a few pixels, never the same way twice. Beats go on after the springs (f), so
+           the flick keeps its shape. */
+        let bx = 0, by = 0, br2 = 0;
+        if (Gs.art && !Gs.bang && !Gs.wag && !Gs.tap && !Gs.shake) {
+          for (const q of ix.beats(t)) { if (q.t < m.start + 0.3 || q.t > m.end - 0.45 || (m.at != null && Math.abs(q.t - m.at) < 0.24 && big)) continue; const k = BEAT(t - q.t) * q.a * (Gs.bt2 || 1) * (0.75 + 0.25 * E); if (k) { by += 0.034 * k; br2 += 0.2 * k; bx -= 0.008 * k; } }
+          if (big && m.at != null) { const k = LAND(t - m.at) * 0.8 * (0.75 + 0.25 * E); if (k) { by += 0.034 * k; br2 += 0.2 * k; bx -= 0.008 * k; } }   // a bigger gesture lands on its word: a small drop as it arrives, eased back
+          const s0 = p.seeds; ay += Math.sin(t * 1.9 + s0[0]) * 0.006 + Math.sin(t * 3.3 + s0[1]) * 0.003; ax += Math.sin(t * 1.3 + s0[2]) * 0.006; ar += Math.sin(t * 1.6 + s0[3]) * 0.028 + Math.sin(t * 2.9 + s0[0]) * 0.014; }
+        else if (!Gs.bang && !Gs.wag && !Gs.tap) for (const n of ix.nods(t)) { if (n.t < m.start + 0.25 || (m.at != null && Math.abs(n.t - m.at) < 0.2 && big)) continue; const q = (t - n.t + 0.18) / 0.3; if (q > 0 && q < 1) { const k = Math.sin(Math.PI * q) * n.a * (Gs.bt || 1); ay += 0.034 * k; ar += 0.08 * k; } }   // a beat on each accent (its low point just ahead of the loudest moment, like the nods)
+        want[sd].push({ w, pri: m.pri || 2, dx: ax * hh2 * mir, dy: (ay + antic * (1 - w)) * hh2, rot: ar * mir, art: Gs.art, th: Gs.late || 0.3, fy: Gs.fy || 0, fxp: Gs.fx || 0, sc: Gs.sc || 1, plain: Gs.plain || 0, f: [fx * hh2 * mir * w, fy * hh2 * w, fr * mir * w], bf: [bx * hh2 * mir, by * hh2, br2 * flickWay(rig, sd, Gs, ar * mir)], an: antic * hh2 }); });
     }
     ['L', 'R'].forEach(sd => { const L2 = want[sd], rest = { dx: -pose.sit[0], dy: 0, rot: 0, fy: 0, sc: 1, plain: 0, hide: false, art: '' }; if (!L2.length) { pose.arms[sd] = rest; return; } let tw = 0, mx = 0, dx = 0, dy = 0, rot = 0, best = null, an = 0; L2.forEach(q => { q.ww = q.w; L2.forEach(o => { if (o.pri > q.pri) q.ww *= 1 - o.w; }); });   // a bigger gesture takes over from the talking hand as it comes in
       let pl = 0; L2.forEach(q => { tw += q.ww; mx = Math.max(mx, q.w); dx += q.dx * q.ww; dy += q.dy * q.ww; rot += q.rot * q.ww; pl += q.plain * q.ww; an = Math.max(an, q.an); F[sd][0] += q.f[0]; F[sd][1] += q.f[1]; F[sd][2] += q.f[2]; if (!best || q.ww > best.ww) best = q; });
-      if (tw <= 0) { rest.dy = an; pose.arms[sd] = rest; return; } const on = best.art && mx > 0.3 && best.w > best.th;   // some drawings only make sense once the hand is up (a finger pointing down would go through the desk)
+      if (tw <= 0) { rest.dy = an; pose.arms[sd] = rest; return; } const on = best.art && mx > 0.3 && best.w > best.th;
+      { const up = cl((mx - 0.6) / 0.4, 0, 1); L2.forEach(q => { const k = q.ww / tw * up; F[sd][0] += q.bf[0] * k; F[sd][1] += q.bf[1] * k; F[sd][2] += q.bf[2] * k; }); }   // beats only once the hand is up, shared between the gestures holding it there   // some drawings only make sense once the hand is up (a finger pointing down would go through the desk)
       // the turn belongs to the drawing showing: his desk hands and his talking hands are drawn at different angles, so a turn blended across two of them would spin the wrong one
       let rw = 0, rr = 0; L2.forEach(q => { if ((q.art || null) === (best.art || null)) { rw += q.ww; rr += q.rot * q.ww; } });
       pose.arms[sd] = { dx: dx / tw * mx - pose.sit[0] * (1 - mx), dy: dy / tw * mx + an * (1 - mx), rot: (rw > 0 ? rr / rw : 0) * mx, fy: on ? best.fy : 0, fx: on ? best.fxp : 0, sc: on ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3, art: on && best.art !== '-hide' ? best.art : '' }; });   // the plain inside of the sleeve as the forearm turns over
@@ -570,22 +585,49 @@ const Character = (() => {
      channel is then slid back by its spring's delay, so a stroke still lands on its syllable. */
   const OPEN = { Aa: 1, Uh: 0.6, Oh: 0.62, L: 0.5, Ee: 0.34, D: 0.3, R: 0.28, 'W-Oo': 0.3, S: 0.16, F: 0.1, M: 0, Neutral: 0 };   // how far each mouth shape lets the jaw down
   const SPR = { ld: [26, 0.85], jw: [36, 0.8], gz: [9.5, 0.85], hx: [17, 0.8], hy: [19, 0.72], hr: [16, 0.74], hl: [12, 0.9], sx: [7, 0.9], sr: [7, 0.9], bLy: [22, 0.68], bRy: [22, 0.68], bLr: [26, 0.7], bRr: [26, 0.7], bLx: [26, 0.8], bRx: [26, 0.8], aLx: [20, 0.66], aLy: [22, 0.62], aLr: [14, 0.55], aRx: [20, 0.66], aRy: [22, 0.62], aRr: [14, 0.55] };
-  const BF = 60;
+  // one beat of a raised hand, in seconds from the stressed syllable: cocked back (to -0.35), flicked down to 1 just ahead of the stress, eased back
+  const BEAT = u => { u += 0.02; return u < -0.3 || u > 0.38 ? 0 : u < -0.11 ? -0.35 * sm((u + 0.3) / 0.19) : u < 0 ? -0.35 + 1.35 * sm((u + 0.11) / 0.11) : 1 - sm(u / 0.38); };
+  // which way a hand turns to flick its fingers down: the short way round from where its drawing points to straight down (a hand pointing up and in goes over the inside)
+  const flickWay = (rig, sd, Gs, rot) => { const HA = typeof Puppet !== 'undefined' && Puppet.handAxis ? Puppet.handAxis(rig) : null, arm = rig.arms && rig.arms[sd], tr = Gs.art && arm ? (rig.triggers[Gs.art] || []).find(([id]) => id === arm.hand) : null, v = HA && HA[sd] && tr ? HA[sd][tr[1]] : null, inward = sd === 'R' ? 1 : -1;
+    if (!v) return inward; const c = Math.cos(Math.atan2(Gs.fy ? -v[1] : v[1], Gs.fx ? -v[0] : v[0]) + rot); return Math.abs(c) < 0.2 ? inward : c > 0 ? 1 : -1; };
+  const LAND = u => { u += 0.02; return u < -0.1 || u > 0.36 ? 0 : u < 0 ? sm((u + 0.1) / 0.1) : 1 - sm(u / 0.36); };
+  const BF = 60, FLIP = 0.2, FLIP_SHORT = 0.14;   // a hand turns through from one drawing to the next in a fifth of a second, a seventh shorter at the change
   function bake(cfg, A, rig, p, dur) {
-    const n = Math.ceil((dur + 2) * BF) + 2, raw = {}, arts = { L: new Array(n), R: new Array(n) }; Object.keys(SPR).forEach(k => { raw[k] = new Float32Array(n); });
+    const n = Math.ceil((dur + 2) * BF) + 2, raw = {}, arts = { L: new Array(n), R: new Array(n) }, mirs = { L: new Uint8Array(n), R: new Uint8Array(n) }, scs = { L: new Float32Array(n), R: new Float32Array(n) }; Object.keys(SPR).forEach(k => { raw[k] = new Float32Array(n); });
     for (let i = 0; i < n; i++) { const q = targetAt(cfg, A, rig, p, i / BF);
       raw.hx[i] = q.head[0]; raw.hy[i] = q.head[1]; raw.hr[i] = q.head[2]; raw.hl[i] = q.head[3]; raw.sx[i] = q.sit[0]; raw.sr[i] = q.sit[1]; raw.ld[i] = q.lidT; raw.jw[i] = q.jawT; raw.gz[i] = q.gz;
-      ['L', 'R'].forEach(sd => { raw['b' + sd + 'x'][i] = q.brow[sd][0]; raw['b' + sd + 'y'][i] = q.brow[sd][1]; raw['b' + sd + 'r'][i] = q.brow[sd][2]; const a = q.arms[sd]; raw['a' + sd + 'x'][i] = a.dx; raw['a' + sd + 'y'][i] = a.dy; raw['a' + sd + 'r'][i] = a.rot; arts[sd][i] = a.hide ? '-hide' : a.art || ''; }); }
+      ['L', 'R'].forEach(sd => { raw['b' + sd + 'x'][i] = q.brow[sd][0]; raw['b' + sd + 'y'][i] = q.brow[sd][1]; raw['b' + sd + 'r'][i] = q.brow[sd][2]; const a = q.arms[sd]; raw['a' + sd + 'x'][i] = a.dx; raw['a' + sd + 'y'][i] = a.dy; raw['a' + sd + 'r'][i] = a.rot; arts[sd][i] = a.hide ? '-hide' : a.art || ''; mirs[sd][i] = (a.fx ? 1 : 0) + (a.fy ? 2 : 0); scs[sd][i] = a.sc || 1; }); }
     // which hand drawing shows, frame by frame: one that would show for under a fifth of a second is skipped (the one before it stays), so a hand never flickers
-    const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && j - i < BF * 0.2) { for (let k = i; k < j; k++) a[k] = a[i - 1]; } i = j; } art[sd] = a; });
+    const art = {}; ['L', 'R'].forEach(sd => { const a = arts[sd]; let i = 0; while (i < n) { let j = i; while (j < n && a[j] === a[i]) j++; if (i > 0 && j < n && j - i < BF * 0.2) { for (let k = i; k < j; k++) { a[k] = a[i - 1]; mirs[sd][k] = mirs[sd][i - 1]; scs[sd][k] = scs[sd][i - 1]; } } i = j; } art[sd] = a; });
     const out = {}; Object.keys(SPR).forEach(k => { const [w, z] = SPR[k], src = raw[k], y = new Float32Array(n), sub = 4, h = 1 / BF / sub, cut = /^a[LR]r$/.test(k) ? art[k[1]] : null, lag = Math.round(2 * z / w * BF), o = new Float32Array(n); let x = src[0], v = 0, s0 = 0;
       for (let i = 0; i < n; i++) { const tg = src[i]; if (cut && i > 0 && cut[i] !== cut[i - 1]) { for (let q = s0; q < i; q++) o[q] = y[Math.min(i - 1, q + lag)]; s0 = i; x = tg; v = 0; }   // a new drawing starts at its own turn: nothing carries over from the last one
         for (let s2 = 0; s2 < sub; s2++) { v += (w * w * (tg - x) - 2 * z * w * v) * h; x += v * h; } y[i] = x; }
       for (let q = s0; q < n; q++) o[q] = y[Math.min(n - 1, q + lag)]; out[k] = o; });
     // the hand's turn follows its travel a little: it drags behind as the arm swings and catches up
     ['L', 'R'].forEach(sd => { const y = out['a' + sd + 'y'], r = out['a' + sd + 'r'], hh = rig.pivot.headH, mir = sd === 'R' ? -1 : 1; let drag = 0; for (let i = 1; i < n; i++) { const vy = (y[i] - y[i - 1]) * BF / hh; drag += (cl(vy * 0.16, -0.14, 0.14) - drag) * 0.3; r[i] += drag * mir; } });
-    p.bk = { n, ch: out, art };
+    /* One hand, not two pictures. His hand lying on the desk and his raised hands are different drawings that point
+       different ways from the cuff, and a change from one to the other in a single frame read as a hand jumping (nine
+       times a minute, the roughest thing left after the animator programme). Now the hand turns through: over a fifth
+       of a second round the change the drawing going out is turned towards the way the one coming in points, the one
+       coming in starts turned back by the rest and carries on to its own angle (quickest at the change itself, where
+       both point the same way), and both are drawn a little short at that moment, as a hand tipping towards the camera
+       is. Puppet.handAxis gives the way each drawing points. flip.r is the extra turn of the drawing showing, flip.s
+       its size. */
+    const flip = {}, HA = typeof Puppet !== 'undefined' && Puppet.handAxis ? Puppet.handAxis(rig) : null;
+    ['L', 'R'].forEach(sd => { const fr = new Float32Array(n), fs = new Float32Array(n).fill(1); flip[sd] = { r: fr, s: fs }; const AX = HA && HA[sd], arm = rig.arms && rig.arms[sd], hn = arm ? rig.nodes[arm.hand] : null; if (!AX || !hn) return;
+      const idx = k => { if (!k) return hn.kids.findIndex(q => q.vis); const tr = (rig.triggers[k] || []).find(([id]) => id === hn.id); return tr ? tr[1] : -1; };
+      const way = (k, i) => { const j = idx(k), v = j >= 0 ? AX[j] : null; if (!v || Math.hypot(v[0], v[1]) < 25) return null; const m = mirs[sd][i]; return Math.atan2(m & 2 ? -v[1] : v[1], m & 1 ? -v[0] : v[0]) + out['a' + sd + 'r'][i]; };
+      const T = art[sd], half = Math.round(BF * FLIP / 2);
+      for (let i = 1; i < n; i++) { if (T[i] === T[i - 1] || T[i] === '-hide' || T[i - 1] === '-hide') continue; const wa = way(T[i - 1], i - 1), wb = way(T[i], i); if (wa == null || wb == null) continue;
+        let D = wb - wa; while (D > Math.PI) D -= 2 * Math.PI; while (D <= -Math.PI) D += 2 * Math.PI; if (Math.abs(D) < 0.25) continue;
+        for (let f = Math.max(0, i - half); f < Math.min(n, i + half); f++) { const u = (f - (i - half) + 0.5) / (2 * half), g = u * u * (3 - 2 * u); if ((f < i && T[f] !== T[i - 1]) || (f >= i && T[f] !== T[i])) continue;   // another change inside the window: that drawing has its own turn
+          fr[f] += f < i ? D * g : -D * (1 - g); fs[f] *= 1 - FLIP_SHORT * Math.sin(Math.PI * u); } } });
+    p.bk = { n, ch: out, art, flip, mir: mirs, sc: scs };
   }
+  // an arm at any moment, from the bake alone: where the wrist is, the turn of the drawing showing (with its turn through), which drawing, its size and flips
+  const SHUT = 1 / 60;
+  const armAt = (p, sd, t, hh) => { const B = p.bk, T = B.art[sd], i = Math.max(0, Math.min(T.length - 1, Math.floor(t * BF + 1e-6))), k = T[i], same = i + 1 < T.length && T[i + 1] === k, u = cl(t * BF - i, 0, 1), FL = B.flip[sd], mid = a => same ? a[i] + (a[i + 1] - a[i]) * u : a[i];
+    return { dx: bk(p, 'a' + sd + 'x', t), dy: Math.min(0.012 * hh, bk(p, 'a' + sd + 'y', t)), rot: (same ? bk(p, 'a' + sd + 'r', t) : B.ch['a' + sd + 'r'][i]) + mid(FL.r), art: k, sc: B.sc[sd][i] * mid(FL.s), m: B.mir[sd][i] }; };   // the desk is solid: a hand never goes through it
   const bk = (p, k, t) => { const a = p.bk.ch[k], f = t * BF, i = Math.floor(f); return i < 0 ? a[0] : i >= a.length - 1 ? a[a.length - 1] : a[i] + (a[i + 1] - a[i]) * (f - i); };
   function poseAt(cfg, A, rig, p, t) {
     const q = targetAt(cfg, A, rig, p, t), F = q.fast, hh = rig.pivot.headH;
@@ -593,8 +635,15 @@ const Character = (() => {
       q.head = [bk(p, 'hx', t), bk(p, 'hy', t), bk(p, 'hr', t), bk(p, 'hl', t)]; q.sit = [bk(p, 'sx', t), bk(p, 'sr', t), 1];
       { const gz = bk(p, 'gz', t), tx = q.head[0] * 0.55 + gz * 0.014 * hh, ty = q.head[1] * 0.42; q.head[0] += gz * 0.010 * hh; q.head[2] += gz * 0.008;
         q.turn = [cl(tx, -0.024 * hh, 0.024 * hh), cl(ty, -0.014 * hh, 0.017 * hh)]; q.lid = bk(p, 'ld', t); q.jaw = Math.max(0, bk(p, 'jw', t)); }
-      ['L', 'R'].forEach(sd => { q.brow[sd] = [bk(p, 'b' + sd + 'x', t), bk(p, 'b' + sd + 'y', t), bk(p, 'b' + sd + 'r', t)]; const a = q.arms[sd]; a.dx = bk(p, 'a' + sd + 'x', t); a.dy = Math.min(0.012 * hh, bk(p, 'a' + sd + 'y', t));   // the desk is solid: a hand never goes through it
-        const T = p.bk.art[sd], i = Math.max(0, Math.min(T.length - 1, Math.floor(t * BF + 1e-6))), k = T[i]; a.rot = i + 1 < T.length && T[i + 1] !== k ? p.bk.ch['a' + sd + 'r'][i] : bk(p, 'a' + sd + 'r', t); a.art = k === '-hide' ? '' : k; a.hide = k === '-hide'; if (!a.art) { a.fy = 0; a.fx = 0; } });
+      ['L', 'R'].forEach(sd => { q.brow[sd] = [bk(p, 'b' + sd + 'x', t), bk(p, 'b' + sd + 'y', t), bk(p, 'b' + sd + 'r', t)]; const a = q.arms[sd], S = armAt(p, sd, t, hh);
+        a.dx = S.dx; a.dy = S.dy; a.rot = S.rot; a.art = S.art === '-hide' ? '' : S.art; a.hide = S.art === '-hide'; a.fx = a.art ? S.m & 1 : 0; a.fy = a.art && (S.m & 2) ? 1 : 0; a.sc = S.sc;
+        /* A hand moving fast is smeared, as a camera would see it (and as an animator draws it): the frame shows it at
+           several moments across the last sixtieth of a second, laid over each other (trail; Puppet.draw adds them up
+           evenly). Where the drawing changes inside that sixtieth both drawings are in the smear, so the change itself
+           is never one clean cut. Only while it is really moving: a held or drifting hand stays sharp. */
+        if (!a.hide && rig.arms && rig.arms[sd]) { const S1 = armAt(p, sd, t - SHUT, hh), travel = Math.abs(S.rot - S1.rot) * 0.4 * hh + Math.hypot(S.dx - S1.dx, S.dy - S1.dy);
+          if (S1.art !== '-hide' && (S1.art !== S.art || travel > 0.03 * hh)) { const K = Math.round(cl(travel / (0.012 * hh), 3, 12)), hid = rig.arms[sd].hand, swi = k => { if (!k) return -1; const tr = (rig.triggers[k] || []).find(([id]) => id === hid); return tr ? tr[1] : -1; };
+            a.trail = []; for (let j = 0; j < K; j++) { const Q = j === 0 ? S : j === K - 1 ? S1 : armAt(p, sd, t - SHUT * j / (K - 1), hh); a.trail.push({ dx: Q.dx, dy: Q.dy, rot: Q.rot, sc: Q.sc, fx: Q.art ? Q.m & 1 : 0, fy: Q.art && (Q.m & 2) ? 1 : 0, swi: swi(Q.art) }); } } } });
       q.dangle += (bk(p, 'hx', t) - bk(p, 'hx', t - 0.14)) / hh * 6 + (bk(p, 'sx', t) - bk(p, 'sx', t - 0.2)) / hh * 8;   // the strings swing behind the head
     }
     /* A blink is not a switch: the lids come down over about 45 ms, stay shut under a tenth of a second and take half as
@@ -602,7 +651,7 @@ const Character = (() => {
        are the upper lids drawn part of the way (lid), one or two frames each at 30 a second. */
     if (!q.blink) for (const b of p.ix.blinks(t + 0.05)) { const u = t - b; const l0 = q.lid || 0; if (u >= -0.045 && u < 0) { if (l0 < 0.62) q.lid = l0 + (0.62 - l0) * sm((u + 0.045) / 0.045); break; } if (u >= 0.095 && u < 0.25) { if (l0 < 0.7) q.lid = l0 + (0.7 - l0) * (1 - sm((u - 0.095) / 0.155)); break; } }
     q.head[0] += F.h[0]; q.head[1] += F.h[1]; q.head[2] += F.h[2]; q.body[0] += F.b;
-    ['L', 'R'].forEach(sd => { const a = q.arms[sd]; a.dx += F[sd][0]; a.dy += F[sd][1]; a.rot += F[sd][2]; if (a.art) handArt(rig, q.swaps, a.art, sd); });
+    ['L', 'R'].forEach(sd => { const a = q.arms[sd]; a.dx += F[sd][0]; a.dy += F[sd][1]; a.rot += F[sd][2]; if (a.trail) a.trail.forEach(Q => { Q.dx += F[sd][0]; Q.dy += F[sd][1]; Q.rot += F[sd][2]; }); if (a.art) handArt(rig, q.swaps, a.art, sd); });
     return q;
   }
 
