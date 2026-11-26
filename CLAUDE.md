@@ -738,6 +738,70 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
 
+### The animator programme (November 2026, on the branch `animator-pass`: NOT published until he says "publish")
+
+He asked (26 November): "I want to be able to drop in an audio clip into it, and have it fully animate the avatar to the
+Standard of a professional animation, so that no adjustments are needed whatsoever when I export the clip... The number
+one thing is for it to be natural, so you have creative permission to do whatever you need to... If you need to make new
+drawings for any part, you have control". He was sent a before and after of his own recording at the end. If he comes
+back on one part, change that part and keep the rest. Measuring tools: `dev/tests/charkit/` (see its README).
+* **What was wrong on the published build** (looked at frame by frame and traced 60 times a second): the face was rigid
+  between swapped drawings (a flat head, lids that only blink, a mouth that only swaps); a blink was one frame of shut
+  eye; the body stood still under a moving head; a mood sat on a whole long sentence; inside a word the mouth lost its
+  vowels and W glides ("way" was 300 ms of pucker, "one" had no vowel) and chattered wide teeth on every N and K; a new
+  recording needed three steps when a script was already there; and the same recording was performed differently each
+  time it was brought in.
+* **A face rig in `Puppet.draw`** (no new drawings were needed: his own are moved). `pose.turn` [x, y] px: the features
+  slide over the head as it turns and nods, the nose furthest, then mouth, eyes, brows (`FZ`), so the flat head reads as
+  round (front, up and down views; not the profiles). `pose.lid` -1..1: the upper lids taller or shorter from their top
+  edge (`LID_DOWN`, `LID_UP`): wide eyed, narrowed, and the in betweens of a blink (down over 45 ms before, easing open
+  until a quarter second after; the blink drawing is still the shut eye, 95 ms). `pose.jaw` 0..1: everything under the
+  top of the mouth is let down a little (`JAW`, 8.5 in a hundred at most) so the chin drops with an open vowel.
+  **The jaw is two clipped passes straight from his pictures** (above the seam untouched, below it stretched from the
+  seam; `band` leaves out pictures wholly across the seam). Do not draw the head on its own surface first: that changed
+  4 in a hundred of its pixels the moment the jaw moved, a pop in sharpness at every phrase (the surface is kept only
+  for the red face). His nose is its own layer (`role` nose).
+* **In `character.js`**: `lidT`, `jawT` and `gz` are sprung like the rest (`SPR` ld, jw, gz). Lids follow the brows, the
+  mood and where he looks; the jaw follows the mouth shape's opening (`OPEN`) and the loudness; on a big glance the eyes
+  lead and the head follows a little (`gz`). The trunk carries some of the head (`pose.sit` from head x and tilt). He
+  breathes in where the recording does (`A.breaths` from LipSync: chest and a small lift of the head). Brows do not
+  rise as a matched pair (`q.as`). A mood found by `planMoods` starts at the phrase holding its cause (the swear, the
+  good news, the doubt) when the sentence is longer than 2.6 s, not at the sentence's first word. The chance in a
+  performance is seeded from the recording's loudness (`A._sig`), so the same recording is always performed the same way
+  ("Different wee movements" still changes it).
+* **Lip sync, driven by what the eye can see.** (1) `dev/src/lexicon.js` (`LEXICON`, about 6,400 words, 104 KB, made by
+  `dev/lexgen.js` from the CMU Pronouncing Dictionary, licence in `dev/assets/cmudict-LICENSE`): how common words are
+  really said, kept only for the words whose visible sounds the spelling rules get wrong; looked up after his hand list
+  `EX` and before `spell()`. (2) `retime` and `share`: inside a word the sounds between sure edges (a hiss, a lip
+  closure, the word's ends) share the time by what each needs (`WANT`) and the loudness, vowels on the loud frames.
+  (3) Sounds nobody sees (K, G, hard C, N, NG, H: `inv`) get no drawing: the vowel after starts early or the shape before
+  is held. (4) `tidy`: every shape is held two frames (`MIN2`, `MIN1`), lips shut and W puckers are always kept, a vowel
+  takes time from a tongue sound and never from closed lips. (5) A short quiet gap inside a phrase and a quiet vowel show
+  his small opening R, not D: **his D and S drawings are the same wide clenched grin** (R is the smallest opening,
+  Neutral and M the same closed line). On his recording against the PocketSphinx reference: vowels shown as a vowel 87
+  to 98 in a hundred, the right vowel shape 55 to 83, lips shut on M B P 87 to 93; word timing unchanged (median about
+  25 ms).
+* **One step** (`takeVoice`, `writeWords`, `settle`, `wireDrop`): a recording added, picked or dropped anywhere on the
+  tab is listened to, its words become the script, every word is lined up and the performance planned, with a status
+  pill on the preview meanwhile; an export waits (`prepare`, `exportWithSound`). A script that is already this
+  recording's (`sameWords`: six in ten of the heard words in order) is kept with his tags and fixes; anything else is
+  replaced (Undo brings it back). **The listening helper must be on the computer** (one download, his click: "Get exact
+  lip sync"). Without it the sample script is cleared and he moves to the sound alone: mouth from the sound, nods,
+  blinks, and (new) his talking hand, planned from stand in words made of the beats of the voice (`SW` in `perfOf`).
+* **Exports draw him the same in every frame** (`Puppet.exporting`, `Puppet.steady`, `steadyWait` in render.js and the
+  same in cut_export.js): he is drawn from copies of his pictures made to size in the background, and a frame made
+  before they arrived was drawn from the full pictures, so his outlines changed by a hair a few frames into every
+  export (2 in a hundred pixels at 1080p, on each helper at its own moment). An export frame that had to start without
+  them now waits and is drawn again. `tests/char_steady.js` holds it to not one pixel.
+* **Hands were left exactly as he approved them** (one talking hand a thought; see above). No resting hand shifts, no new
+  gestures, no new drawings. SoundSwallower was not used (it still needs his say so).
+* Checks: `tests/char_auto.py` (the drop, 10 steps; needs the listening helper served from `dev/tmp_lshome`),
+  `tests/char_nowords.js`, `tests/char_steady.js`, `tests/char_motion.js` (now follows lids, jaw, the slide and the trunk
+  too), `tests/char_sync.py` (the sample script is now replaced by itself), and the older ones (`char_timing.js`: nods
+  reach their low point about 30 ms before the accent now, which reads as on the beat; `char_workers.js '{"n":24}'`,
+  `char_damaged.js '{"n":40}'`, `char_ui.py`, `char_studio.py`, `char_hands.py`). Frame time is unchanged within the
+  noise here (about 16 ms at 1080p in software).
+
 ## The intro (dev/src/intro.js `Intro`, dev/src/intro_scenes.js `IntroScenes`, dev/src/squid.js `Squid`)
 
 The PatterSquid opener lives in the **Video tab** now: "+ Add intro" (Patter in the library) puts it at the start of the
