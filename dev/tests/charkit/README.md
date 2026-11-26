@@ -25,6 +25,8 @@ published build on 8766 from a worktree with the same fixtures linked in.
 * `hplot.py out.png t0 t1 trace.json[:label] ...`: the left hand over a stretch (wrist up and across, turn, its speed,
   changes of drawing) against the loudness, the words and the nods. `hstat.py trace.json ...`: how much of the time a
   raised hand is held dead still, how fast it moves, the turn at a change of drawing.
+* `rstat.py trace.json ...` and `rplot.py out.png t0 t1 trace.json[:label] ...`: the resting right hand on the screen (how
+  far it travels and turns, how long it is dead still, against the left; its lift, slide and turn over a stretch).
 
 Published build (2026.11.19.3) against the programme, his own minute of talking: vowels shown as a vowel 87 to 98 in
 a hundred, the right shape 55 to 85, lips shut on M B P 87 to 93, shut while clearly heard 9 times to none, shapes 252

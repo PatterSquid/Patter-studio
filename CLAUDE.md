@@ -849,6 +849,19 @@ how the hands MOVE, not which gestures he makes or how often. `planHands` is unt
   their wee beats are as they were.
 * **Two hands never move as one**: in a two handed gesture the right comes 0.06 s behind the left (0.03 s for a bang) and
   93 in a hundred as far.
+* **The right hand is alive** (`planRest`, `p.rest`, applied at the end of the hands in `targetAt`). He watched the hands
+  before and after and said: "I think it's the right hand. It basically never moves. Obviously it can move significantly
+  less than the other hand, but it basically sits there. Makes it look unnatural to me". It stays on the desk as he drew
+  it (given gestures of its own he preferred it without: the fourth version above), but it is no longer dead: it taps
+  along on some of the words he leans on hardest (`taps`: beats of 0.55 and over, at least 0.7 s apart, three in ten left
+  out; the wrist lifts up to 0.028 head heights and comes down on the stressed syllable, the fingers staying near the
+  desk); it settles in a slightly new place as the left hand comes up for a thought, at a shift of his weight, or at a
+  new thought after a pause (`sets`: up to 0.032 head heights across and 0.065 rad, picked up a touch as it moves, never
+  closer than 2.4 s); and while he talks it is a moving hold. Nothing while a gesture or a pose has that hand, nothing
+  with hands set to tags, less on calm, more on animated (`K`). Its own chance (from the beats), so the rest of the
+  performance is unchanged. On his recording the right hand's path on the screen went from about 430 px in the minute
+  (nearly all of it the two bangs) to about 1330, against 2900 for the left (`charkit/rstat.py`, `rplot.py`). If he
+  says more or less: the tap's 0.028 and 0.075, the place's 0.064 and 0.13 in `planRest`.
 * **Smaller things.** A hand held up through a thought settles a little way off at each new phrase (`unit.st`, a couple of
   fingers' width, from its own chance so nothing else in the performance moves). A drawing that would show for under 0.4 s
   on the way from one drawing to another (desk, relaxed for a quarter second, finger up) is skipped, and the drawing that
