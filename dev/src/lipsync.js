@@ -434,8 +434,12 @@ const LipSync = (() => {
   }
   // No recording yet: time the script at a steady talking pace, so he can be seen saying it (the timing is a guess)
   function fromText(script, rate) {
-    const P = parse(script), k = 1 / (rate || 1), vis = [], words = []; let t = 0.3;
-    P.words.forEach((W, i) => { const a = t, seen = W.units.some(U => !U.inv); W.units.forEach((U, x) => { const nx = W.units[x + 1], hid = U.inv && seen; if (!hid) vis.push([t, U.inv ? 'R' : U.v]); else if (nx && nx.k === V) vis.push([t, nx.v]); t += (DUR[U.k] || DUR.T)[1] * 0.0105 * k; }); words.push([a, t, W.text || W.w, i, W.w]); t += W.pause ? 0.32 * k : 0.04 * k; if (W.pause) vis.push([t - 0.3 * k, 'Neutral']); });
+    // each word keeps the length the spelling rules alone give it (as it always had: a clip with no recording must not
+    // change length because a word's sounds are now looked up); the sounds really in it share that length
+    const P = parse(script), P0 = parse(script, true), k = 1 / (rate || 1), vis = [], words = [], nom = U => (DUR[U.k] || DUR.T)[1] * 0.0105 * k; let t = 0.3;
+    P.words.forEach((W, i) => { const a = t, seen = W.units.some(U => !U.inv), W0 = P0.words[i] || W, span = W0.units.reduce((x, U) => x + nom(U), 0), own = W.units.reduce((x, U) => x + nom(U), 0), f = own > 0 ? span / own : 1;
+      W.units.forEach((U, x) => { const nx = W.units[x + 1], hid = U.inv && seen; if (!hid) vis.push([t, U.inv ? 'R' : U.v]); else if (nx && nx.k === V) vis.push([t, nx.v]); t += nom(U) * f; }); t = a + span;
+      words.push([a, t, W.text || W.w, i, W.w]); t += W.pause ? 0.32 * k : 0.04 * k; if (W.pause) vis.push([t - 0.3 * k, 'Neutral']); });
     const dur = t + 0.3, n = Math.ceil(dur * FPS), env = new Float32Array(n);
     words.forEach(w => { for (let f = Math.floor(w[0] * FPS); f < Math.min(n, w[1] * FPS); f++) env[f] = 0.55 + 0.35 * Math.sin((f - w[0] * FPS) / Math.max(1, (w[1] - w[0]) * FPS) * Math.PI); });
     const at = i => i < words.length ? words[i][0] : t;
