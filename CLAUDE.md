@@ -819,7 +819,8 @@ make them naturally. Can you run a full improvement programme with the same crea
 (the snap, stiff, gestures not fitting, or just make them natural) he picked "Just make them natural". **Nothing was
 published**: `animator-pass` is as he saw it and can go out alone if he says so. What he has turned down before still
 stands (hands up all the time, made up gestures, both hands sharing the work, hands we drew): this programme changes
-how the hands MOVE, not which gestures he makes or how often. `planHands` is untouched.
+how the hands MOVE, not which gestures he makes or how often (`planHands` was untouched until he asked for the right
+hand to join in now and then, below).
 * **What was wrong** (60 a second close ups and traces, `dev/tests/charkit/hplot.py` and `hstat.py`): (1) a hand changed
   from its drawing on the desk to a raised drawing in ONE frame while the wrist had barely left the desk, so it jumped a
   hand's length (nine lone jumps a minute in the hands' part of the picture); (2) a raised hand was a statue: it hung dead
@@ -862,6 +863,20 @@ how the hands MOVE, not which gestures he makes or how often. `planHands` is unt
   performance is unchanged. On his recording the right hand's path on the screen went from about 430 px in the minute
   (nearly all of it the two bangs) to about 1330, against 2900 for the left (`charkit/rstat.py`, `rplot.py`). If he
   says more or less: the tap's 0.028 and 0.075, the place's 0.064 and 0.13 in `planRest`.
+* **Now and then the right hand talks, or both** (`P_RIGHT`, `P_BOTH`, `OTHER_GAP`, the side choice in `planHands`'
+  `units.forEach`). Shown the resting right hand's small life he said: "But there's no animation. He never actually
+  lifts his hand off the desk is what I am saying. It looks correct most of the time, but sometimes (infrequently and
+  not by a pattern) he would use his right hand and/or both hands". So a thought that brings a hand up is now and then
+  carried by the right hand (his relaxed drawing, mirrored, beside the microphone) or by both, by chance alone: never
+  the first thought, never two such within 7 s, about one in seven each, likelier the longer it has been (a minute
+  seldom passes without one). Over a dozen takes of his minute: 65 thoughts the left's, 6 the right's, 13 both
+  (`tests/char_sides.js`). **This is far less than the fourth version he turned down** (the hands sharing the work all
+  the time): if he says too often, lower the two chances; do not make it regular. A lift is made by the hand that is
+  talking; every other bigger gesture (offer, point, counting) is the left's, which comes up for it: the right's pointing
+  finger or offered palm is half hidden behind the microphone (looked at). While the right has a thought to itself the
+  left has the resting hand's small life (`p.rest.L`), and goes back to its own place after. The wee beats on the desk
+  stay the left's. `cfg._side` ('R' or 'both') forces every such thought to that side for a look. Its own chance
+  (`R3`), so nothing else in the performance moves.
 * **Smaller things.** A hand held up through a thought settles a little way off at each new phrase (`unit.st`, a couple of
   fingers' width, from its own chance so nothing else in the performance moves). A drawing that would show for under 0.4 s
   on the way from one drawing to another (desk, relaxed for a quarter second, finger up) is skipped, and the drawing that
