@@ -11,8 +11,8 @@ async def main():
     await pg.route('**/raw.githubusercontent.com/**', lambda r: r.abort()); await pg.route('**/fonts.googleapis.com/**', lambda r: r.abort())
     await pg.goto(f'http://127.0.0.1:{PORT}/dist/test.html'); await pg.wait_for_timeout(1500)
     info = await pg.evaluate("""async([wav,heardUrl,over])=>{ let { rig } = await Puppet.importFile(new File([await (await fetch('/tmp_puppet.puppet')).blob()], 'M.puppet')); try { rig = await Puppet.setHands(rig.id, await (await fetch('/tmp_hands/sheet.png')).blob()); } catch (e) { }
-      const voice = await CutMedia.importFile(new File([await (await fetch(wav)).blob()], 'voice.wav', { type: 'audio/wav' })); let heard = null; try { heard = await (await fetch(heardUrl)).json(); } catch (e) { }
-      if (heard && typeof Listen !== 'undefined' && Listen.keepHeard) Listen.keepHeard(voice.id, heard.words, 0, heard.text);
+      const voice = wav === 'none' ? { id: '' } : await CutMedia.importFile(new File([await (await fetch(wav)).blob()], 'voice.wav', { type: 'audio/wav' })); let heard = null; try { heard = await (await fetch(heardUrl)).json(); } catch (e) { }
+      if (heard && voice.id && typeof Listen !== 'undefined' && Listen.keepHeard) Listen.keepHeard(voice.id, heard.words, 0, heard.text);
       const c = Object.assign(Character.defaults(), { puppet: rig.id, voice: voice.id, script: heard ? heard.text : '' }, over || {}); await Character.prepare(c); window.__c = c; return { dur: Character.duration(c) }; }""", [WAV, HEARD, CFG])
     t1 = T1 or info['dur']; i0, i1 = int(T0 * FPS), int(t1 * FPS); H = round(W * 9 / 16)
     cw, ch = round(W * (CROP[2] - CROP[0])), round(H * (CROP[3] - CROP[1]))

@@ -849,6 +849,11 @@ how the hands MOVE, not which gestures he makes or how often. `planHands` is unt
   their wee beats are as they were.
 * **Two hands never move as one**: in a two handed gesture the right comes 0.06 s behind the left (0.03 s for a bang) and
   93 in a hundred as far.
+* **Smaller things.** A hand held up through a thought settles a little way off at each new phrase (`unit.st`, a couple of
+  fingers' width, from its own chance so nothing else in the performance moves). A drawing that would show for under 0.4 s
+  on the way from one drawing to another (desk, relaxed for a quarter second, finger up) is skipped, and the drawing that
+  stays keeps its own turn (the skipped one's turn used to spin it). A pace that is not a number is the normal pace, and
+  each pace has its own timing (`textMemo` was kept by the script alone).
 * Sizes to keep in mind if he says "too much" or "not enough": a strong beat is 0.2 rad at the wrist and 0.034 head
   heights of travel (`by`, `br2` in `targetAt`), the drift 0.006 head heights and 0.028 rad. Change those two lines, not
   the method. If he wants the old cut back, `FLIP = 0` is not enough: take `flip` and `trail` out together.
