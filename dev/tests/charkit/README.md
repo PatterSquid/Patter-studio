@@ -20,6 +20,11 @@ published build on 8766 from a worktree with the same fixtures linked in.
 * `clip.py PORT OUTDIR [t0] [t1] [fps]`: frames drawn by the module itself (`W` width, `CROP` a part of the frame as
   fractions, `CFG` settings over the defaults, `WAV`, `HEARD`), for a before and after clip or a close look.
 * `sheet.py DIR out.jpg start step count [cols] [crop] [width]`: those frames as a contact sheet with their times.
+* `pops.py DIR`: frame to frame change of rendered frames in the head and in the hands' part of the picture; lists
+  single frames that change far more than their neighbours (a jump).
+* `hplot.py out.png t0 t1 trace.json[:label] ...`: the left hand over a stretch (wrist up and across, turn, its speed,
+  changes of drawing) against the loudness, the words and the nods. `hstat.py trace.json ...`: how much of the time a
+  raised hand is held dead still, how fast it moves, the turn at a change of drawing.
 
 Published build (2026.11.19.3) against the programme, his own minute of talking: vowels shown as a vowel 87 to 98 in
 a hundred, the right shape 55 to 85, lips shut on M B P 87 to 93, shut while clearly heard 9 times to none, shapes 252

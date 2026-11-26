@@ -811,6 +811,52 @@ back on one part, change that part and keep the rest. Measuring tools: `dev/test
   `char_damaged.js '{"n":40}'`, `char_ui.py`, `char_studio.py`, `char_hands.py`). Frame time is unchanged within the
   noise here (about 16 ms at 1080p in software).
 
+### The hands programme (26 November 2026, on the branch `hands-natural`, on top of `animator-pass`: NOT published until he says "publish")
+
+He watched the animator programme's before and after, said "Looks great publish", stopped the publish seconds later and
+wrote: "The hands are still a bit of an issue tbh. I think we need to address them in the same way, most importantly to
+make them naturally. Can you run a full improvement programme with the same creative freedom". Asked what bothered him
+(the snap, stiff, gestures not fitting, or just make them natural) he picked "Just make them natural". **Nothing was
+published**: `animator-pass` is as he saw it and can go out alone if he says so. What he has turned down before still
+stands (hands up all the time, made up gestures, both hands sharing the work, hands we drew): this programme changes
+how the hands MOVE, not which gestures he makes or how often. `planHands` is untouched.
+* **What was wrong** (60 a second close ups and traces, `dev/tests/charkit/hplot.py` and `hstat.py`): (1) a hand changed
+  from its drawing on the desk to a raised drawing in ONE frame while the wrist had barely left the desk, so it jumped a
+  hand's length (nine lone jumps a minute in the hands' part of the picture); (2) a raised hand was a statue: it hung dead
+  still through whole sentences ("everybody punched each other's head in" without a flicker; held still 18 in a hundred
+  of the time it was up, up to 0.55 s at a time), beating only where a nod was planned; (3) two hands in one gesture
+  moved as one.
+* **One hand, not two pictures** (`bake` in character.js, `flip`; `Puppet.handAxis`). Each hand drawing's weight from the
+  cuff (the middle of its paint, measured once from the pictures and kept on the rig as `haxis`, handed to the helpers) is
+  the way it points. Over `FLIP` (0.24 s) round a change the drawing going out is turned towards the way the one coming
+  in points and the one coming in starts turned back by the rest (quickest at the change, where both point the same way),
+  both a seventh shorter at that moment (`FLIP_SHORT`), then a touch past its angle and back (`FLIP_OVER`). A change
+  between drawings that point the same way (his fist and his hand on the desk) has no turn. `armAt(p, sd, t, hh)` reads
+  an arm at any moment from the bake alone.
+* **Smear** (`trail` on `pose.arms[side]`, drawn in `Puppet.draw`): a hand moving fast is drawn at up to twelve moments
+  across the last sixtieth of a second, each at an equal share, added up ('lighter') on a surface of its own. At a change
+  of drawing the frame (one at 30 a second, two at 60) shows both drawings half and half from just either side of the
+  change, so the change is never a clean cut. A held or drifting hand stays sharp. Lone jumps in the hands' part of the
+  picture on his recording: 9 to none (`charkit/pops.py`).
+* **A raised hand talks** (`p.beats`, `BEAT`, `LAND`, `flickWay`): it beats on the words he leans on, sized by how hard he
+  leans on each (`pros.units` prominence: a clear flick on the words that stand out, the faintest pulse on lesser ones,
+  nothing on throwaway words; the beat after a bigger one within 0.6 s is a ripple of it). A beat is cocked back, flicked
+  down in a tenth of a second to land just ahead of the stressed syllable and eased back; most of it is the hand turning
+  at the wrist (the short way round to "down" for that drawing), the forearm barely moves. It is added after the springs
+  (`bf`, shared between the gestures holding the hand up), so the flick keeps its shape. A bigger gesture lands on its
+  word with a small drop (`LAND`). Between beats every raised hand is a moving hold (a few pixels of drift from
+  `p.seeds`). Held still 18 to 5 in a hundred of the time it is up, longest 0.55 to 0.17 s. The hands on the desk and
+  their wee beats are as they were.
+* **Two hands never move as one**: in a two handed gesture the right comes 0.06 s behind the left (0.03 s for a bang) and
+  93 in a hundred as far.
+* Sizes to keep in mind if he says "too much" or "not enough": a strong beat is 0.2 rad at the wrist and 0.034 head
+  heights of travel (`by`, `br2` in `targetAt`), the drift 0.006 head heights and 0.028 rad. Change those two lines, not
+  the method. If he wants the old cut back, `FLIP = 0` is not enough: take `flip` and `trail` out together.
+* Checks: `tests/char_hands.py` and `tests/char_motion.js` allow the turn through its speed near a change of drawing and
+  nothing else; `tests/char_steady.js '{"hands":true,"t0":1.1,"n":30,"all":true}'` draws a hand coming up on the page and
+  in the helpers (sharp frames identical to the pixel, smeared ones within one level in 255); `char_timing.js` (hand beats
+  land about 7 ms before the accent). A smeared frame costs a few ms more; the median frame is unchanged.
+
 ## The intro (dev/src/intro.js `Intro`, dev/src/intro_scenes.js `IntroScenes`, dev/src/squid.js `Squid`)
 
 The PatterSquid opener lives in the **Video tab** now: "+ Add intro" (Patter in the library) puts it at the start of the

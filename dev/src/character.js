@@ -523,9 +523,10 @@ const Character = (() => {
       if (m.kind !== 'gesture' || t < m.start - 0.2 || t >= m.end) continue;
       let Gs = GEST[m.k] || { art: m.k, at: [0, -0.22, 0], side: m.side }; if (Gs.art && !rig.triggers[Gs.art]) { if (!Gs.old) continue; Gs = Object.assign({}, Gs, Gs.old); }   // his own drawings when loaded, else the old ones
       else if (m.art && (TALKING[Gs.art] || Gs.follow) && rig.triggers[m.art]) Gs = Object.assign({}, Gs, { art: m.art });   // a lift inside a raised thought keeps the hand that is up   // the unit's talking hand matches the bigger gesture inside it
-      const at = m.at != null ? m.at : m.start + 0.45, prep = cl(at - m.start, 0.25, 0.6), u = t - m.start, us = t - at, amp = m.amp || 1, big = (m.pri || 2) >= 5;
-      const w = t < m.start ? 0 : easeWin(t, m.start, m.end - 0.4, prep, 0.4), sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
-      sides.forEach(sd => { const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = Gs.at; ay *= amp; let fx = 0, fy = 0, fr = 0, antic = 0;
+      const at = m.at != null ? m.at : m.start + 0.45, prep = cl(at - m.start, 0.25, 0.6), amp0 = m.amp || 1, big = (m.pri || 2) >= 5, tNow = t;
+      const sides = m.side === 'both' ? ['L', 'R'] : [m.side || 'L'];
+      sides.forEach(sd => { const late = m.side === 'both' && sd === 'R' ? (Gs.bang ? 0.03 : 0.06) : 0, t = tNow - late, amp = amp0 * (late ? 0.93 : 1), u = t - m.start, us = t - at, w = t < m.start ? 0 : easeWin(t, m.start, m.end - 0.4, prep, 0.4);   // two hands never move as one: the right comes a frame or two behind the left and not quite as far
+        const mir = sd === 'R' ? -1 : 1; let [ax, ay, ar] = Gs.at; ay *= amp; let fx = 0, fy = 0, fr = 0, antic = 0;
         if (big && !Gs.bang) antic = Math.sin(Math.PI * cl((t - (m.start - 0.16)) / 0.3, 0, 1)) * 0.014;   // a small dip before it lifts: the wind up
         if (Gs.wag) fr += Math.sin(u * (Gs.wagHz || 14)) * Gs.wag * sm((u - 0.2) / 0.25);
         if (Gs.shake) { const on = sm((u - 0.3) / 0.2); fx += Math.sin(u * 27) * 0.014 * on; fy += Math.sin(u * 31 + 1) * 0.016 * on; }
