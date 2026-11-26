@@ -690,6 +690,7 @@ const Character = (() => {
     if (!rig) { g.save(); g.fillStyle = 'rgba(255,255,255,0.85)'; g.textAlign = 'center'; g.font = `600 ${Math.round(H * 0.045)}px Archivo, sans-serif`; g.fillText(cfg.puppet ? 'Getting your puppet ready…' : 'Load your puppet to start', W / 2, H * 0.46);
       g.font = `${Math.round(H * 0.028)}px Archivo, sans-serif`; g.fillStyle = 'rgba(255,255,255,0.6)'; if (!cfg.puppet) g.fillText('A Character Animator .puppet file, or the Photoshop .psd behind it', W / 2, H * 0.53); g.restore(); return; }
     const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d), pose = poseAt(cfg, A, rig, p, Math.max(0, t)), F = frameOf(cfg, rig, W, H);
+    if (look && look.preview) ['L', 'R'].forEach(sd => { const tr = pose.arms[sd] && pose.arms[sd].trail; if (tr && tr.length > 6) pose.arms[sd].trail = tr.filter((q, j) => j % 2 === 0 || j === tr.length - 1); });   // the preview's smear from half as many moments: it is there to be seen at speed, the export has them all
     g.save(); g.translate(F.ox, F.oy); g.scale(F.s, F.s); g.imageSmoothingQuality = 'high'; Puppet.draw(g, rig, pose); g.restore();
     // while a new recording is being listened to and lined up, the preview says so (an export waits for that work first, so this is never in one)
     const busy = cfg.voice && autoSay[cfg.voice];
