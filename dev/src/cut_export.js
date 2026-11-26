@@ -85,9 +85,10 @@ const CutExport = (() => {
       const fa = performance.now(); for (const f of Video.framesAt(cfg, lookX, t)) { live.add(f.id); fr.set(f.id, await getFrame(f)); } R.footage += performance.now() - fa;
       if (i % 30 === 0) closeIdle(live);
       if (typeof Media !== 'undefined' && Video.mediaAt) await Media.prepare(Video.mediaAt(cfg, t, lookX));
-      ctx.setTransform(1, 0, 0, 1, 0, 0); if (lookX.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
-      ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      Vw.draw(ctx, t, cfg, Object.assign({}, lookX, { cutEnv: { frames: fr, images, k: scale, fps, blur: o.blur !== 'off', blurN: o.blur !== 'off' ? blurN(fps, base.W, base.H) : null } }), base.W, base.H);
+      const paintIt = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); if (lookX.transparent) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        Vw.draw(ctx, t, cfg, Object.assign({}, lookX, { cutEnv: { frames: fr, images, k: scale, fps, blur: o.blur !== 'off', blurN: o.blur !== 'off' ? blurN(fps, base.W, base.H) : null } }), base.W, base.H); };
+      paintIt(); { const w = typeof Puppet !== 'undefined' && Puppet.steady ? Puppet.steady() : null; if (w) { await w; paintIt(); } }   // his character drawn from its sized copies in every frame (see Puppet.steady)
     };
     /* Helpers on the other cores draw every moment without his own footage or the intro (charts, maps, the studio, his
        character...) ahead of time; the page draws the footage moments itself and puts everything together in order. */
@@ -108,6 +109,7 @@ const CutExport = (() => {
       const a = performance.now(); await drawFrame(i); const d = performance.now() - a; R.pageDraw += d; part(i, 'page', d); return canvas; };
     const release = src => { if (src !== canvas && src && src.close) src.close(); };
     R.loopStart = performance.now(); const tStart = R.t, prog = (i, extra) => { const p = i / n, el = (performance.now() - tStart) / 1000, left = p > 0.02 ? el / p - el : 0; say(p, `Rendering ${Math.round(p * 100)}%` + (left ? `, about ${left > 90 ? Math.ceil(left / 60) + ' min' : Math.ceil(left) + ' s'} left` : '') + (extra || '')); };
+    if (typeof Puppet !== 'undefined' && Puppet.exporting) Puppet.exporting(true);
     try {
       /* PNG sequence (see through), for After Effects */
       if (o.png) {
@@ -171,6 +173,7 @@ const CutExport = (() => {
       lastReport = report(R, { kind: 'MP4', W, H, fps, n, dur: t1 - t0, codec: vcfg.codec + (vcfg.hardwareAcceleration ? ' (' + vcfg.hardwareAcceleration + ')' : ''), lat: vcfg.latencyMode, bench: lastBench, audio: acfg ? acfg.codec : 'none', helpers: pool ? pool.size : 0, cores: typeof Render !== 'undefined' && Render.cores ? Render.cores() : '?', bytes: mux.bytes, quality: o.quality || 'high', toDisk: !sink.blob });
       return { blob, codec: vcfg.codec, fam: vcfg.fam, audio: acfg ? acfg.codec : null, frames: n, W, H, secs: (performance.now() - tStart) / 1000, bytes: mux.bytes, helpers: pool ? pool.size : 0, wavBlob: wavSink && wavSink.blob ? await wavSink.blob('audio/wav') : null };
     } finally {
+      if (typeof Puppet !== 'undefined' && Puppet.exporting) Puppet.exporting(false);
       if (pool) { pool.close(); pending.forEach(p => p.then(b => b && b.close && b.close())); pending.clear(); }
       readers.forEach(R => { try { R.close(); } catch (e) { } }); readers.clear();
       // A failed or cancelled export lets go of the encoders (his PC has only a few hardware ones), stops the mixing and

@@ -2,6 +2,8 @@
    where things move fast, then encoded in order by the hardware H.264 encoder. Falls back to one thread if workers can't start. */
 const Render = (() => {
   const inWorker = typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope;
+  // his character is drawn from copies made to size: a frame for an export that had to start without them waits and is drawn again (Puppet.steady)
+  const steadyWait = () => (typeof Puppet !== 'undefined' && Puppet.steady ? Puppet.steady() : null), exportingNow = on => { if (typeof Puppet !== 'undefined' && Puppet.exporting) Puppet.exporting(on); };
   const mk = (w, h) => { if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   const allMods = () => [typeof Charts !== 'undefined' && Charts, typeof Timeline !== 'undefined' && Timeline, typeof MapMod !== 'undefined' && MapMod, typeof Flights !== 'undefined' && Flights, typeof Flyover !== 'undefined' && Flyover, typeof Picto !== 'undefined' && Picto, typeof News !== 'undefined' && News, typeof Story !== 'undefined' && Story, typeof Broll !== 'undefined' && Broll, typeof Video !== 'undefined' && Video, typeof Studio !== 'undefined' && Studio, typeof Character !== 'undefined' && Character].filter(Boolean).map(m => typeof Layers !== 'undefined' ? Layers.wrap(m) : m);
 
@@ -9,7 +11,7 @@ const Render = (() => {
   // and only redraws with motion blur when the movement is fast enough to need it.
   function frameRenderer(mod, cfg, look, W, H, fps, blur, alpha = false, t0 = 0) {
     const cv = mk(W, H), ctx = cv.getContext('2d', { alpha }), scratch = mk(W, H), tw = 96, th = Math.max(16, Math.round(96 * H / W)), tiny = mk(tw, th), tctx = tiny.getContext('2d', { willReadFrequently: true });
-    let prev = null, prevI = -1;
+    let prev = null, prevI = -1, prevN = 1;
     return { canvas: cv, ctx, render(i) {
       const t = t0 + i / fps;
       if (blur === 'full') { E.renderInto(ctx, mod, cfg, look, W, H, t, 5, fps, scratch); return 5; }
@@ -20,8 +22,9 @@ const Render = (() => {
       if (hint) n = hint;
       else {
         tctx.clearRect(0, 0, tw, th); tctx.drawImage(cv, 0, 0, tw, th); const d = tctx.getImageData(0, 0, tw, th).data;
-        let m = 0; if (prev) { let s = 0; for (let k = 0; k < d.length; k += 4) s += Math.abs(d[k] - prev[k]) + Math.abs(d[k + 1] - prev[k + 1]) + Math.abs(d[k + 2] - prev[k + 2]); m = s / (d.length / 4 * 3) / Math.max(1, i - prevI) * (fps / 60); }
-        prev = d; prevI = i; n = m > 14 ? 5 : m > 6 ? 3 : 1;
+        if (i === prevI) n = prevN;   // the same frame drawn again (it waited for something): what was decided stands
+        else { let m = 0; if (prev) { let s = 0; for (let k = 0; k < d.length; k += 4) s += Math.abs(d[k] - prev[k]) + Math.abs(d[k + 1] - prev[k + 1]) + Math.abs(d[k + 2] - prev[k + 2]); m = s / (d.length / 4 * 3) / Math.max(1, i - prevI) * (fps / 60); }
+          prev = d; prevI = i; n = prevN = m > 14 ? 5 : m > 6 ? 3 : 1; }
       }
       if (n > 1) {
         // Keep the frame already drawn as the middle sample and blend in the others around it
@@ -47,6 +50,7 @@ const Render = (() => {
       if (m.media && typeof Media !== 'undefined') Media.load(m.media);
       if (m.packs && typeof Packs !== 'undefined') Packs.loadInWorker(m.packs);
     };
+    exportingNow(true);
     self.onmessage = async e => {
       const m = e.data;
       if (m.type === 'cutinit') {
@@ -69,9 +73,10 @@ const Render = (() => {
         try {
           const { m: o, g, cv, Vw, cfg, look } = C, t = m.t, a = performance.now();
           if (typeof Media !== 'undefined' && Video.mediaAt) await Media.prepare(Video.mediaAt(cfg, t, look));
-          g.setTransform(1, 0, 0, 1, 0, 0); if (look.transparent) g.clearRect(0, 0, o.W, o.H); else { g.fillStyle = '#000'; g.fillRect(0, 0, o.W, o.H); }
-          g.setTransform(o.scale, 0, 0, o.scale, 0, 0);
-          Vw.draw(g, t, cfg, Object.assign({}, look, { cutEnv: { frames: new Map(), images: C.images, k: o.scale, fps: o.fps, blur: !!o.blur, blurN: C.blurN } }), o.bW, o.bH);
+          const paintIt = () => { g.setTransform(1, 0, 0, 1, 0, 0); if (look.transparent) g.clearRect(0, 0, o.W, o.H); else { g.fillStyle = '#000'; g.fillRect(0, 0, o.W, o.H); }
+            g.setTransform(o.scale, 0, 0, o.scale, 0, 0);
+            Vw.draw(g, t, cfg, Object.assign({}, look, { cutEnv: { frames: new Map(), images: C.images, k: o.scale, fps: o.fps, blur: !!o.blur, blurN: C.blurN } }), o.bW, o.bH); };
+          paintIt(); { const w = steadyWait(); if (w) { await w; paintIt(); } }
           const bmp = cv.transferToImageBitmap(); self.postMessage({ type: 'cutframe', j: m.j, bmp, ms: performance.now() - a }, [bmp]);
         } catch (err) { self.postMessage({ type: 'cutframe', j: m.j, err: String((err && err.message) || err) }); }
       } else if (m.type === 'init') {
@@ -93,7 +98,7 @@ const Render = (() => {
       } else if (m.type === 'frame') {
         try {
           if (R.mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(R.mod.mediaAt(R.cfg, R.t0 + m.i / fps, R.look));
-          const t0 = performance.now(), n = R.render(m.i), vf = new VideoFrame(R.canvas, { timestamp: Math.round(m.i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+          const t0 = performance.now(); let n = R.render(m.i); { const w = steadyWait(); if (w) { await w; n = R.render(m.i); } } const vf = new VideoFrame(R.canvas, { timestamp: Math.round(m.i * 1e6 / fps), duration: Math.round(1e6 / fps) });
           self.postMessage({ type: 'frame', i: m.i, frame: vf, n, ms: performance.now() - t0 }, [vf]);
         } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err), i: m.i }); }
       }
@@ -182,13 +187,13 @@ const Render = (() => {
     if (!pool) {
       const isGlobe = mod.id === 'map' || mod.id === 'flights' || mod.id === 'flyover';
       onInfo && onInfo({ threads: 1, gpu: isGlobe && typeof GlobeGL !== 'undefined' ? GlobeGL.available : null });
-      const R = frameRenderer(mod, cfg, look, W, H, fps, blur, false, t0); let drawMs = 0;
-      for (let i = 0; i < n; i++) {
+      const R = frameRenderer(mod, cfg, look, W, H, fps, blur, false, t0); let drawMs = 0; exportingNow(true);
+      try { for (let i = 0; i < n; i++) {
         if (signal && signal.aborted) throw new Error('Export cancelled.');
         if (mod.mediaAt && typeof Media !== 'undefined') await Media.prepare(mod.mediaAt(cfg, t0 + i / fps, look));
-        const tA = performance.now(); R.render(i); drawMs += performance.now() - tA; if (i === n - 1) onInfo && onInfo({ drawMs: drawMs / n }); const vf = new VideoFrame(R.canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+        const tA = performance.now(); R.render(i); { const w = steadyWait(); if (w) { await w; R.render(i); } } drawMs += performance.now() - tA; if (i === n - 1) onInfo && onInfo({ drawMs: drawMs / n }); const vf = new VideoFrame(R.canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
         await onFrame(vf, i); if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
-      }
+      } } finally { exportingNow(false); }
       return;
     }
     onInfo && onInfo({ threads: pool.length, gpu: pool.gpu }); let drawMs = 0, drawN = 0;

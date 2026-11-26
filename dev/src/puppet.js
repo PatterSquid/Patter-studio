@@ -335,10 +335,17 @@ const Puppet = (() => {
     const lv = Math.max(1, Math.ceil(s * 16)) / 16, C = rig.mips || (rig.mips = { lv: [], at: {}, want: null, n: 0 });
     if (C.at[lv]) { C.lv.splice(C.lv.indexOf(lv), 1); C.lv.push(lv); return lv; }
     if (C.want === lv) C.n++; else { C.want = lv; C.n = 1; }
-    if (C.n >= 3) { const set = C.at[lv] = { bm: [], busy: true }; C.lv.push(lv); if (C.lv.length > 2) { const old = C.lv.shift(); delete C.at[old]; }
-      (async () => { for (let i = 0; i < rig.bm.length; i++) { const src = rig.bm[i]; if (!src) continue; const k = lv * (rig.layers[i] ? rig.layers[i].w / src.width : 1); if (k >= 0.95) { set.bm[i] = src; continue; } try { set.bm[i] = await createImageBitmap(src, { resizeWidth: Math.max(1, Math.round(src.width * k)), resizeHeight: Math.max(1, Math.round(src.height * k)), resizeQuality: 'high' }); } catch (e) { set.bm[i] = src; } } set.busy = false; })(); }
+    if (C.n >= 3 || exact) { const set = C.at[lv] = { bm: [], busy: true }; C.lv.push(lv); if (C.lv.length > (exact ? 3 : 2)) { const old = C.lv.shift(); delete C.at[old]; }
+      set.done = (async () => { for (let i = 0; i < rig.bm.length; i++) { const src = rig.bm[i]; if (!src) continue; const k = lv * (rig.layers[i] ? rig.layers[i].w / src.width : 1); if (k >= 0.95) { set.bm[i] = src; continue; } try { set.bm[i] = await createImageBitmap(src, { resizeWidth: Math.max(1, Math.round(src.width * k)), resizeHeight: Math.max(1, Math.round(src.height * k)), resizeQuality: 'high' }); } catch (e) { set.bm[i] = src; } } set.busy = false; })(); }
     return lv;
   }
+  /* Frames for an export: he must be drawn the same way in every one. Drawn from the full pictures until the sized
+     copies arrive and from the copies after, his outlines changed by a hair a few frames into every export (one pixel in
+     a hundred, on each helper at its own moment). While frames are being made for an export (exporting(true): the
+     helpers always, the page for as long as it exports) the copies are started the first time a size is wanted, and
+     steady() hands the frame's maker a promise to wait on before it draws that frame again. */
+  let exact = false; const exporting = on => { exact = !!on; };
+  function steady() { let ps = null; for (const id in mem) { const C = mem[id] && mem[id].mips; if (C) for (const l of C.lv) { const set = C.at[l]; if (set && set.busy && set.done) (ps || (ps = [])).push(set.done); } } return ps ? Promise.all(ps) : null; }
   function sized(rig, li, lv) { const set = lv && rig.mips && rig.mips.at[lv]; return (set && !set.busy && set.bm[li]) || rig.bm[li]; }
   function draw(g0, rig, pose) {
     const lv0 = mipLevel(rig, g0), P = pose || {}, sw = P.swaps || {}, N = rig.nodes, bm = rig.bm, L = rig.layers;
@@ -355,6 +362,7 @@ const Puppet = (() => {
     let g = g0, plainK = 0; const flush = +P.flush || 0, jaw = Math.max(0, Math.min(1, +P.jaw || 0)), turn = P.turn && (P.turn[0] || P.turn[1]) ? P.turn : null, lid = Math.max(-1, Math.min(1, +P.lid || 0));
     // where the jaw hinges in the head view showing: a little under the top of its mouth
     const seamOf = () => { const vk = rig.views[P.view] != null ? P.view : 'front', C = rig._seam || (rig._seam = {}); if (C[vk] === undefined) { const vn = N[rig.views[vk]], mo = vn && (function f(n) { if (n.role === 'mouth') return n; for (const k of n.kids || []) { const r = f(k); if (r) return r; } return null; })(vn); C[vk] = mo && mo.box ? mo.box[1] + (mo.box[3] - mo.box[1]) * 0.12 : null; } return C[vk]; };
+    let band = null;   // while the head is drawn in two pieces: the heights a picture must reach into to be worth drawing in this piece
     const paint = nd => {
       if (!visible(nd)) return; const op = (nd.op == null ? 255 : nd.op) / 255; if (op <= 0) return; const par0 = N[nd.parent];
       g.save(); if (op < 1) g.globalAlpha *= op;
@@ -396,11 +404,13 @@ const Puppet = (() => {
            starts and stops talking (drawn on a surface of its own first, 4 in a hundred of its pixels changed). The
            lower piece starts a pixel and a half above the seam, so no line of background shows through the join. */
         const hb = rig.headBox, seam = seamOf(), m0 = g.getTransform(), px = 1.5 / Math.max(0.05, Math.hypot(m0.c, m0.d)), k = 1 + jaw * JAW, pad = 40;
-        g.save(); g.beginPath(); g.rect(hb[0] - pad, hb[1] - pad, hb[2] - hb[0] + pad * 2, seam - hb[1] + pad); g.clip(); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
-        g.save(); g.beginPath(); g.rect(hb[0] - pad, seam - px, hb[2] - hb[0] + pad * 2, (hb[3] - seam) * k + pad + px); g.clip(); g.translate(0, seam); g.scale(1, k); g.translate(0, -seam); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
+        const far = 70, was = band;   // pictures wholly on the other side of the seam (hair and eyes in the lower piece, say) are left out of that piece; 70 px covers every slide a feature makes
+        band = [-1e9, seam + far]; g.save(); g.beginPath(); g.rect(hb[0] - pad, hb[1] - pad, hb[2] - hb[0] + pad * 2, seam - hb[1] + pad); g.clip(); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
+        band = [seam - far, 1e9]; g.save(); g.beginPath(); g.rect(hb[0] - pad, seam - px, hb[2] - hb[0] + pad * 2, (hb[3] - seam) * k + pad + px); g.clip(); g.translate(0, seam); g.scale(1, k); g.translate(0, -seam); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
+        band = was;
       }
       else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
-      else { const q = L[nd.li], b = q && bm[nd.li] ? sized(rig, nd.li, lv0) : null; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }
+      else { const q = L[nd.li], b = q && bm[nd.li] && !(band && (q.y + q.h < band[0] || q.y > band[1])) ? sized(rig, nd.li, lv0) : null; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }
       g.restore();
     };
     paint(rig.tree);
@@ -409,5 +419,5 @@ const Puppet = (() => {
   const triggerNames = rig => Object.keys(rig.triggers || {});
   function forWorkers(id) { const r = mem[id]; if (!r) return null; const { mips, sheet, ...rest } = r; return rest; }
   function adopt(r) { if (!r || !r.id) return; r.mips = null; mem[r.id] = r; tick++; }
-  return { forWorkers, adopt, importFile, setHands, readPSD, unzip, list, load, get, remove, draw, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
+  return { forWorkers, adopt, importFile, setHands, readPSD, unzip, list, load, get, remove, draw, exporting, steady, triggerNames, VISEMES, get tick() { return tick; }, _mem: mem };
 })();
