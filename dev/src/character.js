@@ -241,7 +241,9 @@ const Character = (() => {
     // what a raised hand beats on: the words he leans on, by how hard he leans on each (not only the ones strong enough for a nod)
     // (a hand rides the rhythm of the talk: a clear flick on the words that stand out, the faintest pulse on the lesser ones, nothing on the throwaway words; two closer than a fifth of a second leave the stronger)
     { const src = pros && pros.units && pros.units.length ? pros.units.filter(u => u.w >= 0 && u.prom >= 0.22).map(u => ({ t: u.t, a: cl(0.16 + 0.84 * u.prom, 0.2, 1) })) : nods.map(q => ({ t: q.t, a: cl(q.a, 0.45, 1) })), out = [];
-      src.sort((x, y) => x.t - y.t).forEach(q => { const L = out[out.length - 1]; if (L && q.t - L.t < 0.2) { if (q.a > L.a) out[out.length - 1] = q; return; } out.push(q); }); p.beats = out; }
+      src.sort((x, y) => x.t - y.t).forEach(q => { const L = out[out.length - 1]; if (L && q.t - L.t < 0.2) { if (q.a > L.a) out[out.length - 1] = q; return; } out.push(q); });
+      for (let i = 1; i < out.length; i++) { const L = out[i - 1], q = out[i]; if (q.t - L.t < 0.6 && L.a >= q.a) q.a2 = q.a * 0.65; }   // nobody makes two big beats in a row: the one after a bigger one is a ripple of it
+      out.forEach(q => { if (q.a2) q.a = q.a2; }); p.beats = out; }
     // moves: the script's tags, then the ones added on the timeline
     const moves = []; (A && A.tags || []).forEach((g, i) => { const m = readTag(g.tag, rig); if (m) moves.push(Object.assign({ id: 'tag' + i, start: g.t, auto: true, tag: g.tag, word: g.word }, m)); });
     (Array.isArray(cfg.moves) ? cfg.moves : []).forEach(mv => { const m = readTag(mv.k, rig); if (m) moves.push(Object.assign({ id: mv.id, start: +mv.start || 0, side: mv.side || m.side }, m, { dur: +mv.dur || m.dur })); });
@@ -591,7 +593,7 @@ const Character = (() => {
   const flickWay = (rig, sd, Gs, rot) => { const HA = typeof Puppet !== 'undefined' && Puppet.handAxis ? Puppet.handAxis(rig) : null, arm = rig.arms && rig.arms[sd], tr = Gs.art && arm ? (rig.triggers[Gs.art] || []).find(([id]) => id === arm.hand) : null, v = HA && HA[sd] && tr ? HA[sd][tr[1]] : null, inward = sd === 'R' ? 1 : -1;
     if (!v) return inward; const c = Math.cos(Math.atan2(Gs.fy ? -v[1] : v[1], Gs.fx ? -v[0] : v[0]) + rot); return Math.abs(c) < 0.2 ? inward : c > 0 ? 1 : -1; };
   const LAND = u => { u += 0.02; return u < -0.1 || u > 0.36 ? 0 : u < 0 ? sm((u + 0.1) / 0.1) : 1 - sm(u / 0.36); };
-  const BF = 60, FLIP = 0.2, FLIP_SHORT = 0.14;   // a hand turns through from one drawing to the next in a fifth of a second, a seventh shorter at the change
+  const BF = 60, FLIP = 0.24, FLIP_SHORT = 0.14, FLIP_OVER = 0.07;   // a hand turns through from one drawing to the next in about a quarter of a second, a seventh shorter at the change, and swings a touch past its angle before it settles
   function bake(cfg, A, rig, p, dur) {
     const n = Math.ceil((dur + 2) * BF) + 2, raw = {}, arts = { L: new Array(n), R: new Array(n) }, mirs = { L: new Uint8Array(n), R: new Uint8Array(n) }, scs = { L: new Float32Array(n), R: new Float32Array(n) }; Object.keys(SPR).forEach(k => { raw[k] = new Float32Array(n); });
     for (let i = 0; i < n; i++) { const q = targetAt(cfg, A, rig, p, i / BF);
@@ -621,7 +623,8 @@ const Character = (() => {
       for (let i = 1; i < n; i++) { if (T[i] === T[i - 1] || T[i] === '-hide' || T[i - 1] === '-hide') continue; const wa = way(T[i - 1], i - 1), wb = way(T[i], i); if (wa == null || wb == null) continue;
         let D = wb - wa; while (D > Math.PI) D -= 2 * Math.PI; while (D <= -Math.PI) D += 2 * Math.PI; if (Math.abs(D) < 0.25) continue;
         for (let f = Math.max(0, i - half); f < Math.min(n, i + half); f++) { const u = (f - (i - half) + 0.5) / (2 * half), g = u * u * (3 - 2 * u); if ((f < i && T[f] !== T[i - 1]) || (f >= i && T[f] !== T[i])) continue;   // another change inside the window: that drawing has its own turn
-          fr[f] += f < i ? D * g : -D * (1 - g); fs[f] *= 1 - FLIP_SHORT * Math.sin(Math.PI * u); } } });
+          fr[f] += f < i ? D * g : -D * (1 - g); fs[f] *= 1 - FLIP_SHORT * Math.sin(Math.PI * u); }
+        const tail = Math.round(BF * 0.28); for (let f = i + half; f < Math.min(n, i + half + tail); f++) { if (T[f] !== T[i]) break; const v = (f - (i + half) + 0.5) / tail; fr[f] += D * FLIP_OVER * Math.sin(Math.PI * v) * (1 - v) * 1.6; } } });   // the follow through: a little past, and back
     p.bk = { n, ch: out, art, flip, mir: mirs, sc: scs };
   }
   // an arm at any moment, from the bake alone: where the wrist is, the turn of the drawing showing (with its turn through), which drawing, its size and flips
@@ -641,9 +644,12 @@ const Character = (() => {
            several moments across the last sixtieth of a second, laid over each other (trail; Puppet.draw adds them up
            evenly). Where the drawing changes inside that sixtieth both drawings are in the smear, so the change itself
            is never one clean cut. Only while it is really moving: a held or drifting hand stays sharp. */
-        if (!a.hide && rig.arms && rig.arms[sd]) { const S1 = armAt(p, sd, t - SHUT, hh), travel = Math.abs(S.rot - S1.rot) * 0.4 * hh + Math.hypot(S.dx - S1.dx, S.dy - S1.dy);
-          if (S1.art !== '-hide' && (S1.art !== S.art || travel > 0.03 * hh)) { const K = Math.round(cl(travel / (0.012 * hh), 3, 12)), hid = rig.arms[sd].hand, swi = k => { if (!k) return -1; const tr = (rig.triggers[k] || []).find(([id]) => id === hid); return tr ? tr[1] : -1; };
-            a.trail = []; for (let j = 0; j < K; j++) { const Q = j === 0 ? S : j === K - 1 ? S1 : armAt(p, sd, t - SHUT * j / (K - 1), hh); a.trail.push({ dx: Q.dx, dy: Q.dy, rot: Q.rot, sc: Q.sc, fx: Q.art ? Q.m & 1 : 0, fy: Q.art && (Q.m & 2) ? 1 : 0, swi: swi(Q.art) }); } } } });
+        if (!a.hide && rig.arms && rig.arms[sd]) { const T = p.bk.art[sd], i = Math.max(0, Math.min(T.length - 1, Math.floor(t * BF + 1e-6))), hid = rig.arms[sd].hand, swi = k => { if (!k) return -1; const tr = (rig.triggers[k] || []).find(([id]) => id === hid); return tr ? tr[1] : -1; }, put = Q => a.trail.push({ dx: Q.dx, dy: Q.dy, rot: Q.rot, sc: Q.sc, fx: Q.art ? Q.m & 1 : 0, fy: Q.art && (Q.m & 2) ? 1 : 0, swi: swi(Q.art) });
+          const ci = i > 0 && T[i] !== T[i - 1] ? i : i > 1 && T[i - 1] !== T[i - 2] ? i - 1 : -1;   // a change of drawing in the last thirtieth of a second
+          if (ci > 0 && T[ci] !== '-hide' && T[ci - 1] !== '-hide') { const ts = ci / BF, K = 4; a.trail = [];   // the frame (one at 30 a second, two at 60) shows both drawings, half and half, from just either side of the change
+            for (let j = 0; j < K; j++) put(armAt(p, sd, ts + SHUT * (j + 0.5) / K, hh)); for (let j = 0; j < K; j++) put(armAt(p, sd, ts - 1e-4 - SHUT * (j + 0.5) / K, hh)); }
+          else { const S1 = armAt(p, sd, t - SHUT, hh), travel = Math.abs(S.rot - S1.rot) * 0.4 * hh + Math.hypot(S.dx - S1.dx, S.dy - S1.dy);
+            if (S1.art === S.art && travel > 0.03 * hh) { const K = Math.round(cl(travel / (0.012 * hh), 3, 12)); a.trail = []; for (let j = 0; j < K; j++) put(j === 0 ? S : j === K - 1 ? S1 : armAt(p, sd, t - SHUT * j / (K - 1), hh)); } } } });
       q.dangle += (bk(p, 'hx', t) - bk(p, 'hx', t - 0.14)) / hh * 6 + (bk(p, 'sx', t) - bk(p, 'sx', t - 0.2)) / hh * 8;   // the strings swing behind the head
     }
     /* A blink is not a switch: the lids come down over about 45 ms, stay shut under a tenth of a second and take half as
