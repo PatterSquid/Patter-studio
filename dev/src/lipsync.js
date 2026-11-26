@@ -278,7 +278,7 @@ const LipSync = (() => {
     const pre = new Float64Array(n + 1); for (let t = 0; t < n; t++) pre[t + 1] = pre[t] + (ft.en[Math.min(ft.n - 1, f0 + t)] - lo) / sp;   // loudness within the run, 0 to 1, summed
     const nv = U.filter(u => u.k === V).length, fixed = U.reduce((x, u) => x + (u.k === V ? 0 : WANT[u.k] || 5), 0), room = nv ? Math.max(n * 0.44, n - fixed) : 0;
     const want = U.map((u, x) => u.k === V ? room * (x > 0 && U[x - 1].k === V ? 0.4 : x + 1 < m && U[x + 1].k === V ? 0.6 : 1) / Math.max(1, nv - U.filter((q, y) => q.k === V && y > 0 && U[y - 1].k === V).length) : (WANT[u.k] || 5) * (nv ? Math.min(1, (n - room) / fixed) : n / fixed));
-    const cost = (x, a, b) => { const len = b - a, loud = pre[b] - pre[a], u = U[x], w = Math.max(1.5, want[x]); if (u.k === V) return (len - loud) * 1.0 + (len < 4 ? (4 - len) * 1.5 : 0) + Math.abs(len - w) / w * 0.9; const least = u.v === 'W-Oo' ? 5 : u.v === 'F' || u.v === 'M' ? 4 : 2; return loud * 0.9 + Math.abs(len - w) / w * 1.3 + (len > w * 2 ? (len - w * 2) * 0.5 : 0) + (len < least ? (least - len) * 2 : 0); };   // a W is a pucker the eye catches, an F the teeth on the lip: each wants its two frames of picture
+    const cost = (x, a, b) => { const len = b - a, loud = pre[b] - pre[a], u = U[x], w = Math.max(1.5, want[x]); if (u.k === V) return (len - loud) * 1.0 + (len < 4 ? (4 - len) * 1.5 : 0) + Math.abs(len - w) / w * 0.9; const least = u.v === 'W-Oo' ? 5 : u.v === 'F' || u.v === 'M' ? 4 : 2; return loud * 0.9 + Math.abs(len - w) / w * 1.3 + (len > w * 2 ? (len - w * 2) * 0.5 : 0) + (len < least ? (least - len) * 2 : 0); };   // a W is a pucker the eye catches, an F the teeth on the lip: each wants its two frames of picture (an L or an R asked for the same lost a closed M and some vowels on his recording: they are topped up in tidy instead, where a vowel can spare the time)
     const best = [], from = []; for (let x = 0; x < m; x++) { best.push(new Float64Array(n + 1).fill(1e18)); from.push(new Int32Array(n + 1)); }
     for (let b2 = 1; b2 <= n - (m - 1); b2++) best[0][b2] = cost(0, 0, b2);
     for (let x = 1; x < m; x++) for (let b2 = x + 1; b2 <= n - (m - 1 - x); b2++) { let bv = 1e18, ba = x; for (let a2 = x; a2 < b2; a2++) { const v = best[x - 1][a2]; if (v >= 1e17) continue; const c = v + cost(x, a2, b2); if (c < bv) { bv = c; ba = a2; } } best[x][b2] = bv; from[x][b2] = ba; }
@@ -334,6 +334,11 @@ const LipSync = (() => {
       if (soft(i - 1)) { const take = Math.min(need, Math.max(0, len(i - 1) - 0.02)); s[i][0] -= take; need -= take; }
       if (need > 0.001 && soft(i + 1)) { const take = Math.min(need, Math.max(0, len(i + 1) - 0.02)); s[i + 1][0] += take; need -= take; }
       if (need > 0.001 && s[i][1] === 'W-Oo' && i + 2 < s.length && rk(i + 1) === 2 && len(i + 1) - need >= 0.09) s[i + 1][0] += need; }   // the pucker of a W before its vowel: two frames of it, out of a vowel that can spare them
+    // an L (the tongue up in an open mouth) or an R (the lips drawn in) just short of its two frames takes them from a vowel
+    // beside it that can spare them (a vowel after it first: the glide leads into it); where the talk is too quick for
+    // that it goes, as an animator would let it
+    for (let i = 0; i < s.length - 1; i++) { const v = s[i][1]; if (v !== 'L' && v !== 'R') continue; const need = MIN1 + 0.002 - len(i); if (need <= 0.002 || need > 0.03) continue;
+      if (rk(i + 1) === 2 && i + 2 < s.length && len(i + 1) - need >= 0.08) s[i + 1][0] += need; else if (i > 0 && rk(i - 1) === 2 && len(i - 1) - need >= 0.08) s[i][0] -= need; }
     // then thin: the weakest of the too short shapes goes first. A tongue sound's time goes to the stronger neighbour (the one
     // before on a tie); a vowel's goes to another vowel beside it, else to a tongue sound, and only then to closed lips
     for (let guard = 0; guard < 4000; guard++) {

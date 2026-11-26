@@ -633,7 +633,7 @@ const Character = (() => {
     g.save(); g.translate(F.ox, F.oy); g.scale(F.s, F.s); g.imageSmoothingQuality = 'high'; Puppet.draw(g, rig, pose); g.restore();
     // while a new recording is being listened to and lined up, the preview says so (an export waits for that work first, so this is never in one)
     const busy = cfg.voice && autoSay[cfg.voice];
-    if (busy) { const st = pinning[cfg.voice], txt = busy + (st && !st.done && st.q ? ' ' + Math.round(st.q * 100) + '%' : ''), fs = Math.round(H * 0.032); g.save(); g.font = `600 ${fs}px Archivo, sans-serif`; const tw = g.measureText(txt).width, bw = tw + fs * 1.6, bh = fs * 1.9, bx = (W - bw) / 2, by = H * 0.045;
+    if (busy && !(look && look.thumb)) { const st = pinning[cfg.voice], txt = busy + (st && !st.done && st.q ? ' ' + Math.round(st.q * 100) + '%' : ''), fs = Math.round(H * 0.032); g.save(); g.font = `600 ${fs}px Archivo, sans-serif`; const tw = g.measureText(txt).width, bw = tw + fs * 1.6, bh = fs * 1.9, bx = (W - bw) / 2, by = H * 0.045;
       g.fillStyle = 'rgba(10,17,32,0.82)'; g.beginPath(); if (g.roundRect) g.roundRect(bx, by, bw, bh, bh / 2); else g.rect(bx, by, bw, bh); g.fill(); g.fillStyle = '#f3ead6'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, W / 2, by + bh / 2 + 1); g.restore(); }
   }
 
