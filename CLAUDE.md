@@ -778,7 +778,9 @@ back on one part, change that part and keep the rest. Measuring tools: `dev/test
   is held. (4) `tidy`: every shape is held two frames (`MIN2`, `MIN1`), lips shut and W puckers are always kept, a vowel
   takes time from a tongue sound and never from closed lips. (5) A short quiet gap inside a phrase and a quiet vowel show
   his small opening R, not D: **his D and S drawings are the same wide clenched grin** (R is the smallest opening,
-  Neutral and M the same closed line). On his recording against the PocketSphinx reference: vowels shown as a vowel 87
+  Neutral and M the same closed line). (6) An L (tongue up) or an R (lips drawn in) just short of its two frames takes
+  them from a vowel beside it that can spare them; quicker than that it goes (asking `share` for five frames for them
+  cost a closed M and some vowels on his recording, so it does not). On his recording against the PocketSphinx reference: vowels shown as a vowel 87
   to 98 in a hundred, the right vowel shape 55 to 83, lips shut on M B P 87 to 93; word timing unchanged (median about
   25 ms).
 * **One step** (`takeVoice`, `writeWords`, `settle`, `wireDrop`): a recording added, picked or dropped anywhere on the
