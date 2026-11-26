@@ -19,13 +19,18 @@ const LipSync = (() => {
     want: 'wont', water: 'wawter', world: 'wurld', work: 'wurk', word: 'wurd', women: 'wimin', woman: 'wuman', money: 'munee', mother: 'muther', other: 'uther', another: 'unuther', brother: 'bruther', nothing: 'nuthing',
     something: 'sumthing', young: 'yung', country: 'kuntree', front: 'frunt', month: 'munth', wonder: 'wunder', son: 'sun', ton: 'tun', won: 'wun', mr: 'mister', mrs: 'misiz', uk: 'yookay', tv: 'teevee', bbc: 'beebeesee', snp: 'esenpee' };
   const V = 'V', G = 'G', N = 'N', B = 'B', T = 'T', S = 'S', F = 'F';
+  /* Sounds nobody can see: K, G, N, NG and H are made at the back of the mouth or with the tongue behind the teeth, and the
+     lips take the shape of the vowel beside them. They are found in the sound like any other (ui marks them), but they are
+     given no drawing of their own: the vowel that follows starts on them, or the vowel before is held through them. His
+     D drawing is a wide set of clenched teeth; flashed on every N and K it made him chatter. */
+  const ui = (v, k) => ({ v, k, inv: 1 });
   const u = (v, k) => ({ v, k }), AA = u('Aa', V), EE = u('Ee', V), OH = u('Oh', V), UH = u('Uh', V), WO = u('W-Oo', V);
-  const DIG = [['tch', [u('S', S)]], ['igh', [AA, EE]], ['tion', [u('S', S), UH, u('D', N)]], ['sion', [u('S', S), UH, u('D', N)]], ['sch', [u('S', S), u('D', T)]],
-    ['ch', [u('S', S)]], ['sh', [u('S', S)]], ['th', [u('L', F)]], ['ph', [u('F', F)]], ['gh', []], ['ck', [u('D', T)]], ['ng', [u('D', N)]], ['nk', [u('D', N), u('D', T)]], ['qu', [u('D', T), u('W-Oo', G)]],
+  const DIG = [['tch', [u('S', S)]], ['igh', [AA, EE]], ['tion', [u('S', S), UH, ui('D', N)]], ['sion', [u('S', S), UH, ui('D', N)]], ['sch', [u('S', S), ui('D', T)]],
+    ['ch', [u('S', S)]], ['sh', [u('S', S)]], ['th', [u('L', F)]], ['ph', [u('F', F)]], ['gh', []], ['ck', [ui('D', T)]], ['ng', [ui('D', N)]], ['nk', [ui('D', N), ui('D', T)]], ['qu', [ui('D', T), u('W-Oo', G)]],
     ['wh', [u('W-Oo', G)]], ['wr', [u('R', G)]], ['ee', [EE]], ['ea', [EE]], ['ie', [EE]], ['ey', [EE]], ['ei', [EE]], ['ae', [EE]], ['oo', [WO]], ['ou', [AA, WO]], ['ow', [AA, WO]], ['oa', [OH]], ['oe', [OH]],
     ['ai', [EE]], ['ay', [EE]], ['au', [OH]], ['aw', [OH]], ['oi', [OH, EE]], ['oy', [OH, EE]], ['ue', [WO]], ['ew', [WO]], ['ar', [AA, u('R', G)]], ['er', [u('R', G)]], ['ir', [u('R', G)]], ['ur', [u('R', G)]], ['or', [OH, u('R', G)]]];
-  const ONE = { a: [AA], e: [EE], i: [EE], o: [OH], u: [UH], b: [u('M', B)], p: [u('M', B)], m: [u('M', N)], f: [u('F', F)], v: [u('F', F)], s: [u('S', S)], z: [u('S', S)], x: [u('D', T), u('S', S)],
-    j: [u('S', S)], g: [u('D', T)], d: [u('D', T)], t: [u('D', T)], k: [u('D', T)], q: [u('D', T)], n: [u('D', N)], h: [u('D', F)], l: [u('L', G)], r: [u('R', G)], w: [u('W-Oo', G)], I: [AA, EE], O: [AA, WO] };
+  const ONE = { a: [AA], e: [EE], i: [EE], o: [OH], u: [UH], b: [u('M', B)], p: [u('M', B)], m: [u('M', N)], f: [u('F', F)], v: [u('F', F)], s: [u('S', S)], z: [u('S', S)], x: [ui('D', T), u('S', S)],
+    j: [u('S', S)], g: [ui('D', T)], d: [u('D', T)], t: [u('D', T)], k: [ui('D', T)], q: [ui('D', T)], n: [ui('D', N)], h: [ui('D', F)], l: [u('L', G)], r: [u('R', G)], w: [u('W-Oo', G)], I: [AA, EE], O: [AA, WO] };
   const isV = c => /[aeiouy]/.test(c);
   function spell(w) {
     const out = []; let s = w;
@@ -35,11 +40,11 @@ const LipSync = (() => {
       const c = s[i];
       if (c === '#') { i++; continue; }
       if (c === 'L') { out.push(UH, u('L', G)); i++; continue; }
-      if (i === 0 && s.startsWith('kn')) { out.push(u('D', N)); i += 2; continue; }
+      if (i === 0 && s.startsWith('kn')) { out.push(ui('D', N)); i += 2; continue; }
       const dg = DIG.find(d => s.startsWith(d[0], i)); if (dg) { out.push(...dg[1]); i += dg[0].length; continue; }
       if (c === s[i - 1] && !isV(c)) { i++; continue; }   // double letters
       if (c === 'h' && !/[aeiouy]/.test(s[i + 1] || '')) { i++; continue; }   // h is only heard before a vowel
-      if (c === 'c') { out.push(/[eiy]/.test(s[i + 1] || '') ? u('S', S) : u('D', T)); i++; continue; }
+      if (c === 'c') { out.push(/[eiy]/.test(s[i + 1] || '') ? u('S', S) : ui('D', T)); i++; continue; }
       if (c === 'y') { const mono = !/[aeiou]/.test(s.slice(0, i)) && i > 0 && i === s.length - 1; out.push(...(i === 0 ? [u('Ee', G)] : mono ? [AA, EE] : [EE])); i++; continue; }
       if (/[aeiou]/.test(c) && s[i + 2] === '#' && !isV(s[i + 1] || '')) { out.push(...({ a: [EE], e: [EE], i: [AA, EE], o: [OH], u: [WO] })[c]); i++; continue; }   // magic e
       if (c === 'e' && i === s.length - 2 && s[i + 1] === 'd' && !/[td]/.test(s[i - 1] || '')) { i++; continue; }   // -ed: just d
@@ -121,7 +126,7 @@ const LipSync = (() => {
     const addSil = (word) => { st.push({ k: 'sil', unit: null, word, j: 0, m: 1, M: 1, opt: true }); };
     addSil(-1);
     words.forEach((W, wi) => { W.units.forEach((U, i) => { const d = DUR[U.k] || DUR.T, diph = i > 0 && U.k === V && W.units[i - 1].k === V; const m = diph ? Math.max(2, d[0] - 1) : d[0], M = diph ? Math.round(d[2] * 0.7) : d[2];
-      const ui = units.length; units.push({ v: U.v, k: U.k, word: wi, typ: d[1] }); uFirst.push(st.length); for (let j = 0; j < M; j++) st.push({ k: U.k, unit: ui, word: wi, j, m, M }); });
+      const ui = units.length; units.push({ v: U.v, k: U.k, word: wi, typ: d[1], inv: U.inv ? 1 : 0 }); uFirst.push(st.length); for (let j = 0; j < M; j++) st.push({ k: U.k, unit: ui, word: wi, j, m, M }); });
       addSil(wi); });
     const S = st.length, T = ft.n, nU = units.length;
     // where each state sits along the script, as a fraction of the usual total length
@@ -293,7 +298,7 @@ const LipSync = (() => {
   /* ---------- shapes from sound alone (no script) ---------- */
   function guess(ft) {
     const out = []; for (let t = 0; t < ft.n; t++) { const e = ft.en[t], h = ft.hf[t], l = ft.lf[t]; let v = 'Neutral';
-      if (e < 0.12) v = 'Neutral'; else if (h > 0.42 && ft.voi[t] < 0.6) v = 'S'; else if (e > 0.68) v = l > 0.82 ? 'Oh' : 'Aa'; else if (e > 0.42) v = h > 0.16 ? 'Ee' : (l > 0.85 ? 'W-Oo' : 'Uh'); else v = 'D';
+      if (e < 0.12) v = 'Neutral'; else if (h > 0.42 && ft.voi[t] < 0.6) v = 'S'; else if (e > 0.68) v = l > 0.82 ? 'Oh' : 'Aa'; else if (e > 0.42) v = h > 0.16 ? 'Ee' : (l > 0.85 ? 'W-Oo' : 'Uh'); else v = 'R';
       out.push(v); }
     // dips between syllables close the lips briefly
     for (let t = 2; t < ft.n - 2; t++) if (ft.en[t] > 0.12 && ft.en[t] < ft.en[t - 2] * 0.55 && ft.en[t] < ft.en[t + 2] * 0.55) out[t] = 'M';
@@ -310,34 +315,57 @@ const LipSync = (() => {
      alike and are the first to go, their time handed to the stronger neighbour. The shapes lead the sound by a twenty fifth
      of a second, as a mouth does and as animators time it (picture a little early reads as in sync, picture late reads as
      dubbed: ITU-R BT.1359, and the old two frames ahead rule). */
-  const RANK = { M: 3, F: 3, 'W-Oo': 2, Aa: 2, Ee: 2, Oh: 2, Uh: 2, L: 1, S: 1, R: 1, D: 0, Neutral: 1 }, SEEN = 0.062, LEAD = 0.04;
+  const RANK = { M: 3, F: 3, 'W-Oo': 2, Aa: 2, Ee: 2, Oh: 2, Uh: 2, L: 1, S: 1, R: 1, D: 0, Neutral: 1 }, SEEN = 0.062, LEAD = 0.04; let MIN2 = 0.058, MIN1 = 0.066;   // a vowel shape wants its two frames of a 30 a second video near enough; a tongue sound that cannot have them goes
   function tidy(list, lead) {
     let s = []; list.forEach(([t, v]) => { const L = s[s.length - 1]; if (L && L[1] === v) return; if (L && t <= L[0]) { L[1] = v; return; } s.push([t, v]); });
     const end = i => (s[i + 1] ? s[i + 1][0] : s[i][0] + 1), len = i => end(i) - s[i][0];
     // lips shut and teeth on lip: at least two frames, taken from the shape before (or after, when there is none to take from)
     for (let i = 0; i < s.length; i++) { if (RANK[s[i][1]] !== 3) continue; const need = SEEN - len(i); if (need <= 0) continue;
       if (i > 0 && len(i - 1) - need >= 0.03) s[i][0] -= need; else if (i > 0 && s[i - 1][1] === 'Neutral') s[i][0] -= Math.min(need, Math.max(0, len(i - 1) - 0.01)); else if (s[i + 1] && len(i + 1) - need >= 0.03) s[i + 1][0] += need; }
-    // then thin: the weakest of the too short shapes goes first, its time to the stronger neighbour (the one before on a tie)
+    // a vowel is the jaw opening on a syllable: one too short to be seen takes its two frames from a tongue sound beside it
+    // (which looks much the same and will not be missed), never from closed lips
+    const rk = i => (RANK[s[i][1]] == null ? 1 : RANK[s[i][1]]), soft = i => i >= 0 && i < s.length - 1 && rk(i) <= 1 && s[i][1] !== 'Neutral';
+    for (let i = 0; i < s.length - 1; i++) { if (rk(i) !== 2) continue; let need = MIN2 + 0.002 - len(i); if (need <= 0.002) continue;
+      if (soft(i - 1)) { const take = Math.min(need, Math.max(0, len(i - 1) - 0.02)); s[i][0] -= take; need -= take; }
+      if (need > 0.001 && soft(i + 1)) { const take = Math.min(need, Math.max(0, len(i + 1) - 0.02)); s[i + 1][0] += take; need -= take; }
+      if (need > 0.001 && s[i][1] === 'W-Oo' && i + 2 < s.length && rk(i + 1) === 2 && len(i + 1) - need >= 0.09) s[i + 1][0] += need; }   // the pucker of a W before its vowel: two frames of it, out of a vowel that can spare them
+    // then thin: the weakest of the too short shapes goes first. A tongue sound's time goes to the stronger neighbour (the one
+    // before on a tie); a vowel's goes to another vowel beside it, else to a tongue sound, and only then to closed lips
     for (let guard = 0; guard < 4000; guard++) {
-      let k = -1, kr = 9, kl = 9; for (let i = 0; i < s.length - 1; i++) { const v = s[i][1], r = RANK[v] == null ? 1 : RANK[v], min = r === 3 ? 0.03 : v === 'Neutral' ? 0.07 : r === 2 ? 0.045 : 0.055, l = len(i); if (l < min && (r < kr || (r === kr && l < kl))) { k = i; kr = r; kl = l; } }
+      let k = -1, kr = 9, kl = 9; for (let i = 0; i < s.length - 1; i++) { const v = s[i][1], r = rk(i), hemmed = r === 2 && i > 0 && (rk(i - 1) === 3 || s[i - 1][1] === 'Neutral') && (rk(i + 1) === 3 || s[i + 1][1] === 'Neutral'),
+        min = r === 3 ? 0.03 : v === 'Neutral' ? 0.07 : r === 2 ? (hemmed ? 0.04 : MIN2) : MIN1, l = len(i); if (l < min && (r < kr || (r === kr && l < kl))) { k = i; kr = r; kl = l; } }
       if (k < 0) break;
-      const pr = k > 0 ? (RANK[s[k - 1][1]] == null ? 1 : RANK[s[k - 1][1]]) : -1, nr = RANK[s[k + 1][1]] == null ? 1 : RANK[s[k + 1][1]];
-      if (k > 0 && pr >= nr) s.splice(k, 1); else { s[k + 1][0] = s[k][0]; s.splice(k, 1); }
+      const r = rk(k), pr = k > 0 ? rk(k - 1) : -1, nr = rk(k + 1); let toPrev = k > 0 && pr >= nr;
+      if (r === 2 && k > 0) { const score = i => rk(i) === 2 ? 3 : soft(i) ? 2 : rk(i) === 3 ? 1 : 0; toPrev = score(k - 1) >= score(k + 1); }
+      if (toPrev) s.splice(k, 1); else { s[k + 1][0] = s[k][0]; s.splice(k, 1); }
       for (let i = s.length - 1; i > 0; i--) if (s[i][1] === s[i - 1][1]) s.splice(i, 1);
     }
+    // a mouth does not snap shut in the middle of talking: across a gap of under a fifth of a second (the hold of a T or a K, a catch
+    // between two words) it stays a little open (his R drawing, the smallest opening he has); it shuts for an M, a B or a P, and for a real pause
+    for (let i = 1; i < s.length - 1; i++) if (s[i][1] === 'Neutral' && len(i) < 0.2 && s[i - 1][1] !== 'Neutral' && s[i + 1][1] !== 'Neutral' && s[i - 1][1] !== 'M' && s[i + 1][1] !== 'M') s[i][1] = 'R';
+    for (let i = s.length - 1; i > 0; i--) if (s[i][1] === s[i - 1][1]) s.splice(i, 1);
     return s.map(([t, v]) => [Math.max(0, +(t - lead).toFixed(3)), v]);
   }
   /* The mouth follows the sound whatever the words say: where a word has been placed but nothing can be heard he is not
      saying it there (shut, unless it is the hold of a p or a t), and where there is clear speech with no word on it (a
      word the script lacks, a laugh, an "eh") the shape is read from the sound itself, so he is never caught with his
      mouth shut while he can be heard. */
-  function toSound(seg, al, ft, heardShapes) {
+  /* Breaths: in a silence that leads into speech, a stretch of soft unvoiced sound (150 ms or more, clear of the word
+     before) is him breathing in. His lips part for it (the R drawing, the smallest opening) and the times are kept
+     (breaths) so the chest can rise with it. A recording cleaned until the breaths are gone simply has none. */
+  function breathIn(ft, f0, f1) {
+    let best = null, a = -1, gap = 0; for (let t = f0 + 10; t <= f1; t++) { const on = t < f1 && t < ft.n && ft.en[t] >= 0.085 && ft.en[t] < 0.42 && ft.voi[t] < 0.62; if (on) { if (a < 0) a = t; gap = 0; } else if (a >= 0 && (++gap > 3 || t >= f1)) { const b = t - gap + (t >= f1 && gap <= 3 ? gap : 0); if (b - a >= 14 && f1 - b <= 50 && (!best || b - a > best[1] - best[0])) best = [a, b]; a = -1; gap = 0; } }
+    return best;
+  }
+  function toSound(seg, al, ft, heardShapes, breaths) {
     const out = [];
-    seg.forEach(([a, b, k, f0, f1]) => {
+    seg.forEach(([a, b, k, f0, f1], si) => {
       const n = Math.max(1, f1 - f0); let quiet = 0, loud = 0; for (let t = f0; t < f1 && t < ft.n; t++) { if (ft.en[t] < 0.07) quiet++; if (ft.en[t] > 0.34) loud++; }
       if (k >= 0) { const U = al.units[k]; if (quiet === n && n >= 7 && U.k !== 'B' && U.k !== 'T') { out.push([a, 'Neutral']); return; } out.push([a, null, k, f0, f1]); return; }
       if (loud >= 7 && heardShapes) { let on = false; for (let t = f0; t < f1 && t < ft.n; t++) { const sp = ft.en[t] > 0.3; if (sp) { const v = heardShapes[t]; if (!on || out[out.length - 1][1] !== v) out.push([t / FPS + MID, v]); on = true; } else if (on || t === f0) { out.push([t === f0 ? a : t / FPS + MID, 'Neutral']); on = false; } } return; }
       out.push([a, 'Neutral']);
+      const nx = seg[si + 1], br = breaths && nx && nx[2] >= 0 && f1 - f0 >= 26 ? breathIn(ft, f0, f1) : null;
+      if (br) { const t0 = (br[0] + 2) / FPS + MID, t1 = br[1] / FPS + MID; breaths.push([+t0.toFixed(3), +t1.toFixed(3)]); out.push([t0, 'R']); if (f1 - br[1] > 12) out.push([t1, 'Neutral']); }
     });
     return out;
   }
@@ -350,25 +378,30 @@ const LipSync = (() => {
     if (OWN_W > 0 && P.words.length >= 12) for (let pass = 0; pass < 2; pass++) { const own = learn(ft, al); if (!own) break; const a2 = align(ft, P.words, pinned ? pin.win : null, own); if (!a2) break; al = a2; }
     const seg = RETIME ? retime(segments(al), al, ft) : segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
     let bySound = null; const soundShape = () => { if (!bySound) { bySound = new Array(ft.n).fill('Neutral'); const g = guess(ft); g.forEach(([t, v], i) => { const f0 = Math.round(t * FPS), f1 = g[i + 1] ? Math.round(g[i + 1][0] * FPS) : ft.n; for (let f = f0; f < f1; f++) bySound[f] = v === 'Neutral' ? 'Uh' : v; }); } return bySound; };
-    const fit = toSound(seg, al, ft, seg.some(q => q[2] < 0 && q[4] - q[3] >= 7) ? soundShape() : null);
+    const breaths = [], fit = toSound(seg, al, ft, seg.some(q => q[2] < 0 && q[4] - q[3] >= 7) ? soundShape() : null, breaths);
     fit.forEach(q => { if (q[1] != null) vis.push([q[0], q[1]]); });
     seg.forEach(([a, b, k]) => { if (k < 0) return; const U = al.units[k], w = wt[U.word]; w[0] = Math.min(w[0], a); w[1] = Math.max(w[1], b); });
     fit.forEach(([a, vv, k, f0, f1]) => {
       if (vv != null) return; const b = f1 / FPS + MID;
       const U = al.units[k]; let v = U.v;
-      if (U.k === V) { let m = 0, c = 0; for (let t = f0; t < Math.min(ft.n, f1); t++) { m += ft.en[t]; c++; } m /= Math.max(1, c); if (v === 'Aa' && m < 0.38) v = 'Uh'; if (m < 0.18 && v !== 'Oh' && v !== 'W-Oo') v = 'D'; }
-      vis.push([a, v]);
+      if (U.k === V) { let m = 0, c = 0; for (let t = f0; t < Math.min(ft.n, f1); t++) { m += ft.en[t]; c++; } m /= Math.max(1, c); if (v === 'Aa' && m < 0.38) v = 'Uh'; if (m < 0.18 && v !== 'Oh' && v !== 'W-Oo') v = 'R'; }   // a vowel said under the breath: the mouth barely opens
+      vis.push([a, v, { inv: U.inv, word: U.word, vowel: U.k === V }]);
     });
     vis.sort((p, q) => p[0] - q[0]);
+    // the sounds nobody can see: the vowel after them in the word starts where they did; with none, the shape before is held
+    { const shown = {}; vis.forEach(q => { if (q[2] && !q[2].inv) shown[q[2].word] = 1; });
+      for (let i = vis.length - 1; i >= 0; i--) { const q = vis[i]; if (!q[2] || !q[2].inv) continue; if (!shown[q[2].word]) { q[1] = 'R'; shown[q[2].word] = 1; continue; }
+        const nx = vis[i + 1]; if (nx && nx[2] && nx[2].word === q[2].word && nx[2].vowel) nx[0] = q[0]; else if (i === 0 || vis[i - 1][1] === 'Neutral') { q[1] = 'R'; continue; }   // straight after a silence there is no shape to hold: lips part
+        vis.splice(i, 1); } }
     const words = P.words.map((W, i) => [wt[i][0], wt[i][1], W.text || W.w, i, W.w]).filter(w => isFinite(w[0]));
     const at = i => { const w = wt[i]; if (w && isFinite(w[0])) return w[0]; const p = wt[i - 1]; return p && isFinite(p[1]) ? p[1] : 0; };
     const tags = P.tags.map(g => ({ tag: g.tag, word: g.word, t: g.word >= P.words.length ? (wt.length ? Math.max(0, ...wt.map(w => isFinite(w[1]) ? w[1] : 0)) : dur) : at(g.word) }));
-    return { visemes: tidy(vis, LEAD), words, tags, env, lev, fps: FPS, dur, script: true, pinned };
+    return { visemes: tidy(vis, LEAD), words, tags, env, lev, fps: FPS, dur, script: true, pinned, breaths };
   }
   // No recording yet: time the script at a steady talking pace, so he can be seen saying it (the timing is a guess)
   function fromText(script, rate) {
     const P = parse(script), k = 1 / (rate || 1), vis = [], words = []; let t = 0.3;
-    P.words.forEach((W, i) => { const a = t; W.units.forEach(U => { vis.push([t, U.v]); t += (DUR[U.k] || DUR.T)[1] * 0.0105 * k; }); words.push([a, t, W.text || W.w, i, W.w]); t += W.pause ? 0.32 * k : 0.04 * k; if (W.pause) vis.push([t - 0.3 * k, 'Neutral']); });
+    P.words.forEach((W, i) => { const a = t, seen = W.units.some(U => !U.inv); W.units.forEach((U, x) => { const nx = W.units[x + 1], hid = U.inv && seen; if (!hid) vis.push([t, U.inv ? 'R' : U.v]); else if (nx && nx.k === V) vis.push([t, nx.v]); t += (DUR[U.k] || DUR.T)[1] * 0.0105 * k; }); words.push([a, t, W.text || W.w, i, W.w]); t += W.pause ? 0.32 * k : 0.04 * k; if (W.pause) vis.push([t - 0.3 * k, 'Neutral']); });
     const dur = t + 0.3, n = Math.ceil(dur * FPS), env = new Float32Array(n);
     words.forEach(w => { for (let f = Math.floor(w[0] * FPS); f < Math.min(n, w[1] * FPS); f++) env[f] = 0.55 + 0.35 * Math.sin((f - w[0] * FPS) / Math.max(1, (w[1] - w[0]) * FPS) * Math.PI); });
     const at = i => i < words.length ? words[i][0] : t;
@@ -395,5 +428,5 @@ const LipSync = (() => {
       if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.03); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
-  return { _retime: v => { RETIME = !!v; }, _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
+  return { _retime: v => { RETIME = !!v; }, _mins: (a, b) => { MIN2 = a; MIN1 = b; }, _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
 })();

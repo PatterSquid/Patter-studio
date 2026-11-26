@@ -264,7 +264,13 @@ const Character = (() => {
       else if (S.val < 0 && ar < 0.27) k = 'sad';
       else if (S.doubt && ar < 0.5 && !S.q) k = 'suspicious';
       if (k === 'calm' || burst(S.t0, S.t1)) return; const last = runs[runs.length - 1];
-      if (last && last.k === k && S.t0 - last.b < 1.2) last.b = S.t1; else runs.push({ k, a: S.t0, b: S.t1 }); });
+      /* A mood belongs where its cause is. A long sentence that ends in a curse is told calmly until the turn comes: the
+         mood starts with the phrase (the stretch between two pauses) that holds the first word that earns it (a curse or
+         a hard word for anger, a good word for happy, a maybe for doubt; for a shout or a surprise, the last phrase),
+         not eight seconds earlier at the top of the sentence. */
+      let a0 = S.t0; if (S.t1 - S.t0 > 2.6 && ips.length) { const want = k === 'happy' ? ['good'] : k === 'suspicious' ? ['doubt'] : k === 'sad' ? null : k === 'surprised' ? [] : ['swear', 'bad', 'rage']; if (want) { let j = -1; for (let q = S.a; q <= S.b && j < 0; q++) if (want.some(c => sem.cls[q] && sem.cls[q].includes(c))) j = q; if (j < 0) j = S.b;
+          const P = ips.find(P2 => P2.u && P2.u.includes(j)); if (P) a0 = Math.max(S.t0, P.a); } }
+      if (last && last.k === k && a0 - last.b < 1.2) last.b = S.t1; else runs.push({ k, a: a0, b: S.t1 }); });
     runs.forEach((r, i) => moves.push({ id: 'md' + i, k: r.k, kind: 'emotion', start: Math.max(0, r.a - 0.2), end: r.b + 0.35, auto: true, plan: true, tag: EMO_NAMES[r.k] + (heard ? ' (voice)' : ' (words)') }));
   }
   /* Natural hands, planned the way people use them (McNeill, Kendon): the hands come up for a thought (an intonation
@@ -421,7 +427,9 @@ const Character = (() => {
     if (em.shake > 0.01) { F.h[0] += Math.sin(t * 61) * 0.004 * hh * em.shake * (0.4 + L); F.h[1] += Math.sin(t * 47 + 1) * 0.003 * hh * em.shake * (0.4 + L); }
     // a shift of weight at a new thought: the whole of him moves over a little, the head stays level
     let sx = 0; { const S = p.shifts; let k = -1; for (let i = 0; i < S.length; i++) { if (S[i].t <= t) k = i; else break; } if (k >= 0) { const q = S[k], w = sm((t - q.t) / 0.9); sx = q.from + (q.x - q.from) * w; } }
-    pose.sit = [sx * 0.013 * hh, sx * 0.007, 1]; hr -= sx * 0.006;
+    /* Nothing moves alone: the trunk carries a share of where the head leans and tilts (its springs are slow, so the
+       quick part, the nods, stays in the neck and the slow part moves the whole of him: Hadar and others 1983). */
+    pose.sit = [sx * 0.013 * hh + hx * 0.24, sx * 0.007 + hr * 0.16, 1]; hr -= sx * 0.006;
     pose.head = [hx, hy, hr, lean];
     // eyebrows: the emotion, a quick raise on the strongest accents, up through a question (down for a why or a what)
     let lift = 0, liftL = 0, liftR = 0; const damp = 1 - 0.6 * cl((em.L[1] - 0.1) / 0.2, 0, 1);
@@ -433,7 +441,10 @@ const Character = (() => {
     // eyes: on the camera; away while he finds a thought, small darts between
     for (const g of ix.glances(t)) { const w = easeWin(t, g.a, g.b, 0.07, 0.09); if (w > 0) { pose.pupil = [g.x * w, g.y * w]; break; } }
     // breathing, deeper before each phrase
-    let br = Math.sin(t * 2 * Math.PI / 3.9 + s[3]) * 0.0035; ix.phr(t).forEach(ph => { const u = (t - (ph.a - 0.45)) / 0.45; if (u > 0 && u < 1) br += Math.sin(Math.PI * u) * 0.006; }); pose.body = [br];
+    let br = Math.sin(t * 2 * Math.PI / 3.9 + s[3]) * 0.0035; ix.phr(t).forEach(ph => { const u = (t - (ph.a - 0.45)) / 0.45; if (u > 0 && u < 1) br += Math.sin(Math.PI * u) * 0.006; });
+    // a breath that can be heard in the recording: the chest fills with it and lets go as he starts to talk, the head comes up a touch
+    if (A && A.breaths) for (const q of A.breaths) { if (t < q[0] - 0.1 || t > q[1] + 0.7) continue; const w = easeWin(t, q[0], q[1], 0.22, 0.55); br += w * 0.007; pose.head[1] -= w * 0.0045 * hh; }
+    pose.body = [br];
     // moves: looks (head turns), hands, poses, costumes
     const sw = pose.swaps, apply = (k, side) => (rig.triggers[k] || []).forEach(([id, i]) => { if (side && side !== 'both' && isHand(rig, id)) { const sd = sideOf(rig, id); if (sd && sd !== side) return; } sw[id] = i; });
     if (cfg.costume && rig.triggers[cfg.costume]) apply(cfg.costume);
