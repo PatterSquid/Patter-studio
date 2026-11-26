@@ -375,8 +375,8 @@ const Puppet = (() => {
       if (lid && nd.role === 'lid' && nd.box) { const k = lid > 0 ? 1 + lid * LID_DOWN : 1 + lid * LID_UP; g.translate(0, nd.box[1]); g.scale(1, k); g.translate(0, -nd.box[1]); }
       if (nd.role === 'pupil' && P.pupil && nd.box) { const par = N[nd.parent], eb = par && par.box, w = eb ? eb[2] - eb[0] : 20, h = eb ? eb[3] - eb[1] : 20; g.translate(P.pupil[0] * w * 0.28, P.pupil[1] * h * 0.2); }
       if (nd.role === 'dangle' && P.dangle && nd.box) { const b = nd.box, cx = (b[0] + b[2]) / 2; g.translate(cx, b[1]); g.rotate(P.dangle * (nd.id % 2 ? 1 : -0.8)); g.translate(-cx, -b[1]); }
-      if (nd.role === 'head' && rig.headBox && (flush > 0.01 || (jaw > 0.004 && seamOf() != null))) {
-        // the head drawn on its own at the size it will show: reddened from the neck up when he rages, its jaw let down, then put back
+      if (nd.role === 'head' && rig.headBox && flush > 0.01) {
+        // red in the face: the head drawn on its own at the size it will show, reddened from the neck up (its jaw let down there too), then put back
         const hb = rig.headBox, m0 = g.getTransform(), sc = Math.min(1.6, Math.max(0.08, Math.ceil(Math.hypot(m0.a, m0.b) * 24) / 24)), pad = 4, w = Math.ceil((hb[2] - hb[0]) * sc) + pad * 2, h = Math.ceil((hb[3] - hb[1]) * sc) + pad * 2;
         const c = scratchG('head', w, h), cg = c.getContext('2d'), outer = g;
         cg.setTransform(1, 0, 0, 1, 0, 0); cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1; cg.clearRect(0, 0, c.width, c.height); cg.setTransform(sc, 0, 0, sc, pad - hb[0] * sc, pad - hb[1] * sc); cg.imageSmoothingQuality = 'high'; g = cg; for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g = outer;
@@ -388,6 +388,16 @@ const Puppet = (() => {
         if (seam != null) { const sy = Math.max(1, Math.min(h - 2, Math.round((seam - hb[1]) * sc) + pad));   // above the seam as it is; below it stretched down from the seam
           g.drawImage(c, 0, 0, w, sy + 1, X, Y, w / sc, (sy + 1) / sc); g.drawImage(c, 0, sy, w, h - sy, X, Y + sy / sc, w / sc, (h - sy) / sc * (1 + jaw * JAW)); }
         else g.drawImage(c, 0, 0, w, h, X, Y, w / sc, h / sc);
+      }
+      else if (nd.role === 'head' && rig.headBox && jaw > 0.004 && seamOf() != null) {
+        /* The jaw let down: the head is drawn twice straight from its pictures, once kept to above the seam and once to
+           below it with everything stretched down from the seam. Nothing goes through a second surface, so the part
+           above the seam is the very pixels it has with the mouth shut and the head never changes sharpness as he
+           starts and stops talking (drawn on a surface of its own first, 4 in a hundred of its pixels changed). The
+           lower piece starts a pixel and a half above the seam, so no line of background shows through the join. */
+        const hb = rig.headBox, seam = seamOf(), m0 = g.getTransform(), px = 1.5 / Math.max(0.05, Math.hypot(m0.c, m0.d)), k = 1 + jaw * JAW, pad = 40;
+        g.save(); g.beginPath(); g.rect(hb[0] - pad, hb[1] - pad, hb[2] - hb[0] + pad * 2, seam - hb[1] + pad); g.clip(); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
+        g.save(); g.beginPath(); g.rect(hb[0] - pad, seam - px, hb[2] - hb[0] + pad * 2, (hb[3] - seam) * k + pad + px); g.clip(); g.translate(0, seam); g.scale(1, k); g.translate(0, -seam); for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); g.restore();
       }
       else if (nd.group) { for (let i = nd.kids.length - 1; i >= 0; i--) paint(nd.kids[i]); }
       else { const q = L[nd.li], b = q && bm[nd.li] ? sized(rig, nd.li, lv0) : null; if (b && q) { g.drawImage(b, q.x, q.y, q.w, q.h); const pb = plainK > 0.01 && rig.plainBm && rig.plainBm[nd.li]; if (pb) { g.globalAlpha *= Math.min(1, plainK); g.drawImage(pb, q.x, q.y, q.w, q.h); } } }

@@ -32,6 +32,11 @@ const LipSync = (() => {
   const ONE = { a: [AA], e: [EE], i: [EE], o: [OH], u: [UH], b: [u('M', B)], p: [u('M', B)], m: [u('M', N)], f: [u('F', F)], v: [u('F', F)], s: [u('S', S)], z: [u('S', S)], x: [ui('D', T), u('S', S)],
     j: [u('S', S)], g: [ui('D', T)], d: [u('D', T)], t: [u('D', T)], k: [ui('D', T)], q: [ui('D', T)], n: [ui('D', N)], h: [ui('D', F)], l: [u('L', G)], r: [u('R', G)], w: [u('W-Oo', G)], I: [AA, EE], O: [AA, WO] };
   const isV = c => /[aeiouy]/.test(c);
+  /* How common words are really said (lexicon.js, from the CMU Pronouncing Dictionary): one letter a sound. Looked up
+     before the spelling rules, after the hand written list above (which knows how he says things). */
+  const LEXU = { A: AA, E: EE, O: OH, U: UH, W: WO, R: u('R', V), w: u('W-Oo', G), r: u('R', G), l: u('L', G), y: u('Ee', G), m: u('M', N), b: u('M', B), f: u('F', F), s: u('S', S), t: u('D', T), k: ui('D', T), n: ui('D', N), h: ui('D', F), T: u('L', F) };
+  const unitCode = U => { for (const c in LEXU) { const q = LEXU[c]; if (q.v === U.v && q.k === U.k && !q.inv === !U.inv) return c; } return '?'; };
+  let LEX = null; const lex = key => { if (!LEX) { LEX = {}; if (typeof LEXICON === 'string') LEXICON.split('|').forEach(e => { const i = e.indexOf(':'); if (i > 0) LEX[e.slice(0, i)] = e.slice(i + 1); }); } const c = LEX[key]; return c ? c.split('').map(ch => LEXU[ch]).filter(Boolean) : null; };
   function spell(w) {
     const out = []; let s = w;
     if (s.length > 2 && /[^aeiou]e$/.test(s) && !/[^aeiou]le$/.test(s)) s = s.slice(0, -1) + '#';   // silent final e (marks the vowel before it long)
@@ -56,7 +61,7 @@ const LipSync = (() => {
   function numWords(n) { if (n < 20) return NUM[n]; if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + NUM[n % 10] : ''); if (n < 1000) return NUM[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' and ' + numWords(n % 100) : '');
     if (n < 1e6) return numWords(Math.floor(n / 1000)) + ' thousand' + (n % 1000 ? (n % 1000 < 100 ? ' and ' : ' ') + numWords(n % 1000) : ''); return String(n).split('').map(d => NUM[+d]).join(' '); }
   // the script: words (with where each came from) and the tags between them
-  function parse(script) {
+  function parse(script, rulesOnly) {
     const words = [], tags = []; const src = String(script || '');
     const re = /\[([^\]]{1,40})\]|([^\s\[\]]+)/g; let m;
     while ((m = re.exec(src))) {
@@ -66,7 +71,7 @@ const LipSync = (() => {
       const pause = /[.!?;:,—–-]$/.test(raw);
       t.split(/\s+/).map(x => x.replace(/[^a-z']/g, '')).filter(Boolean).forEach((x, i, all) => { words.push({ text: i === 0 ? raw : '', w: x, pause: pause && i === all.length - 1 }); });
     }
-    words.forEach(W => { const key = W.w.replace(/'/g, ''); const ex = EX[key]; W.units = (ex ? ex.split(' ').flatMap(spell) : spell(key.replace(/'s$/, 's'))); if (!W.units.length) W.units = [UH]; });
+    words.forEach(W => { const key = W.w.replace(/'/g, ''); const ex = EX[key], lx = !ex && !rulesOnly ? lex(key) : null; W.units = (ex ? ex.split(' ').flatMap(spell) : lx || spell(key.replace(/'s$/, 's'))); if (!W.units.length) W.units = [UH]; });
     return { words, tags };
   }
 
@@ -428,5 +433,6 @@ const LipSync = (() => {
       if (engine === 'rhubarb' && typeof Rhubarb !== 'undefined' && await Rhubarb.ready()) { const said = parse(script).words.map(w => w.w).join(' '); r.visemes = tidy(await Rhubarb.visemes(x, said), 0.03); r.engine = 'rhubarb'; } cache.set(k, r); if (cache.size > 24) cache.delete(cache.keys().next().value); return r; })().finally(() => pending.delete(k));
     pending.set(k, p); return p;
   }
-  return { _retime: v => { RETIME = !!v; }, _mins: (a, b) => { MIN2 = a; MIN1 = b; }, _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
+  return { unitCode, LEXU, _EX: EX, _retime: v => { RETIME = !!v; }, _mins: (a, b) => { MIN2 = a; MIN1 = b; }, _set: (b, a, q, nx, ow) => { PIN_BEFORE = b; PIN_AFTER = a; PIN_QUIET = q; if (nx != null) PIN_NEXT = nx; if (ow != null) OWN_W = ow; }, seed, forget, analyse, fromText, decode, parse, spell, features, forMedia, peek, pinWords, FPS, _numWords: numWords };
 })();
+if (typeof module !== 'undefined') module.exports = LipSync;

@@ -415,6 +415,8 @@ const Character = (() => {
       if (S.q) { const t0 = Math.min(U[last.peak].t, last.b - 0.45) - 0.15; tilts.push({ a: t0, b: last.b + 0.35, r: (R() < 0.5 ? -1 : 1) * 0.045, y: -0.006 }); raises.push({ a: t0, b: last.b + 0.3, v: S.wh ? -0.2 : 0.42 }); }
       else if (S.doubt) { const j = (() => { for (let k = S.a; k <= S.b; k++) if (sem.cls[k].includes('doubt')) return k; return S.a; })(); tilts.push({ a: W[j][0] - 0.2, b: W[j][1] + 0.7, r: (R() < 0.5 ? -1 : 1) * 0.04, y: 0 }); raises.push({ a: W[j][0] - 0.15, b: W[j][1] + 0.5, v: 0.35, one: R() < 0.5 ? 'L' : 'R' }); } });
     pros.accents.forEach(ac => { if (ac.s < 0.62 || raises.some(r => ac.t > r.a - 0.75 && ac.t < r.b + 0.75)) return; const u = byWord && ac.w >= 0 ? U[ac.w] : null; raises.push({ a: ac.t - 0.18, b: (u ? u.b : ac.t + 0.2) + 0.06, v: 0.16 + 0.3 * (ac.s - 0.62) / 0.38 }); });
+    // no face lifts both brows the same: one leads (his left, more often than not), by a different amount each time
+    raises.forEach(q => { if (!q.one) q.as = (R() - 0.36) * 0.56; });
     raises.sort((x, y) => x.a - y.a);
     let pos = 0; pros.ips.forEach((P, i) => { const prev = pros.ips[i - 1]; if (!prev || !prev.sent || prev.gap < 0.55 || P.b - P.a < 1.2 || P.a < 2) return; if (shifts.length && P.a - shifts[shifts.length - 1].t < 6) return; let nx = pos; while (nx === pos) nx = [-1, 0, 1][Math.floor(R() * 3)]; shifts.push({ t: P.a - 0.5, from: pos, x: nx }); pos = nx; });
   }
@@ -475,7 +477,7 @@ const Character = (() => {
     pose.head = [hx, hy, hr, lean];
     // eyebrows: the emotion, a quick raise on the strongest accents, up through a question (down for a why or a what)
     let lift = 0, liftL = 0, liftR = 0; const damp = 1 - 0.6 * cl((em.L[1] - 0.1) / 0.2, 0, 1);
-    if (p.pros) { for (const q of ix.raises(t)) { const w = easeWin(t, q.a, q.b, 0.17, 0.28); if (w <= 0) continue; const v = -q.v * w * Math.min(1.3, 0.6 + 0.4 * G) * (q.v > 0 ? damp : 1); if (q.one === 'L') liftL += v; else if (q.one === 'R') liftR += v; else lift += v; } lift += -sm(cl((p.slow(t) - 0.4) / 0.45, 0, 1)) * 0.1 * Math.min(1.4, G) * damp; }
+    if (p.pros) { for (const q of ix.raises(t)) { const w = easeWin(t, q.a, q.b, 0.17, 0.28); if (w <= 0) continue; const v = -q.v * w * Math.min(1.3, 0.6 + 0.4 * G) * (q.v > 0 ? damp : 1); if (q.one === 'L') liftL += v; else if (q.one === 'R') liftR += v; else { lift += v; if (q.as) { liftL += v * q.as; liftR -= v * q.as; } } } lift += -sm(cl((p.slow(t) - 0.4) / 0.45, 0, 1)) * 0.1 * Math.min(1.4, G) * damp; }
     else lift = -sm(cl((p.slow(t) - 0.3) / 0.45, 0, 1)) * 0.3 * Math.min(1.4, G) * damp;
     pose.brow.L = [em.L[0], em.L[1] + lift + liftL, em.L[2]]; pose.brow.R = [em.R[0], em.R[1] + (lift + liftR) * 1.08, em.R[2]];
     // blinks (shut for about a tenth of a second)
