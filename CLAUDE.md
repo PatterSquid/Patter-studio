@@ -738,13 +738,15 @@ with the PSD inside) or the .psd in the panel and it is kept in IndexedDB `patte
   `clipSound`, `CutExport` waits on `Character.prepare`). Tests: `tests/puppet_read.py`, `char_ui.py`, `char_hands.py`,
   `tests/char_motion.js` (runjs: every continuous part of the pose frame by frame).
 
-### The animator programme (November 2026, on the branch `animator-pass`: NOT published until he says "publish")
+### The animator programme (26 November 2026, published with the hands programme as 2026.11.26.1)
 
 He asked (26 November): "I want to be able to drop in an audio clip into it, and have it fully animate the avatar to the
 Standard of a professional animation, so that no adjustments are needed whatsoever when I export the clip... The number
 one thing is for it to be natural, so you have creative permission to do whatever you need to... If you need to make new
-drawings for any part, you have control". He was sent a before and after of his own recording at the end. If he comes
-back on one part, change that part and keep the rest. Measuring tools: `dev/tests/charkit/` (see its README).
+drawings for any part, you have control". He was sent a before and after of his own recording at the end and said it
+looked great; it went out the same evening together with the hands programme below. He has not yet said what he thinks
+of it in use: if he comes back on one part, change that part and keep the rest. Measuring tools: `dev/tests/charkit/`
+(see its README). The branch `animator-pass` is this programme alone, before the hands.
 * **What was wrong on the published build** (looked at frame by frame and traced 60 times a second): the face was rigid
   between swapped drawings (a flat head, lids that only blink, a mouth that only swaps); a blink was one frame of shut
   eye; the body stood still under a moving head; a mood sat on a whole long sentence; inside a word the mouth lost its
@@ -811,13 +813,16 @@ back on one part, change that part and keep the rest. Measuring tools: `dev/test
   `char_damaged.js '{"n":40}'`, `char_ui.py`, `char_studio.py`, `char_hands.py`). Frame time is unchanged within the
   noise here (about 16 ms at 1080p in software).
 
-### The hands programme (26 November 2026, on the branch `hands-natural`, on top of `animator-pass`: NOT published until he says "publish")
+### The hands programme (26 November 2026, published as 2026.11.26.1; branch `hands-natural`, on top of `animator-pass`)
 
 He watched the animator programme's before and after, said "Looks great publish", stopped the publish seconds later and
 wrote: "The hands are still a bit of an issue tbh. I think we need to address them in the same way, most importantly to
 make them naturally. Can you run a full improvement programme with the same creative freedom". Asked what bothered him
-(the snap, stiff, gestures not fitting, or just make them natural) he picked "Just make them natural". **Nothing was
-published**: `animator-pass` is as he saw it and can go out alone if he says so. What he has turned down before still
+(the snap, stiff, gestures not fitting, or just make them natural) he picked "Just make them natural". He then
+watched three more before and afters (the hands, the resting right hand, the right hand joining in), and to the last
+said "Looks class, publish": **both programmes went out together as 2026.11.26.1**. He has not yet said what he thinks
+of the hands in use: if he comes back on them, ask what he wants changed and change little (the sizes to move are named
+below). What he has turned down before still
 stands (hands up all the time, made up gestures, both hands sharing the work, hands we drew): this programme changes
 how the hands MOVE, not which gestures he makes or how often (`planHands` was untouched until he asked for the right
 hand to join in now and then, below).

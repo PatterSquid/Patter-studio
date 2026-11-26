@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.19.3",
+  "version": "2026.11.26.1",
   "file": "app/patter-studio.html",
-  "notes": "Audio tab: Studio voice. One switch for a rough microphone: buzz and noise out, the room taken out so the voice comes from the mouth, the tone of a close microphone, an even level, silent gaps and softened breaths. A report of what came in (level, noise, buzz, room). Every stage can be set by hand. Recording now goes straight to a 32 bit WAV with a level meter and a choice of microphone. Loudness lands on the figure you pick."
+  "notes": "Animator: drop a recording in and he performs it by himself. It listens, writes the words, lines every word up and plans the whole performance (press Get exact lip sync once if the Voice card shows it). A mouth that follows what the eye can see, with no lips shut on clear speech. Eyelids, chin and features that move with his head, real blinks, breathing where the recording breathes, and a body that carries the head. The same recording is always performed the same way, and exports draw him the same in every frame. Hands: one drawing turns through into the next with a smear and no jump, a raised hand beats on the words he leans on and is never frozen, the resting hand is alive, and now and then the right hand or both hands carry a thought."
 }
