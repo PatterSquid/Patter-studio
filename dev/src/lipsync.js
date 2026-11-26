@@ -367,11 +367,30 @@ const LipSync = (() => {
     let best = null, a = -1, gap = 0; for (let t = f0 + 10; t <= f1; t++) { const on = t < f1 && t < ft.n && ft.en[t] >= 0.085 && ft.en[t] < 0.42 && ft.voi[t] < 0.62; if (on) { if (a < 0) a = t; gap = 0; } else if (a >= 0 && (++gap > 3 || t >= f1)) { const b = t - gap + (t >= f1 && gap <= 3 ? gap : 0); if (b - a >= 14 && f1 - b <= 50 && (!best || b - a > best[1] - best[0])) best = [a, b]; a = -1; gap = 0; } }
     return best;
   }
-  function toSound(seg, al, ft, heardShapes, breaths) {
-    const out = [];
+  function toSound(seg, al, ft, getShapes, breaths) {
+    const out = [], skip = new Set();
     seg.forEach(([a, b, k, f0, f1], si) => {
+      if (skip.has(si)) { out.push([a, 'Neutral']); return; }   // a vowel already shown where it was really said
       const n = Math.max(1, f1 - f0); let quiet = 0, loud = 0; for (let t = f0; t < f1 && t < ft.n; t++) { if (ft.en[t] < 0.07) quiet++; if (ft.en[t] > 0.34) loud++; }
-      if (k >= 0) { const U = al.units[k]; if (quiet === n && n >= 7 && U.k !== 'B' && U.k !== 'T') { out.push([a, 'Neutral']); return; } out.push([a, null, k, f0, f1]); return; }
+      if (k >= 0) { const U = al.units[k]; if (quiet === n && n >= 7 && U.k !== 'B' && U.k !== 'T') { out.push([a, 'Neutral']); return; }
+        /* Lips cannot be shut on a sound that loud. A long hold of a p or a b with clear speech inside it is the search
+           gone astray in a loosely heard word (his "bye" with a second of near silence after it was all closure, its
+           vowel put at the far end where nothing is said). The closure keeps the quiet at its start, the word's own
+           vowels are shown over the loud stretch (and not again where the search left them), anything loud after that
+           is read from the sound, and he is shut for the rest. */
+        if (U.k === 'B' && U.v === 'M' && n >= 14 && loud >= 7) {
+          let l0 = -1, l1 = -1, gap = 0; for (let t = f0; t < f1 && t < ft.n; t++) { if (ft.en[t] > 0.3) { if (l0 < 0) l0 = t; l1 = t + 1; gap = 0; } else if (l0 >= 0 && ++gap > 4) { if (l1 - l0 >= 6) break; l0 = -1; gap = 0; } }
+          const vs = []; for (let j = si + 1; j < seg.length; j++) { const U2 = seg[j][2] >= 0 ? al.units[seg[j][2]] : null; if (!U2 || U2.word !== U.word || U2.k !== V) break; vs.push(j); }
+          if (l0 >= 0 && l1 - l0 >= 6) {
+            out.push([a, null, k, f0, Math.max(f0 + 1, l0)]);
+            if (vs.length) { const cut = vs.length > 1 ? [0, 0.6, 1] : [0, 1]; vs.slice(0, 2).forEach((j, x) => { const fa = Math.round(l0 + (l1 - l0) * cut[x]), fb = Math.round(l0 + (l1 - l0) * cut[x + 1]); out.push([Math.max(a + 0.01, fa / FPS + MID), null, seg[j][2], fa, fb]); }); vs.forEach(j => skip.add(j)); }
+            else if (getShapes) { const hs = getShapes(); for (let t = l0; t < l1; t++) if (t === l0 || hs[t] !== hs[t - 1]) out.push([Math.max(a + 0.01, t / FPS + MID), hs[t]]); }
+            if (l1 < f1) { out.push([l1 / FPS + MID, 'Neutral']); const hs = getShapes ? getShapes() : null;   // later sound in the same hold: only a stretch long enough to see (80 ms)
+              if (hs) for (let t = l1 + 5; t < f1 && t < ft.n; t++) { if (!(ft.en[t] > 0.3)) continue; let e = t, top = 0, q = 0; while (e < f1 && e < ft.n && q <= 2) { if (ft.en[e] > 0.3) { q = 0; if (ft.en[e] > top) top = ft.en[e]; } else q++; e++; } e -= q;
+                if (e - t >= 8 && top > 0.34) { for (let u = t; u < e; u++) if (u === t || hs[u] !== hs[u - 1]) out.push([u / FPS + MID, hs[u]]); out.push([e / FPS + MID, 'Neutral']); } t = e; } }
+            return; } }
+        out.push([a, null, k, f0, f1]); return; }
+      const heardShapes = loud >= 7 && getShapes ? getShapes() : null;
       if (loud >= 7 && heardShapes) { let on = false; for (let t = f0; t < f1 && t < ft.n; t++) { const sp = ft.en[t] > 0.3; if (sp) { const v = heardShapes[t]; if (!on || out[out.length - 1][1] !== v) out.push([t / FPS + MID, v]); on = true; } else if (on || t === f0) { out.push([t === f0 ? a : t / FPS + MID, 'Neutral']); on = false; } } return; }
       out.push([a, 'Neutral']);
       const nx = seg[si + 1], br = breaths && nx && nx[2] >= 0 && f1 - f0 >= 26 ? breathIn(ft, f0, f1) : null;
@@ -388,7 +407,7 @@ const LipSync = (() => {
     if (OWN_W > 0 && P.words.length >= 12) for (let pass = 0; pass < 2; pass++) { const own = learn(ft, al); if (!own) break; const a2 = align(ft, P.words, pinned ? pin.win : null, own); if (!a2) break; al = a2; }
     const seg = RETIME ? retime(segments(al), al, ft) : segments(al), vis = [], wt = P.words.map(() => [Infinity, -Infinity]);
     let bySound = null; const soundShape = () => { if (!bySound) { bySound = new Array(ft.n).fill('Neutral'); const g = guess(ft); g.forEach(([t, v], i) => { const f0 = Math.round(t * FPS), f1 = g[i + 1] ? Math.round(g[i + 1][0] * FPS) : ft.n; for (let f = f0; f < f1; f++) bySound[f] = v === 'Neutral' ? 'Uh' : v; }); } return bySound; };
-    const breaths = [], fit = toSound(seg, al, ft, seg.some(q => q[2] < 0 && q[4] - q[3] >= 7) ? soundShape() : null, breaths);
+    const breaths = [], fit = toSound(seg, al, ft, soundShape, breaths);
     fit.forEach(q => { if (q[1] != null) vis.push([q[0], q[1]]); });
     seg.forEach(([a, b, k]) => { if (k < 0) return; const U = al.units[k], w = wt[U.word]; w[0] = Math.min(w[0], a); w[1] = Math.max(w[1], b); });
     fit.forEach(([a, vv, k, f0, f1]) => {

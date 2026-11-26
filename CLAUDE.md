@@ -780,7 +780,11 @@ back on one part, change that part and keep the rest. Measuring tools: `dev/test
   his small opening R, not D: **his D and S drawings are the same wide clenched grin** (R is the smallest opening,
   Neutral and M the same closed line). (6) An L (tongue up) or an R (lips drawn in) just short of its two frames takes
   them from a vowel beside it that can spare them; quicker than that it goes (asking `share` for five frames for them
-  cost a closed M and some vowels on his recording, so it does not). On his recording against the PocketSphinx reference: vowels shown as a vowel 87
+  cost a closed M and some vowels on his recording, so it does not). (7) Lips are never shut on clear speech: a long
+  hold of a p or a b with loud sound inside it is the search gone astray in a loosely heard word (his "bye" was a second
+  of closure with its vowel put where nothing is said); `toSound` shows the word's own vowels over the loud stretch.
+  `charkit/vscore.py` counts "shut while clearly heard" (0.1 s or more): 9 times in his minute on the published build,
+  none now. On his recording against the PocketSphinx reference: vowels shown as a vowel 87
   to 98 in a hundred, the right vowel shape 55 to 83, lips shut on M B P 87 to 93; word timing unchanged (median about
   25 ms).
 * **One step** (`takeVoice`, `writeWords`, `settle`, `wireDrop`): a recording added, picked or dropped anywhere on the

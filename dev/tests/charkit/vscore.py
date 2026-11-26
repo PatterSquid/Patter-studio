@@ -45,4 +45,13 @@ def score(f):
     renv = np.corrcoef(ops[sp], env[sp])[0, 1]
     ro, oo = np.array(ro), np.array(oo); dur = [b[0] - a[0] for a, b in zip(V, V[1:]) if a[1] != 'Neutral']
     print('%-22s vowels shown as a vowel %3d%%  right shape %3d%%  shut on a vowel %2d%% (of %d) | lips shut on M B P %3d%% (%d) | teeth on lip F V %3d%% (%d) | open with loud r %.2f | shapes %d, median %.0f ms, under 50 ms: %d' % (f.split('/')[-1], 100 * n['vowOpen'] / n['vow'], 100 * n['vowCls'] / n['vow'], 100 * n['shut'] / n['vow'], n['vow'], 100 * n['lipsHit'] / max(1, n['lips']), n['lips'], 100 * n['fvHit'] / max(1, n['fv']), n['fv'], renv, len(dur), 1000 * np.median(dur), sum(1 for x in dur if x < 0.05)))
+    # the mouth shut (M or Neutral) while he can clearly be heard, for a tenth of a second or more (the mouth leads the sound by 40 ms)
+    mth, env, runs, cur = d['ch']['mouth'], d.get('env') or [], [], None
+    for i in range(len(mth)):
+        t = i / 60; e = env[min(len(env) - 1, int((t + 0.04) * 100))] if env else 0
+        if mth[i] in ('M', 'Neutral') and e > 0.45: cur = [t, t] if cur is None else [cur[0], t]
+        else:
+            if cur and cur[1] - cur[0] >= 0.1: runs.append(round(cur[0], 2))
+            cur = None
+    print('%-22s shut while clearly heard (0.1 s or more): %d %s' % ('', len(runs), runs[:12]))
 for f in sys.argv[1:]: score(f)
