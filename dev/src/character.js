@@ -116,6 +116,47 @@ const Character = (() => {
     st.p = (async () => { try { if (!(await Listen.heard(id))) await Listen.forMedia(id, { onProgress: q => { st.q = q; pinNote(id); } }); } catch (e) { st.err = (e && e.message) || String(e); } st.p = null; st.done = true; tick++; pinNote(id); if (panelRedraw) panelRedraw(); })();
     return st.p;
   }
+  /* One step (November 2026: "drop in an audio clip and have it fully animate the avatar, no adjustments needed").
+     A recording that arrives (Add a recording, picked from the list, or dropped anywhere on the tab) is listened to and
+     its words become the script by themselves; then every word is lined up and the performance planned as before. A
+     script he already has is kept when it is this recording's (six words in ten of what was heard, in order): it may
+     carry his tags and fixes. Anything else is replaced (Undo brings it back). The listening helper must be on the
+     computer (one download, his click); without it the voice still drives the mouth and the moves, more roughly.
+     auto[id] is the work in hand for a recording: an export waits for it (settle, prepare). */
+  const auto = {}, autoSay = {}; let panel = null;
+  const plainWords = t => String(t || '').replace(/\[[^\]]*\]/g, ' ').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+  function sameWords(script, heardText) { const a = plainWords(script), b = plainWords(heardText), n = a.length, m = b.length; if (n < 3 || m < 3) return false;
+    let prev = new Uint16Array(m + 1), cur = new Uint16Array(m + 1); for (let i = 1; i <= n; i++) { for (let j = 1; j <= m; j++) cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]); const t = prev; prev = cur; cur = t; }
+    return prev[m] >= 0.6 * m && prev[m] >= 0.5 * n; }
+  function writeWords(cfg, id) {
+    if (!id || typeof Listen === 'undefined' || typeof CutMedia === 'undefined' || typeof window === 'undefined') return Promise.resolve(); if (auto[id]) return auto[id];
+    const say = t => { autoSay[id] = t; tick++; if (typeof document === 'undefined') return; const el = document.getElementById('chAuto'); if (el && el.dataset.id === id) el.textContent = t; };
+    return (auto[id] = (async () => {
+      try {
+        if (Listen.state !== 'ready' && (await Listen.check()) !== 'ready') return;   // not on this computer yet: the button in the Voice card gets it
+        say('Listening to what you said…'); const p = ensureHeard(id); if (p) await p;
+        const h = (Listen.heardNow && Listen.heardNow(id)) || (Listen.heard ? await Listen.heard(id) : null), text = h ? (h.text || (h.words || []).map(w => w[0]).join(' ')) : '';
+        if (cfg.voice !== id) return; if (!text.trim()) { heardNote = 'It heard no words in that recording, so he moves to the sound alone.'; return; }
+        const blank = !String(cfg.script || '').trim() || cfg.script === defaults().script;
+        if (blank || !sameWords(cfg.script, text)) { cfg.script = text; heardNote = ''; }
+        say('Lining every word up…'); await LipSync.forMedia(id, String(cfg.script || ''), i => CutMedia.blobOf(i), engineOf(cfg)).catch(() => null);
+      } catch (e) { heardNote = (e && e.message) || String(e); }
+      finally { delete auto[id]; delete autoSay[id]; tick++; if (panel && panel.cfg === cfg) { try { panel.changed(); } catch (e) { } if (panelRedraw) panelRedraw(); } }
+    })());
+  }
+  async function takeVoice(cfg, file, note) {
+    if (typeof CutMedia === 'undefined') return; const m = await CutMedia.importFile(file, q => note && note('Bringing in ' + file.name + '… ' + Math.round(q * 100) + '%'));
+    cfg.voice = m.id; cfg.voiceName = file.name; heardNote = ''; const done = writeWords(cfg, m.id); if (panel && panel.cfg === cfg) { try { panel.changed(); } catch (e) { } if (panel.root.isConnected) form(panel.root, cfg, panel.changed); } return done;
+  }
+  const settle = cfg => (cfg && cfg.voice && auto[cfg.voice]) || Promise.resolve();
+  // a sound or video file let go anywhere on the tab while its panel is showing
+  let dropWired = false;
+  function wireDrop() { if (dropWired || typeof window === 'undefined') return; dropWired = true;
+    const live = () => panel && panel.root && panel.root.isConnected && panel.root.offsetParent !== null, sound = e => { const dt = e.dataTransfer; if (!dt) return null; const it = dt.items && [...dt.items].find(q => q.kind === 'file'); if (e.type === 'dragover') return it ? {} : null; return [...(dt.files || [])].find(f => /^(audio|video)\//.test(f.type) || /\.(wav|mp3|m4a|aac|ogg|flac|webm|mp4|mov)$/i.test(f.name)) || null; };
+    window.addEventListener('dragover', e => { if (live() && sound(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+    window.addEventListener('drop', e => { if (!live()) return; const f = sound(e); if (!f) return; e.preventDefault(); e.stopPropagation(); const P = panel, note = t => { const el = P.root.querySelector('.ch-vnote'); if (el) el.textContent = t; };
+      note('Bringing in ' + f.name + '…'); takeVoice(P.cfg, f, note).catch(er => note((er && er.message) || String(er))); }, true);
+  }
   /* A PatterScript file (the phone app's Send file) to what he says: the sections' words in order, the shot and edit
      cues (upper case tags, [beat], [pause]) taken out, his own lower case tags kept. */
   function fromPatterScript(text) {
@@ -145,6 +186,7 @@ const Character = (() => {
   async function prepare(cfg) {
     if (cfg.puppet) await Puppet.load(cfg.puppet);
     if (cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined') await Rhubarb.ready();
+    if (cfg.voice && auto[cfg.voice]) await auto[cfg.voice];   // the words are still being written
     if (cfg.voice && typeof CutMedia !== 'undefined') { const p = ensureHeard(cfg.voice); if (p) await p;   // an export waits for the exact timing
       await LipSync.forMedia(cfg.voice, String(cfg.script || ''), id => CutMedia.blobOf(id), engineOf(cfg)).catch(() => null); }
   }
@@ -574,6 +616,10 @@ const Character = (() => {
       g.font = `${Math.round(H * 0.028)}px Archivo, sans-serif`; g.fillStyle = 'rgba(255,255,255,0.6)'; if (!cfg.puppet) g.fillText('A Character Animator .puppet file, or the Photoshop .psd behind it', W / 2, H * 0.53); g.restore(); return; }
     const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d), pose = poseAt(cfg, A, rig, p, Math.max(0, t)), F = frameOf(cfg, rig, W, H);
     g.save(); g.translate(F.ox, F.oy); g.scale(F.s, F.s); g.imageSmoothingQuality = 'high'; Puppet.draw(g, rig, pose); g.restore();
+    // while a new recording is being listened to and lined up, the preview says so (an export waits for that work first, so this is never in one)
+    const busy = cfg.voice && autoSay[cfg.voice];
+    if (busy) { const st = pinning[cfg.voice], txt = busy + (st && !st.done && st.q ? ' ' + Math.round(st.q * 100) + '%' : ''), fs = Math.round(H * 0.032); g.save(); g.font = `600 ${fs}px Archivo, sans-serif`; const tw = g.measureText(txt).width, bw = tw + fs * 1.6, bh = fs * 1.9, bx = (W - bw) / 2, by = H * 0.045;
+      g.fillStyle = 'rgba(10,17,32,0.82)'; g.beginPath(); if (g.roundRect) g.roundRect(bx, by, bw, bh, bh / 2); else g.rect(bx, by, bw, bh); g.fill(); g.fillStyle = '#f3ead6'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, W / 2, by + bh / 2 + 1); g.restore(); }
   }
 
   /* ---------- sound in this tab's preview ---------- */
@@ -601,6 +647,7 @@ const Character = (() => {
   function form(root, cfg, changed) {
     const { H, field, card, btn, sel, num, area } = UI; root.innerHTML = '';
     const redo = () => { changed(); form(root, cfg, changed); }, rig = cfg.puppet ? Puppet.get(cfg.puppet) : null;
+    panel = { root, cfg, changed }; wireDrop();
     panelRedraw = () => { if (typeof document === 'undefined' || !document.contains(root)) return; const ae = document.activeElement; if (ae && root.contains(ae) && /TEXTAREA|INPUT|SELECT/.test(ae.tagName)) return; form(root, cfg, changed); };   // what was heard has arrived: show it, unless he is typing
     if (cfg.puppet && !rig) Puppet.load(cfg.puppet).then(r => { if (r && root.isConnected) form(root, cfg, changed); });
     const seg = (val, opts, fn) => H('div', { className: 'st-seg wrap' }, ...opts.map(([v, l]) => H('button', { type: 'button', className: String(v) === String(val) ? 'on' : '', textContent: l, on: { click: () => fn(v) } })));
@@ -624,8 +671,8 @@ const Character = (() => {
         H('p', { className: 'hint', textContent: sh ? 'Matched to his own hands in size and colour. He uses them for talking, explaining, palms up, and pointing at you; without them he uses his puppet\u2019s hands.' : 'A picture of your hand drawings on green (each with a bit of sleeve). They are cut out, matched to his hands in size and colour, and kept on this computer with the puppet.' })));
     }
     // the voice
-    const vpick = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm' }); vpick.style.display = 'none'; const vnote = H('p', { className: 'hint', 'aria-live': 'polite' });
-    vpick.addEventListener('change', async () => { const f = vpick.files && vpick.files[0]; if (!f || typeof CutMedia === 'undefined') return; vnote.textContent = 'Bringing in ' + f.name + '…'; try { const m = await CutMedia.importFile(f, (q) => { vnote.textContent = 'Bringing in ' + f.name + '… ' + Math.round(q * 100) + '%'; }); cfg.voice = m.id; cfg.voiceName = f.name; if (canHear() && scriptIsBlank()) { redo(); hear(); } else redo(); } catch (e) { vnote.textContent = e.message || String(e); } });
+    const vpick = H('input', { type: 'file', accept: 'audio/*,video/*,.wav,.mp3,.m4a,.aac,.ogg,.flac,.webm' }); vpick.style.display = 'none'; const vnote = H('p', { className: 'hint ch-vnote', 'aria-live': 'polite' });
+    vpick.addEventListener('change', async () => { const f = vpick.files && vpick.files[0]; if (!f || typeof CutMedia === 'undefined') return; vnote.textContent = 'Bringing in ' + f.name + '…'; const done = takeVoice(cfg, f, t => { vnote.textContent = t; }); done.catch(e => { vnote.textContent = (e && e.message) || String(e); }); });
     // the words from the recording itself (Listen), or from a PatterScript file
     const canHear = () => typeof Listen !== 'undefined' && Listen.state === 'ready', scriptIsBlank = () => !String(cfg.script || '').trim() || cfg.script === defaults().script;
     const hear = async () => { if (hearing[cfg.voice]) return; const id = cfg.voice, say = t => { hearing[id] = t; const el = document.getElementById('chHear'); if (el) { el.textContent = t; el.disabled = true; } };
@@ -637,11 +684,12 @@ const Character = (() => {
     const vinfo = cfg.voice && typeof CutMedia !== 'undefined' ? CutMedia.info(cfg.voice) : null, sounds = typeof CutMedia !== 'undefined' ? CutMedia.list().filter(m => (m.kind === 'audio' || (m.kind === 'video' && m.hasAudio !== false)) && !m.builtin) : [];
     const A = syncOf(cfg), pinBusy = !!(cfg.voice && pinning[cfg.voice] && !pinning[cfg.voice].done), heardHere = !!(cfg.voice && typeof Listen !== 'undefined' && Listen.heardNow && Listen.heardNow(cfg.voice));
     root.append(card('Voice',
-      field('Recording', sel(cfg.voice || '', [['', 'None (timed from the script)'], ...sounds.map(m => [m.id, m.name || 'Sound'])], v => { cfg.voice = v; const m = sounds.find(q => q.id === v); cfg.voiceName = m ? m.name : ''; redo(); }, 'Voice recording'),
+      field('Recording', sel(cfg.voice || '', [['', 'None (timed from the script)'], ...sounds.map(m => [m.id, m.name || 'Sound'])], v => { cfg.voice = v; const m = sounds.find(q => q.id === v); cfg.voiceName = m ? m.name : ''; redo(); if (v) writeWords(cfg, v); }, 'Voice recording'),
         vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (!A || A.guessed ? ' Lining up…' : A.pinned ? ' Every word is lined up with where it is said.' : heardHere && !pinBusy ? ' The script does not match what is said in the recording, so the timing is a rough fit.' : ' Roughly lined up.') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
       H('div', { className: 'btnrow' }, btn('Add a recording', () => vpick.click(), cfg.voice ? '' : 'primary')), vpick, vnote,
+      (() => { const q = H('p', { className: 'hint', id: 'chAuto', 'aria-live': 'polite' }); q.dataset.id = cfg.voice || ''; q.textContent = (cfg.voice && autoSay[cfg.voice]) || (cfg.voice ? '' : 'Or drop a recording anywhere on this tab: he listens, writes the words and performs it by himself.'); return q; })(),
       ...(cfg.voice ? [(() => { const p = H('p', { className: 'hint', id: 'chPin', 'aria-live': 'polite' }); p.dataset.id = cfg.voice; p.textContent = pinBusy ? ' Listening to line every word up exactly… ' + Math.round((pinning[cfg.voice].q || 0) * 100) + '%' : ''; return p; })()] : []),
-      ...(cfg.voice && typeof Listen !== 'undefined' && Listen.state === 'none' ? [H('div', { className: 'btnrow' }, btn('Get exact lip sync (180 MB download, once)', async e => { const b = e.target; b.disabled = true; try { await Listen.download(q => { b.textContent = 'Getting the listening helper… ' + Math.round(q * 100) + '%'; }); tick++; redo(); } catch (err) { vnote.textContent = (err && err.message) || String(err); b.disabled = false; b.textContent = 'Try the download again'; } })),
+      ...(cfg.voice && typeof Listen !== 'undefined' && Listen.state === 'none' ? [H('div', { className: 'btnrow' }, btn('Get exact lip sync (180 MB download, once)', async e => { const b = e.target; b.disabled = true; try { await Listen.download(q => { b.textContent = 'Getting the listening helper… ' + Math.round(q * 100) + '%'; }); tick++; redo(); if (cfg.voice) writeWords(cfg, cfg.voice); } catch (err) { vnote.textContent = (err && err.message) || String(err); b.disabled = false; b.textContent = 'Try the download again'; } })),
         H('p', { className: 'hint' }, 'The listening helper hears where each word is said, so the mouth and the movements land on the right words. It stays on this computer.')] : []),
       ...(cfg.voice ? [field('Lip sync', seg(cfg.sync === 'rhubarb' ? 'rhubarb' : 'patter', [['patter', 'Patter (built in)'], ['rhubarb', 'Rhubarb']], v => { cfg.sync = v; redo(); }),
         cfg.sync === 'rhubarb' ? (typeof Rhubarb === 'undefined' ? 'Rhubarb is not in this version.' : Rhubarb.state === 'ready' ? (A && A.engine === 'rhubarb' ? 'Mouth shapes from Rhubarb Lip Sync.' : 'Rhubarb is working on it…') : 'Rhubarb needs a one-off download of about 40 MB, then works offline.') : 'Built in. Mouth shapes from the script, timed to the recording.'),
@@ -697,5 +745,5 @@ const Character = (() => {
   const soundId = cfg => cfg && cfg.voice || null;
   // Just the puppet at a moment, in its own pixels (no background, no framing): for the Studio to place and light
   function drawRig(g, cfg, t) { const rig = cfg && cfg.puppet ? Puppet.get(cfg.puppet) : null; if (!rig) return null; const A = syncOf(cfg), d = duration(cfg), p = perfOf(cfg, A, rig, d); Puppet.draw(g, rig, poseAt(cfg, A, rig, p, Math.max(0, t))); return rig; }
-  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, _GEST: GEST, fromPatterScript, get ticks() { return tick + Puppet.tick; }, get _drift() { return audio && !audio.paused ? drift : null; }, exportWithSound: null };
+  return { id: 'char', name: 'Character', mainThread: () => true, workerData, adoptWorker, defaults, duration, draw, drawRig, form, editor, prepare, soundId, tick: tickSound, stopSound, poseAt, perfOf, readTag, catalogue, syncOf, frameOf, EMO, _GEST: GEST, fromPatterScript, get ticks() { return tick + Puppet.tick; }, get _drift() { return audio && !audio.paused ? drift : null; }, exportWithSound: null, takeVoice, settle, _sameWords: sameWords };
 })();

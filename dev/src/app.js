@@ -258,7 +258,7 @@
     cutUI = CutUI.create(cutO); cutO.ui = cutUI; cutInsp = CutInspect.create(cutO, cutUI); window.PatterCut = { ui: cutUI, insp: cutInsp, player, select: id => ed.select(id) };
     if (typeof Intro !== 'undefined') Intro.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Intro.ready(); await Intro.ensureSound(copy); } catch (e) { }
       cutInsp.exportDialog({ v: 2, items: [{ id: 'introx', kind: 'clip', mod: 'intro', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };   // the tests drive the editor through this
-    if (typeof Character !== 'undefined') Character.exportWithSound = async c => { const copy = JSON.parse(JSON.stringify(c)); try { await Character.prepare(copy); } catch (e) { }
+    if (typeof Character !== 'undefined') Character.exportWithSound = async c => { try { await Character.settle(c); } catch (e) { } const copy = JSON.parse(JSON.stringify(c)); try { await Character.prepare(copy); } catch (e) { }   // the words may still be being written from the recording: wait, then take the copy
       cutInsp.exportDialog({ v: 2, items: [{ id: 'charx', kind: 'clip', mod: 'char', cfg: copy, inPt: 0, hold: 0 }], tracks: [], layers: [] }); };
     if (typeof Thumb !== 'undefined') Thumb.hooks.videoFrame = async () => { const v = state.cfg.video; if (!v || !((v.items || []).length || (v.tracks || []).some(T => (T.items || []).length))) return null; const lk = state.look; return CutExport.still(JSON.parse(JSON.stringify(v)), lk, state.module === 'video' ? player.t : videoT, '1080'); };
     Object.assign(Video.hooks, { inspect: (...a) => cutInsp.inspect(...a), scene: (...a) => cutInsp.scene(...a), time: () => player.t, cfg: () => state.cfg.video });
