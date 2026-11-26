@@ -350,6 +350,11 @@ const LipSync = (() => {
       if (toPrev) s.splice(k, 1); else { s[k + 1][0] = s[k][0]; s.splice(k, 1); }
       for (let i = s.length - 1; i > 0; i--) if (s[i][1] === s[i - 1][1]) s.splice(i, 1);
     }
+    // after the thinning, once more: closed lips or teeth on the lip still short of two frames take the rest from the longer
+    // shape beside them, if that keeps two frames of its own (a neighbour too short to give earlier may have grown since)
+    for (let i = 0; i < s.length - 1; i++) { if (rk(i) !== 3) continue; const need = SEEN - len(i); if (need <= 0.001) continue;
+      const pl = i > 0 && s[i - 1][1] !== 'Neutral' ? len(i - 1) : (i > 0 ? 9 : 0), nl = i + 2 < s.length ? len(i + 1) : 0;
+      if (pl >= nl && pl - need >= MIN2) s[i][0] -= need; else if (nl - need >= MIN2) s[i + 1][0] += need; else if (pl - need >= MIN2) s[i][0] -= need; }
     // a mouth does not snap shut in the middle of talking: across a gap of under a fifth of a second (the hold of a T or a K, a catch
     // between two words) it stays a little open (his R drawing, the smallest opening he has); it shuts for an M, a B or a P, and for a real pause
     for (let i = 1; i < s.length - 1; i++) if (s[i][1] === 'Neutral' && len(i) < 0.2 && s[i - 1][1] !== 'Neutral' && s[i + 1][1] !== 'Neutral' && s[i - 1][1] !== 'M' && s[i + 1][1] !== 'M') s[i][1] = 'R';
