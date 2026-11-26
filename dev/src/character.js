@@ -269,10 +269,11 @@ const Character = (() => {
     // lengths: emotions and costumes last until the next one of their kind
     moves.forEach((m, i) => { if (m.end != null) return; if (m.dur) { m.end = m.start + m.dur; return; } if (m.kind === 'burst') { m.end = m.start + 2.2; return; } if (m.kind === 'gesture') { m.end = m.start + ((GEST[m.k] && GEST[m.k].len) || 1.6) + 0.4; return; } const L0 = LEN[m.kind]; if (L0) { m.end = m.start + L0; return; } const nx = moves.slice(i + 1).find(q => q.kind === m.kind && (m.kind !== 'costume' || q.k === m.k)); m.end = nx ? nx.start : dur + 10; });
     p.moves = moves;
+    planRest(cfg, A, p, moves, dur);
     planEyes(cfg, A, p, moves, R, dur);
     p.seeds = [R() * 9, R() * 9, R() * 9, R() * 9];
     const D = dur + 12;
-    p.ix = { moves: mkIdx(moves, m => m.start - 0.6, m => Math.min(D, m.end + 0.8), D), phr: mkIdx(p.phrases, q => q.a - 0.8, q => q.b + 0.9, D), nods: mkIdx(nods, q => q.t - 0.5, q => q.t + 0.6, D), beats: mkIdx(p.beats, q => q.t - 0.5, q => q.t + 0.6, D), shakes: mkIdx(p.shakes, q => q.a - 0.1, q => q.b + 0.1, D), tilts: mkIdx(p.tilts, q => q.a - 0.5, q => q.b + 0.6, D), raises: mkIdx(p.raises, q => q.a - 0.3, q => q.b + 0.5, D), glances: mkIdx(p.glances, q => q.a - 0.2, q => q.b + 0.3, D), blinks: mkIdx(p.blinks, q => q, q => q + 0.3, D) };
+    p.ix = { moves: mkIdx(moves, m => m.start - 0.6, m => Math.min(D, m.end + 0.8), D), phr: mkIdx(p.phrases, q => q.a - 0.8, q => q.b + 0.9, D), nods: mkIdx(nods, q => q.t - 0.5, q => q.t + 0.6, D), taps: mkIdx(p.rest.taps, q => q.t - 0.6, q => q.t + 0.5, D), beats: mkIdx(p.beats, q => q.t - 0.5, q => q.t + 0.6, D), shakes: mkIdx(p.shakes, q => q.a - 0.1, q => q.b + 0.1, D), tilts: mkIdx(p.tilts, q => q.a - 0.5, q => q.b + 0.6, D), raises: mkIdx(p.raises, q => q.a - 0.3, q => q.b + 0.5, D), glances: mkIdx(p.glances, q => q.a - 0.2, q => q.b + 0.3, D), blinks: mkIdx(p.blinks, q => q, q => q + 0.3, D) };
     bake(cfg, A, rig, p, dur);
     perfMemo.set(A || 'none', { key, p }); if (perfMemo.size > 16) perfMemo.delete(perfMemo.keys().next().value);
     return p;
@@ -421,6 +422,29 @@ const Character = (() => {
       if (moves.some(m => m.kind === 'gesture' && a < m.end + 0.3 && b > m.start - 0.3) || clash(a, b, 'L')) return;
       moves.push({ id: 'd' + Math.round(a * 100), k: 'desk', kind: 'gesture', side: 'L', start: a, end: b, at: a + 0.45, amp: 1, auto: true, plan: true, pri: 1, tag: GEST.desk.label }); });
   }
+  /* The hand that rests (his right, by the microphone). He said (26 November 2026): "It basically never moves.
+     Obviously it can move significantly less than the other hand, but it basically sits there. Makes it look
+     unnatural". It stays on the desk as he drew it (when it was given gestures of its own he preferred it without:
+     "unnatural movement and a bit too much"), but a resting hand is not a dead one. Three small things, all from the
+     voice: it taps along on some of the words he leans on hardest (the wrist lifts a few pixels and comes down on the
+     stressed syllable; never two close together, and not every one), it settles again in a slightly new place when a
+     new thought starts after a pause (a hand's width at most, with the shifts of his weight when there are any), and
+     while he is talking it is a moving hold. Nothing while a gesture has that hand. Its own chance (from the beats),
+     so nothing else in the performance moves. */
+  function planRest(cfg, A, p, moves, dur) {
+    const K = cfg.hands === 'tags' ? 0 : cfg.hands === 'calm' ? 0.65 : cfg.hands === 'animated' ? 1.3 : 1, taps = [], sets = []; p.rest = { K, taps, sets }; if (!K) return;
+    const B = p.beats || [], R2 = rng(hash('rest' + B.length + ':' + Math.round(dur * 10) + ':' + (cfg.seed || 0)));
+    const busy = t => moves.some(m => m.kind === 'gesture' && (m.side === 'R' || m.side === 'both') && t > m.start - 0.5 && t < (m.end != null ? m.end : m.start + 2) + 0.3) || moves.some(m => m.kind === 'pose' && t > m.start - 0.5 && t < (m.end != null ? m.end : m.start + 2) + 0.3);
+    B.forEach(q => { if (q.a < 0.55 || busy(q.t) || (taps.length && q.t - taps[taps.length - 1].t < 0.7) || R2() < 0.3) return; taps.push({ t: q.t, a: cl((q.a - 0.35) / 0.65, 0.3, 1) }); });
+    // new resting places: as the other hand comes up for a thought (a body moves as a whole: one hand rising shifts the other), at a shift of his weight, and at a new thought after a pause when there has been neither for a while
+    const when = [], ips = (p.pros && p.pros.ips) || [];
+    moves.forEach(m => { if (m.kind === 'gesture' && m.plan && m.side === 'L' && GEST[m.k] && (GEST[m.k].art || m.k === 'talk') && m.start > 1) when.push([m.start + 0.12, 2]); });
+    (p.shifts || []).forEach(q => when.push([q.t + 0.3, 2]));
+    ips.forEach((P, i) => { const prev = ips[i - 1]; if (prev && prev.gap >= 0.35 && P.a > 2) when.push([P.a - 0.25, 1]); }); (p.phrases || []).forEach(P => { if (!ips.length && P.a > 2) when.push([P.a - 0.25, 1]); });
+    when.sort((x, y) => x[0] - y[0]).forEach(([t, pr]) => { if (busy(t) || (sets.length && t - sets[sets.length - 1].t < (pr > 1 ? 2.4 : 6))) return; const L = sets[sets.length - 1] || { x: 0, y: 0, r: 0 }; let x = 0, y = 0, r = 0;
+      for (let k = 0; k < 6; k++) { x = (R2() - 0.5) * 0.064; y = (R2() - 0.35) * 0.016; r = (R2() - 0.5) * 0.13; if (Math.abs(x - L.x) + Math.abs(r - L.r) * 0.3 > 0.022) break; }   // far enough from the last place to be a move
+      sets.push({ t, x, y, r }); });
+  }
   /* The head and eyebrows beyond the nods: shakes with no, never, nothing (and smaller ones with all, every, really:
      McClave 2000), a tilt and the brows through a question or a doubt, quick brow raises on the strongest accents
      (about one accent in three: Krahmer and Swerts 2007), and a shift of weight when a new thought starts after a
@@ -559,7 +583,14 @@ const Character = (() => {
       { const up = cl((mx - 0.6) / 0.4, 0, 1); L2.forEach(q => { const k = q.ww / tw * up; F[sd][0] += q.bf[0] * k; F[sd][1] += q.bf[1] * k; F[sd][2] += q.bf[2] * k; }); }   // beats only once the hand is up, shared between the gestures holding it there   // some drawings only make sense once the hand is up (a finger pointing down would go through the desk)
       // the turn belongs to the drawing showing: his desk hands and his talking hands are drawn at different angles, so a turn blended across two of them would spin the wrong one
       let rw = 0, rr = 0; L2.forEach(q => { if ((q.art || null) === (best.art || null)) { rw += q.ww; rr += q.rot * q.ww; } });
-      pose.arms[sd] = { dx: dx / tw * mx - pose.sit[0] * (1 - mx), dy: dy / tw * mx + an * (1 - mx), rot: (rw > 0 ? rr / rw : 0) * mx, fy: on ? best.fy : 0, fx: on ? best.fxp : 0, sc: on ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3, art: on && best.art !== '-hide' ? best.art : '' }; });   // the plain inside of the sleeve as the forearm turns over
+      pose.arms[sd] = { dx: dx / tw * mx - pose.sit[0] * (1 - mx), dy: dy / tw * mx + an * (1 - mx), rot: (rw > 0 ? rr / rw : 0) * mx, fy: on ? best.fy : 0, fx: on ? best.fxp : 0, sc: on ? 1 + (best.sc - 1) * Math.min(1, (mx - 0.3) / 0.4) : 1, plain: pl / tw * cl(mx / 0.5, 0, 1), hide: best.art === '-hide' && mx > 0.3, art: on && best.art !== '-hide' ? best.art : '', free: 1 - cl(mx, 0, 1) }; });   // the plain inside of the sleeve as the forearm turns over
+    // the resting right hand's small life (planRest): taps on some stressed words, a new place now and then, a moving hold while he talks
+    { const a = pose.arms.R, RS = p.rest; if (a && RS && RS.K && !a.hide) { const free = (a.free == null ? 1 : a.free) * RS.K * (0.8 + 0.2 * E), s0 = p.seeds, talk = cl((p.slow(t) - 0.06) / 0.2, 0, 1);
+        if (free > 0.01) { let ox = 0, oy = 0, or = 0; const S = RS.sets; let k = -1; for (let i = 0; i < S.length; i++) { if (S[i].t <= t) k = i; else break; }
+          if (k >= 0) { const c = S[k], q = k ? S[k - 1] : { x: 0, y: 0, r: 0 }, w = sm((t - c.t) / 0.6); ox = q.x + (c.x - q.x) * w; oy = q.y + (c.y - q.y) * w - Math.sin(Math.PI * w) * 0.018; or = q.r + (c.r - q.r) * w + Math.sin(Math.PI * w) * 0.04; }   // picked up a touch as it moves, the wrist first
+          const hold = 0.25 + 0.75 * talk; ox += Math.sin(t * 0.83 + s0[1]) * 0.005 * hold; oy -= (0.5 + 0.5 * Math.sin(t * 1.13 + s0[2])) * 0.005 * hold; or += (Math.sin(t * 0.97 + s0[3]) * 0.02 + Math.sin(t * 2.1 + s0[0]) * 0.009) * hold;
+          a.dx += ox * hh * free; a.dy += oy * hh * free; a.rot += or * free;
+          for (const q of ix.taps(t)) { const u = t - q.t + 0.02, v = u < -0.36 || u > 0.2 ? 0 : u < -0.13 ? sm((u + 0.36) / 0.23) : u < 0 ? 1 - sm((u + 0.13) / 0.13) : 0.14 * Math.sin(Math.PI * u / 0.2); if (v) { F.R[1] -= 0.028 * hh * v * q.a * free; F.R[2] += 0.075 * v * q.a * free; F.R[0] += 0.005 * hh * v * q.a * free; } } } } }
     // a laugh: head back, eyes screwed shut, mouth wide open on every ha, shoulders bouncing
     const lw = cl(em.laugh, 0, 1);
     if (lw > 0.03) {
