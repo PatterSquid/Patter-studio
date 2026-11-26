@@ -133,7 +133,8 @@ const Character = (() => {
     const say = t => { autoSay[id] = t; tick++; if (typeof document === 'undefined') return; const el = document.getElementById('chAuto'); if (el && el.dataset.id === id) el.textContent = t; };
     return (auto[id] = (async () => {
       try {
-        if (Listen.state !== 'ready' && (await Listen.check()) !== 'ready') return;   // not on this computer yet: the button in the Voice card gets it
+        let ready = Listen.state === 'ready'; if (!ready) { try { ready = (await Listen.check()) === 'ready'; } catch (e) { } }
+        if (!ready) { if (cfg.voice === id && cfg.script === defaults().script) cfg.script = ''; return; }   // not on this computer yet (the button in the Voice card gets it): he moves to the sound alone, not to the sample's words
         say('Listening to what you said…'); const p = ensureHeard(id); if (p) await p;
         const h = (Listen.heardNow && Listen.heardNow(id)) || (Listen.heard ? await Listen.heard(id) : null), text = h ? (h.text || (h.words || []).map(w => w[0]).join(' ')) : '';
         if (cfg.voice !== id) return; if (!text.trim()) { heardNote = 'It heard no words in that recording, so he moves to the sound alone.'; return; }
@@ -243,7 +244,19 @@ const Character = (() => {
     moves.forEach(m => { if (m.kind === 'gesture') { m.at = m.start; m.start = Math.max(0, m.start - 0.45); } });   // the hand gets there on the word
     planBursts(cfg, A, p, moves, rig, dur);
     if (cfg.autoEmo !== false && sem && !moves.some(m => m.kind === 'emotion')) planMoods(cfg, A, p, moves);
-    if (cfg.hands !== 'tags' && A && A.words && A.words.length) planHands(cfg, A, p, moves, R, E, dur, rig);
+    // No words (no script, and nothing heard yet): his hands still talk. The beats of the voice (each swell of loudness
+    // between two dips, about a syllable) stand in for words, so thoughts and their stresses are found the usual way
+    // (no meanings, so only the talking hand and its beats)
+    let AH = A;
+    if (A && (!A.words || !A.words.length) && env.length) { const lev = A.lev || env, SW = [], n = lev.length;
+      const run = (a, b) => { if (b - a < 6) return; const pk = [];   // the swells in one stretch of speech, at least 120 ms apart and standing clear of the dip before them
+          let low = lev[a]; for (let i = a + 1; i < b - 1; i++) { const v = lev[i]; if (v < low) low = v; if (v >= lev[i - 1] && v > lev[i + 1] && v - low > 0.05 && (!pk.length || i - pk[pk.length - 1] >= 12)) { pk.push(i); low = v; } }
+          let from = a; for (let k = 1; k < pk.length; k++) { let cut = pk[k - 1], m = Infinity; for (let i = pk[k - 1]; i <= pk[k]; i++) if (lev[i] < m) { m = lev[i]; cut = i; } if (cut - from >= 5) { SW.push([from / fps, cut / fps, '']); from = cut; } }
+          SW.push([from / fps, b / fps, '']); };
+      let a = -1; for (let i = 0; i <= n; i++) { const sp = i < n && (lev[i] || 0) > 0.12; if (sp && a < 0) a = i; else if (!sp && a >= 0) { run(a, i); a = -1; } }
+      SW.forEach((w, k) => { if (!SW[k + 1] || SW[k + 1][0] - w[1] >= 0.18) w[2] = '.'; });   // a pause closes a thought, as a full stop would
+      if (SW.length) AH = Object.assign({}, A, { words: SW }); }
+    if (cfg.hands !== 'tags' && AH && AH.words && AH.words.length) planHands(cfg, AH, p, moves, R, E, dur, rig);
     planHead(cfg, A, p, moves, R, dur);
     moves.sort((a, b) => a.start - b.start);
     // lengths: emotions and costumes last until the next one of their kind
@@ -587,7 +600,7 @@ const Character = (() => {
     /* A blink is not a switch: the lids come down over about 45 ms, stay shut under a tenth of a second and take half as
        long again to open (Stern and others 1984). The puppet has one shut eye drawing, so the way down and the way back
        are the upper lids drawn part of the way (lid), one or two frames each at 30 a second. */
-    if (!q.blink) for (const b of p.ix.blinks(t + 0.05)) { const u = t - b; if (u >= -0.045 && u < 0) { q.lid = Math.max(q.lid || 0, 0.62 * sm((u + 0.045) / 0.045)); break; } if (u >= 0.095 && u < 0.25) { q.lid = Math.max(q.lid || 0, 0.7 * (1 - sm((u - 0.095) / 0.155))); break; } }
+    if (!q.blink) for (const b of p.ix.blinks(t + 0.05)) { const u = t - b; const l0 = q.lid || 0; if (u >= -0.045 && u < 0) { if (l0 < 0.62) q.lid = l0 + (0.62 - l0) * sm((u + 0.045) / 0.045); break; } if (u >= 0.095 && u < 0.25) { if (l0 < 0.7) q.lid = l0 + (0.7 - l0) * (1 - sm((u - 0.095) / 0.155)); break; } }
     q.head[0] += F.h[0]; q.head[1] += F.h[1]; q.head[2] += F.h[2]; q.body[0] += F.b;
     ['L', 'R'].forEach(sd => { const a = q.arms[sd]; a.dx += F[sd][0]; a.dy += F[sd][1]; a.rot += F[sd][2]; if (a.art) handArt(rig, q.swaps, a.art, sd); });
     return q;
@@ -687,12 +700,12 @@ const Character = (() => {
     const A = syncOf(cfg), pinBusy = !!(cfg.voice && pinning[cfg.voice] && !pinning[cfg.voice].done), heardHere = !!(cfg.voice && typeof Listen !== 'undefined' && Listen.heardNow && Listen.heardNow(cfg.voice));
     root.append(card('Voice',
       field('Recording', sel(cfg.voice || '', [['', 'None (timed from the script)'], ...sounds.map(m => [m.id, m.name || 'Sound'])], v => { cfg.voice = v; const m = sounds.find(q => q.id === v); cfg.voiceName = m ? m.name : ''; redo(); if (v) writeWords(cfg, v); }, 'Voice recording'),
-        vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (!A || A.guessed ? ' Lining up…' : A.pinned ? ' Every word is lined up with where it is said.' : heardHere && !pinBusy ? ' The script does not match what is said in the recording, so the timing is a rough fit.' : ' Roughly lined up.') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
+        vinfo ? (vinfo.dur ? vinfo.dur.toFixed(1) + ' s.' : '') + (!A || A.guessed ? ' Lining up…' : A.pinned ? ' Every word is lined up with where it is said.' : heardHere && !pinBusy ? ' The script does not match what is said in the recording, so the timing is a rough fit.' : !(A.words && A.words.length) ? ' No words yet: he is moving to the sound alone.' : ' Roughly lined up.') : 'Without a recording he says the script at a steady pace, so you can see it before you record.'),
       H('div', { className: 'btnrow' }, btn('Add a recording', () => vpick.click(), cfg.voice ? '' : 'primary')), vpick, vnote,
       (() => { const q = H('p', { className: 'hint', id: 'chAuto', 'aria-live': 'polite' }); q.dataset.id = cfg.voice || ''; q.textContent = (cfg.voice && autoSay[cfg.voice]) || (cfg.voice ? '' : 'Or drop a recording anywhere on this tab: he listens, writes the words and performs it by himself.'); return q; })(),
       ...(cfg.voice ? [(() => { const p = H('p', { className: 'hint', id: 'chPin', 'aria-live': 'polite' }); p.dataset.id = cfg.voice; p.textContent = pinBusy ? ' Listening to line every word up exactly… ' + Math.round((pinning[cfg.voice].q || 0) * 100) + '%' : ''; return p; })()] : []),
-      ...(cfg.voice && typeof Listen !== 'undefined' && Listen.state === 'none' ? [H('div', { className: 'btnrow' }, btn('Get exact lip sync (180 MB download, once)', async e => { const b = e.target; b.disabled = true; try { await Listen.download(q => { b.textContent = 'Getting the listening helper… ' + Math.round(q * 100) + '%'; }); tick++; redo(); if (cfg.voice) writeWords(cfg, cfg.voice); } catch (err) { vnote.textContent = (err && err.message) || String(err); b.disabled = false; b.textContent = 'Try the download again'; } })),
-        H('p', { className: 'hint' }, 'The listening helper hears where each word is said, so the mouth and the movements land on the right words. It stays on this computer.')] : []),
+      ...(cfg.voice && typeof Listen !== 'undefined' && Listen.state === 'none' ? [H('div', { className: 'btnrow' }, btn('Get exact lip sync (180 MB download, once)', async e => { const b = e.target; b.disabled = true; try { await Listen.download(q => { b.textContent = 'Getting the listening helper… ' + Math.round(q * 100) + '%'; }); tick++; redo(); if (cfg.voice) writeWords(cfg, cfg.voice); } catch (err) { vnote.textContent = (err && err.message) || String(err); b.disabled = false; b.textContent = 'Try the download again'; } }, 'primary')),
+        H('p', { className: 'hint' }, 'The listening helper hears what you said and where each word is said, so he says your words and his movements land on them. Get it once and every recording after this is written, lined up and performed by itself. It stays on this computer.')] : []),
       ...(cfg.voice ? [field('Lip sync', seg(cfg.sync === 'rhubarb' ? 'rhubarb' : 'patter', [['patter', 'Patter (built in)'], ['rhubarb', 'Rhubarb']], v => { cfg.sync = v; redo(); }),
         cfg.sync === 'rhubarb' ? (typeof Rhubarb === 'undefined' ? 'Rhubarb is not in this version.' : Rhubarb.state === 'ready' ? (A && A.engine === 'rhubarb' ? 'Mouth shapes from Rhubarb Lip Sync.' : 'Rhubarb is working on it…') : 'Rhubarb needs a one-off download of about 40 MB, then works offline.') : 'Built in. Mouth shapes from the script, timed to the recording.'),
         ...(cfg.sync === 'rhubarb' && typeof Rhubarb !== 'undefined' && Rhubarb.state !== 'ready' ? [H('div', { className: 'btnrow' }, btn(Rhubarb.state === 'downloading' ? 'Downloading…' : 'Download Rhubarb (40 MB, once)', async e => { const b = e.target, note2 = vnote; b.disabled = true; try { await Rhubarb.download(q => { b.textContent = 'Downloading… ' + Math.round(q * 100) + '%'; }); note2.textContent = 'Rhubarb is ready.'; tick++; redo(); } catch (err) { note2.textContent = err.message || String(err); b.disabled = false; b.textContent = 'Try the download again'; } }, 'primary'))] : []),

@@ -20,7 +20,7 @@ async def main():
       if await pg.evaluate("()=>{ const c=" + CFG + "; return !!(c && c.puppet && Puppet.get(c.puppet)); }"): break
     await pg.locator('#inspector input[type=file][accept*=audio]').set_input_files(os.path.abspath(WAV)); await pg.wait_for_timeout(3000)
     txt = lambda: pg.evaluate("()=>document.querySelector('#inspector').innerText")
-    t = await txt(); print('PASS' if 'Get exact lip sync' in t else 'FAIL', 'the panel offers the listening helper'); print('PASS' if 'Roughly lined up' in t or 'Lining up' in t else 'FAIL', 'says the timing is rough until then')
+    t = await txt(); print('PASS' if 'Get exact lip sync' in t else 'FAIL', 'the panel offers the listening helper'); print('PASS' if 'Roughly lined up' in t or 'Lining up' in t or 'No words yet' in t else 'FAIL', 'says the timing is rough until then')
     await pg.click("#inspector button:has-text('Get exact lip sync')")
     ok = False
     for i in range(240):
@@ -28,7 +28,8 @@ async def main():
       if await pg.evaluate("()=>{ const c=" + CFG + "; return Listen.state==='ready' && !!Listen.heardNow(c.voice); }"): ok = True; break
       if i == 12: await pg.screenshot(path=OUT + '/listening.png')
     print('PASS' if ok else 'FAIL', 'the helper was fetched and the recording listened to by itself', i, 's')
-    await pg.wait_for_timeout(1500); t = await txt(); print('PASS' if 'does not match' in t else 'FAIL', 'the sample script is reported as not matching the recording')
+    await pg.wait_for_timeout(3000); st0 = await pg.evaluate("()=>{ const c=" + CFG + ", A=Character.syncOf(c); return { script: c.script.slice(0,40), words: A && A.words.length, pinned: A && A.pinned }; }")
+    print('PASS' if st0['pinned'] and st0['pinned'] >= st0['words'] * 0.9 else 'FAIL', 'the sample script was not this recording, so the words heard took its place by themselves', st0)
     pg.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
     await pg.click('#chHear'); await pg.wait_for_timeout(4000)
     st = await pg.evaluate("()=>{ const c=" + CFG + ", A=Character.syncOf(c); return { script: c.script.slice(0,60), words: A && A.words.length, pinned: A && A.pinned }; }")
